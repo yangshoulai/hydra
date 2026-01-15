@@ -1,0 +1,72 @@
+# Hydra Configuration Example
+
+server:
+  port: 8080                    # HTTP 服务端口
+  read_timeout: 30s             # 读取超时
+  write_timeout: 30s            # 写入超时
+  max_header_bytes: 1048576     # 最大 Header 大小 (1MB)
+
+database:
+  type: sqlite                  # 数据库类型: sqlite | postgres
+  sqlite_path: ../data/hydra.db  # SQLite 数据库文件路径
+  postgres_dsn: ""              # PostgreSQL 连接字符串(当 type=postgres 时使用)
+  max_open_conns: 10            # 最大打开连接数
+  max_idle_conns: 5             # 最大空闲连接数
+  conn_max_lifetime: 300s       # 连接最大生命周期
+
+log:
+  level: info                   # 日志级别: debug | info | warn | error
+  retention_days: 30            # 审计日志保留天数
+  debug_enabled: false          # 是否启用调试日志(记录完整 Request/Response Body)
+  file:
+    enabled: true               # 是否启用文件日志
+    path: ../data/logs/hydra.log # 日志文件路径
+    max_size: 100               # 单个日志文件最大大小(MB)
+    max_backups: 10             # 保留的日志文件数量
+    max_age: 0                  # 日志文件保留天数(0 表示不按天数清理)
+    compress: true              # 是否压缩旧日志文件
+
+circuit_breaker:
+  failure_threshold: 3          # 熔断失败阈值(连续失败 N 次后进入冷却)
+  cooling_duration_sec: 60      # 冷却时长(秒)
+  max_retry: 3                  # 单个请求最大重试次数
+
+sniffer:
+  error_keywords:               # 明文错误关键词列表(用于识别假 200 响应)
+    - "无可用后端"
+    - "额度不足"
+    - "maintenance"
+    - "系统繁忙"
+    - "服务暂不可用"
+    - "service unavailable"
+    - "quota exceeded"
+
+proxy:
+  request_timeout: 60s          # 代理请求超时
+  max_response_size: 10485760   # 最大响应 Body 大小(10MB)
+  max_concurrent: 1000          # 最大并发请求数
+
+admin:
+  session_secret: "change-me-in-production"  # 会话密钥(生产环境必须修改)
+  session_max_age: 86400        # 会话过期时间(秒,默认 24 小时)
+  cookie_secure: false          # 是否启用 Secure Cookie(生产环境建议 true)
+  cookie_http_only: true        # 是否启用 HttpOnly Cookie
+  cookie_same_site: "lax"       # SameSite 策略: strict | lax | none
+
+cors:
+  enabled: false                # 是否启用 CORS
+  allowed_origins:              # 允许的来源
+    - "*"
+  allowed_methods:              # 允许的方法
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "PATCH"
+  allowed_headers:              # 允许的 Header
+    - "Origin"
+    - "Content-Type"
+    - "Authorization"
+  exposed_headers:              # 暴露的 Header
+    - "X-Trace-ID"
+  max_age: 86400                # 预检请求缓存时间(秒)

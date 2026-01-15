@@ -1,0 +1,84 @@
+# Hydra - Docker Compose Configuration
+version: '3.8'
+
+services:
+  # Hydra with SQLite (Default)
+  hydra:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    container_name: hydra
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../configs/config.yaml:/app/configs/config.yaml
+      - hydra-logs:/app/logs
+      - hydra-data:/app/data
+    environment:
+      - HYDRA_DATABASE_TYPE=sqlite
+      - HYDRA_DATABASE_SQLITE_PATH=/app/data/hydra.db
+      - HYDRA_LOG_FILE_PATH=/app/logs/hydra.log
+    restart: unless-stopped
+    networks:
+      - hydra-network
+
+  # Hydra with PostgreSQL (Optional)
+  hydra-postgres:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    container_name: hydra-postgres
+    ports:
+      - "8081:8080"
+    volumes:
+      - ../configs/config.yaml:/app/configs/config.yaml
+      - hydra-postgres-logs:/app/logs
+    environment:
+      - HYDRA_DATABASE_TYPE=postgres
+      - HYDRA_DATABASE_POSTGRES_DSN=postgres://hydra:hydra123@postgres:5432/hydra?sslmode=disable
+      - HYDRA_LOG_FILE_PATH=/app/logs/hydra.log
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - hydra-network
+    profiles:
+      - postgres
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: hydra-postgres-db
+    environment:
+      - POSTGRES_USER=hydra
+      - POSTGRES_PASSWORD=hydra123
+      - POSTGRES_DB=hydra
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hydra"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - hydra-network
+    profiles:
+      - postgres
+
+volumes:
+  hydra-logs:
+    driver: local
+  hydra-data:
+    driver: local
+  hydra-postgres-logs:
+    driver: local
+  postgres-data:
+    driver: local
+
+networks:
+  hydra-network:
+    driver: bridge

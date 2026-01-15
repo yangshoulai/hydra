@@ -1,0 +1,377 @@
+openapi: 3.0.3
+info:
+  title: Hydra Proxy API
+  description: |
+    Hydra 高可用大模型聚合网关 - 代理接口
+
+    提供与 OpenAI API 兼容的代理接口,支持多渠道自动切换和熔断保护。
+  version: 1.0.0
+  contact:
+    name: Hydra Team
+
+servers:
+  - url: http://localhost:8080/v1
+    description: 本地开发环境
+  - url: https://api.example.com/v1
+    description: 生产环境
+
+security:
+  - BearerAuth: []
+
+paths:
+  /chat/completions:
+    post:
+      summary: 创建聊天补全
+      description: |
+        兼容 OpenAI Chat Completions API,支持流式和非流式响应。
+
+        系统会自动:
+        - 选择可用渠道和 Key
+        - 失败时自动重试其他渠道
+        - 识别并拦截假 200 响应
+        - 生成 TraceID 用于全链路追踪
+      operationId: createChatCompletion
+      tags:
+        - Chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+            examples:
+              non-stream:
+                summary: 非流式请求
+                value:
+                  model: gpt-4
+                  messages:
+                    - role: user
+                      content: Hello, how are you?
+                  temperature: 0.7
+                  max_tokens: 100
+              stream:
+                summary: 流式请求
+                value:
+                  model: gpt-4
+                  messages:
+                    - role: user
+                      content: Tell me a story
+                  stream: true
+
+      responses:
+        '200':
+          description: 成功响应
+          headers:
+            X-Trace-ID:
+              description: 请求追踪 ID(UUID)
+              schema:
+                type: string
+                format: uuid
+              example: 123e4567-e89b-12d3-a456-426614174000
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE 流式响应
+              example: |
+                data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1677652288,"model":"gpt-4","choices":[{"delta":{"content":"Hello"},"index":0,"finish_reason":null}]}
+
+                data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1677652288,"model":"gpt-4","choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}
+
+                data: [DONE]
+
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 请求的模型不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  message: "Model 'gpt-5' does not exist"
+                  type: model_not_found
+                  code: 404
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: 所有渠道不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  message: "All upstream channels are unavailable. Please contact administrator."
+                  type: service_unavailable
+                  code: 503
+
+  /models:
+    get:
+      summary: 获取虚拟模型列表
+      description: |
+        返回系统配置的所有统一模型名称(虚拟列表)。
+
+        注意:此列表不反映上游真实模型,而是系统内部配置的映射名称。
+      operationId: listModels
+      tags:
+        - Models
+      responses:
+        '200':
+          description: 成功响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsResponse'
+              example:
+                object: list
+                data:
+                  - id: gpt-4
+                    object: model
+                    created: 1686935002
+                    owned_by: system
+                  - id: gpt-3.5-turbo
+                    object: model
+                    created: 1686935002
+                    owned_by: system
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        使用管理后台创建的 Access Token 进行认证。
+
+        示例: `Authorization: Bearer sk-hydra-xxx`
+
+  schemas:
+    ChatCompletionRequest:
+      type: object
+      required:
+        - model
+        - messages
+      properties:
+        model:
+          type: string
+          description: 模型名称(统一名称,如 gpt-4)
+          example: gpt-4
+        messages:
+          type: array
+          description: 聊天消息列表
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        temperature:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 2
+          default: 1
+          description: 采样温度
+        max_tokens:
+          type: integer
+          minimum: 1
+          description: 最大生成 Token 数
+          example: 100
+        stream:
+          type: boolean
+          default: false
+          description: 是否启用流式响应
+        top_p:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: 核采样概率
+        n:
+          type: integer
+          minimum: 1
+          default: 1
+          description: 生成补全的数量
+        stop:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: 停止序列
+        presence_penalty:
+          type: number
+          format: float
+          minimum: -2
+          maximum: 2
+          default: 0
+        frequency_penalty:
+          type: number
+          format: float
+          minimum: -2
+          maximum: 2
+          default: 0
+        user:
+          type: string
+          description: 用户标识
+
+    ChatMessage:
+      type: object
+      required:
+        - role
+        - content
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+          description: 消息角色
+        content:
+          type: string
+          description: 消息内容
+        name:
+          type: string
+          description: 消息发送者名称
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 补全 ID
+          example: chatcmpl-123
+        object:
+          type: string
+          enum: [chat.completion]
+          description: 对象类型
+        created:
+          type: integer
+          description: 创建时间戳
+          example: 1677652288
+        model:
+          type: string
+          description: 使用的模型名称(返回用户请求的统一名称)
+          example: gpt-4
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatCompletionChoice'
+        usage:
+          $ref: '#/components/schemas/Usage'
+
+    ChatCompletionChoice:
+      type: object
+      properties:
+        index:
+          type: integer
+          description: 选项索引
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+        finish_reason:
+          type: string
+          enum: [stop, length, content_filter, null]
+          description: 结束原因
+
+    Usage:
+      type: object
+      properties:
+        prompt_tokens:
+          type: integer
+          description: 提示词 Token 数
+        completion_tokens:
+          type: integer
+          description: 补全 Token 数
+        total_tokens:
+          type: integer
+          description: 总 Token 数
+
+    ModelsResponse:
+      type: object
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Model'
+
+    Model:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 模型 ID(统一名称)
+          example: gpt-4
+        object:
+          type: string
+          enum: [model]
+        created:
+          type: integer
+          description: 创建时间戳
+        owned_by:
+          type: string
+          description: 拥有者
+          example: system
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - message
+            - type
+            - code
+          properties:
+            message:
+              type: string
+              description: 错误消息
+            type:
+              type: string
+              description: 错误类型
+            code:
+              type: integer
+              description: HTTP 状态码
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: "Invalid request: 'model' field is required"
+              type: invalid_request_error
+              code: 400
+
+    Unauthorized:
+      description: 认证失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: "Invalid or missing access token"
+              type: authentication_error
+              code: 401
+
+    TooManyRequests:
+      description: 请求过于频繁
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: "Too many requests. Please retry later."
+              type: rate_limit_error
+              code: 429

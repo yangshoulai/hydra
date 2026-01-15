@@ -1,0 +1,223 @@
+/* ===================================
+   Hydra API Gateway - Global Styles
+   设计系统：统一、现代、专业的管理后台
+   =================================== */
+
+/* Tailwind CSS v4 导入 */
+@import "tailwindcss";
+
+/* Tailwind v4 主题配置 */
+@theme {
+    /* 颜色系统 */
+    --color-primary-50: #f5f7ff;
+    --color-primary-100: #ebf0ff;
+    --color-primary-200: #d6dfff;
+    --color-primary-300: #b3c3ff;
+    --color-primary-400: #8a9fff;
+    --color-primary-500: #667eea;
+    --color-primary-600: #5568d3;
+    --color-primary-700: #4653b8;
+    --color-primary-800: #3a4495;
+    --color-primary-900: #2f3775;
+
+    --color-secondary-500: #7c3aed;
+    --color-secondary-600: #9333ea;
+    --color-secondary-700: #7e22ce;
+
+    /* 阴影系统 */
+    --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.06);
+    --shadow-soft-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+    --shadow-soft-xl: 0 16px 32px rgba(0, 0, 0, 0.12);
+    --shadow-soft-2xl: 0 24px 48px rgba(0, 0, 0, 0.16);
+
+    /* 动画 */
+    --animate-fade-in: fadeIn 0.2s ease-in-out;
+    --animate-slide-up: slideUp 0.3s ease-out;
+    --animate-scale-in: scaleIn 0.3s ease-out;
+    --animate-spin-slow: spin 3s linear infinite;
+}
+
+/* ===================
+   CSS 变量系统
+   =================== */
+@layer base {
+    :root {
+        /* 品牌色 */
+        --primary-color: #667eea;
+        --primary-color-dark: #5a67d8;
+        --primary-color-light: #7c8ef5;
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+        /* 中性色 */
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-300: #d1d5db;
+        --gray-400: #9ca3af;
+        --gray-500: #6b7280;
+        --gray-600: #4b5563;
+        --gray-700: #374151;
+        --gray-800: #1f2937;
+        --gray-900: #111827;
+
+        /* 背景色 */
+        --bg-primary: #ffffff;
+        --bg-secondary: #f9fafb;
+        --bg-tertiary: #f3f4f6;
+        --bg-hover: #f5f7fa;
+
+        /* 文字颜色 */
+        --text-primary: #111827;
+        --text-secondary: #6b7280;
+        --text-tertiary: #9ca3af;
+        --text-inverse: #ffffff;
+
+        /* 边框颜色 */
+        --border-light: #e5e7eb;
+        --border-medium: #d1d5db;
+        --border-dark: #9ca3af;
+
+        /* 功能色 */
+        --success-color: #10b981;
+        --success-light: #d1fae5;
+        --warning-color: #f59e0b;
+        --warning-light: #fef3c7;
+        --error-color: #ef4444;
+        --error-light: #fee2e2;
+        --info-color: #3b82f6;
+        --info-light: #dbeafe;
+
+        /* 阴影 */
+        --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+        /* 圆角 */
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-xl: 16px;
+        --radius-2xl: 20px;
+        --radius-full: 9999px;
+
+        /* 间距 */
+        --spacing-xs: 4px;
+        --spacing-sm: 8px;
+        --spacing-md: 16px;
+        --spacing-lg: 24px;
+        --spacing-xl: 32px;
+        --spacing-2xl: 48px;
+
+        /* 字体 */
+        --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+        --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono',
+        'Source Code Pro', monospace;
+
+        /* 字体大小 */
+        --text-xs: 0.75rem; /* 12px */
+        --text-sm: 0.875rem; /* 14px */
+        --text-base: 1rem; /* 16px */
+        --text-lg: 1.125rem; /* 18px */
+        --text-xl: 1.25rem; /* 20px */
+        --text-2xl: 1.5rem; /* 24px */
+        --text-3xl: 1.875rem; /* 30px */
+        --text-4xl: 2.25rem; /* 36px */
+
+        /* 过渡 */
+        --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+        --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+        /* Z-index */
+        --z-dropdown: 1000;
+        --z-sticky: 1020;
+        --z-fixed: 1030;
+        --z-modal-backdrop: 1040;
+        --z-modal: 1050;
+        --z-popover: 1060;
+        --z-tooltip: 1070;
+    }
+
+    /* 基础元素样式 */
+    html {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+    }
+
+    body {
+        font-family: var(--font-sans);
+        color: var(--text-primary);
+        background-color: var(--bg-secondary);
+    }
+}
+
+/* ===================
+   自定义组件样式层
+   =================== */
+/* 卡片样式 */
+.card {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid #f3f4f6;
+}
+
+.card-elevated {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.card-hoverable {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.card-hoverable:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    transform: translateY(-0.125rem);
+}
+
+/* 滚动条样式 */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #f9fafb;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* 全局滚动条 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--gray-300);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--gray-400);
+}
+

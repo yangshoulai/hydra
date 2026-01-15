@@ -1,0 +1,154 @@
+# Hydra - Gitignore Configuration
+
+# ========== Go ==========
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+hydra
+
+# Build output
+/backend/hydra
+/backend/cmd/hydra/hydra
+/backend/bin/
+/backend/dist/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Vendor
+/backend/vendor/
+
+# Test coverage
+*.coverprofile
+coverage.out
+coverage.html
+
+# ========== Node.js / Vue 3 / TypeScript ==========
+# Dependencies
+node_modules/
+/frontend/node_modules/
+
+# Build output
+/frontend/dist/
+/frontend/build/
+/backend/static/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# TypeScript
+*.tsbuildinfo
+.tsc-incremental/
+
+# Vite
+.vite/
+.vite-cache/
+
+# ========== Database ==========
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+hydra.db
+/backend/*.db
+
+# PostgreSQL dumps
+*.sql
+*.dump
+
+# ========== Logs ==========
+logs/
+*.log
+/backend/logs/
+/var/log/hydra/
+
+# ========== Configuration ==========
+# Local config overrides
+config.yaml
+config.yml
+!config.example.yaml
+!config.example.yml
+
+# ========== IDE / Editor ==========
+# VSCode
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.template
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ========== OS ==========
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ========== Docker ==========
+# Docker volumes
+/docker-volumes/
+
+# Runtime data (keep directory structure but ignore contents)
+/data/*
+!data/.gitkeep
+!data/README.md
+
+# ========== Testing ==========
+# Test artifacts
+/backend/tests/integration/*.log
+/backend/tests/load/*.html
+/backend/tests/load/*.json
+
+# ========== Temporary ==========
+*.tmp
+*.temp
+*.bak
+*.cache
+
+# ========== Security ==========
+# Secrets
+*.key
+*.pem
+*.crt
+secrets/
+credentials.json

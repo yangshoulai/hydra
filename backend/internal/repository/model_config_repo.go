@@ -1,0 +1,99 @@
+package repository
+
+import (
+	"context"
+	"errors"
+
+	"github.com/yangshoulai/hydra/internal/models"
+	"gorm.io/gorm"
+)
+
+// ChannelModelConfigRepository 渠道模型配置仓储
+type ChannelModelConfigRepository struct {
+	db *gorm.DB
+}
+
+// NewChannelModelConfigRepository 创建渠道模型配置仓储
+func NewChannelModelConfigRepository(db *gorm.DB) *ChannelModelConfigRepository {
+	return &ChannelModelConfigRepository{db: db}
+}
+
+// Create 创建模型配置
+func (r *ChannelModelConfigRepository) Create(ctx context.Context, config *models.ChannelModelConfig) error {
+	return r.db.WithContext(ctx).Create(config).Error
+}
+
+// BatchCreate 批量创建模型配置
+func (r *ChannelModelConfigRepository) BatchCreate(ctx context.Context, configs []*models.ChannelModelConfig) error {
+	if len(configs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Create(&configs).Error
+}
+
+// FindByID 根据ID查询模型配置
+func (r *ChannelModelConfigRepository) FindByID(ctx context.Context, id uint) (*models.ChannelModelConfig, error) {
+	var config models.ChannelModelConfig
+	err := r.db.WithContext(ctx).First(&config, id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &config, nil
+}
+
+// FindByChannelID 根据渠道ID查询所有模型配置
+func (r *ChannelModelConfigRepository) FindByChannelID(ctx context.Context, channelID uint) ([]*models.ChannelModelConfig, error) {
+	var configs []*models.ChannelModelConfig
+	err := r.db.WithContext(ctx).
+		Where("channel_id = ?", channelID).
+		Order("unified_model ASC").
+		Find(&configs).Error
+	return configs, err
+}
+
+// FindByUnifiedModel 根据统一模型名查询所有支持的渠道配置
+func (r *ChannelModelConfigRepository) FindByUnifiedModel(ctx context.Context, unifiedModel string) ([]*models.ChannelModelConfig, error) {
+	var configs []*models.ChannelModelConfig
+	err := r.db.WithContext(ctx).
+		Where("unified_model = ? AND status = ?", unifiedModel, "active").
+		Preload("Channel", "status = ?", "active").
+		Order("id ASC").
+		Find(&configs).Error
+	return configs, err
+}
+
+// Update 更新模型配置
+func (r *ChannelModelConfigRepository) Update(ctx context.Context, config *models.ChannelModelConfig) error {
+	return r.db.WithContext(ctx).Save(config).Error
+}
+
+// Delete 删除模型配置
+func (r *ChannelModelConfigRepository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&models.ChannelModelConfig{}, id).Error
+}
+
+// DeleteByChannelID 删除渠道下的所有模型配置
+func (r *ChannelModelConfigRepository) DeleteByChannelID(ctx context.Context, channelID uint) error {
+	return r.db.WithContext(ctx).
+		Where("channel_id = ?", channelID).
+		Delete(&models.ChannelModelConfig{}).Error
+}
+
+// ListUnifiedModels 获取所有启用的统一模型名列表(去重)
+func (r *ChannelModelConfigRepository) ListUnifiedModels(ctx context.Context) ([]string, error) {
+	var modelNames []string
+
+	// 子查询：只选择激活渠道的模型配置
+	err := r.db.WithContext(ctx).
+		Model(&models.ChannelModelConfig{}).
+		Joins("INNER JOIN channels ON channels.id = channel_model_configs.channel_id").
+		Where("channel_model_configs.status = ?", "active").
+		Where("channels.status = ?", "active").
+		Distinct("channel_model_configs.unified_model").
+		Pluck("channel_model_configs.unified_model", &modelNames).Error
+
+	return modelNames, err
+}
