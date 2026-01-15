@@ -1,10 +1,10 @@
 <template>
   <div class="dashboard-container">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1 class="page-title">仪表盘</h1>
-      <n-text depth="3" class="page-subtitle">实时监控系统状态</n-text>
-    </div>
+    <!--    &lt;!&ndash; 页面标题 &ndash;&gt;-->
+    <!--    <div class="page-header">-->
+    <!--      <h1 class="page-title">仪表盘</h1>-->
+    <!--      <n-text depth="3" class="page-subtitle">实时监控系统状态</n-text>-->
+    <!--    </div>-->
 
     <!-- 顶部统计卡片 -->
     <n-grid :cols="4" :x-gap="16" :y-gap="16" responsive="screen" class="stats-grid">
@@ -14,7 +14,7 @@
           <div class="metric-card__header">
             <div class="metric-card__icon">
               <n-icon size="20">
-                <FlashIcon />
+                <FlashIcon/>
               </n-icon>
             </div>
             <n-tag :bordered="false" type="info" size="small">
@@ -23,9 +23,9 @@
           </div>
           <div class="metric-card__value">
             <n-number-animation
-              :from="0"
-              :to="metrics?.current_qps || 0"
-              :active="true"
+                :from="0"
+                :to="metrics?.current_qps || 0"
+                :active="true"
             />
           </div>
           <div class="metric-card__label">当前 QPS</div>
@@ -38,16 +38,16 @@
           <div class="metric-card__header">
             <div class="metric-card__icon">
               <n-icon size="20">
-                <TrendingUpIcon />
+                <TrendingUpIcon/>
               </n-icon>
             </div>
           </div>
           <div class="metric-card__value">
             <n-number-animation
-              :from="0"
-              :to="metrics?.total_requests_today || 0"
-              :active="true"
-              :format="formatNumber"
+                :from="0"
+                :to="metrics?.total_requests_today || 0"
+                :active="true"
+                :format="formatNumber"
             />
           </div>
           <div class="metric-card__label">今日请求总数</div>
@@ -60,23 +60,23 @@
           <div class="metric-card__header">
             <div class="metric-card__icon">
               <n-icon size="20">
-                <CheckmarkCircleIcon />
+                <CheckmarkCircleIcon/>
               </n-icon>
             </div>
             <n-tag
-              :bordered="false"
-              :type="(metrics?.today_success_rate?.success_rate || 0) >= 95 ? 'success' : 'warning'"
-              size="small"
+                :bordered="false"
+                :type="(metrics?.today_success_rate?.success_rate || 0) >= 95 ? 'success' : 'warning'"
+                size="small"
             >
               {{ (metrics?.today_success_rate?.success_rate || 0).toFixed(1) }}%
             </n-tag>
           </div>
           <div class="metric-card__value">
             <n-number-animation
-              :from="0"
-              :to="metrics?.today_success_rate?.success_rate || 0"
-              :precision="1"
-              :active="true"
+                :from="0"
+                :to="metrics?.today_success_rate?.success_rate || 0"
+                :precision="1"
+                :active="true"
             />
             <span class="metric-card__unit">%</span>
           </div>
@@ -90,7 +90,7 @@
           <div class="metric-card__header">
             <div class="metric-card__icon">
               <n-icon size="20">
-                <ServerIcon />
+                <ServerIcon/>
               </n-icon>
             </div>
           </div>
@@ -103,198 +103,293 @@
       </n-grid-item>
     </n-grid>
 
-    <!-- 主要内容区域 -->
-    <n-grid :cols="1" :x-gap="16" :y-gap="16" responsive="screen" class="content-grid">
-      <!-- QPS 趋势图 -->
-      <n-grid-item span="1 s:1 xl:3">
-        <n-card
-          title="QPS 趋势"
-          size="small"
-          :bordered="false"
-          class="chart-card"
-        >
-          <template #header-extra>
-            <n-space>
-              <n-tag :bordered="false" type="info" size="small">
-                近 1 小时
-              </n-tag>
-            </n-space>
-          </template>
-          <QpsChart :data="metrics?.qps_time_series || []" />
-        </n-card>
-      </n-grid-item>
-
-      <!-- 系统健康状态 -->
-      <n-grid-item span="1 s:1 xl:1">
-        <n-card
-          title="系统健康"
-          size="small"
-          :bordered="false"
-          class="health-card"
-        >
-          <n-space vertical :size="12">
-            <!-- 渠道状态卡片 -->
-            <div class="health-cards">
-              <div class="health-card-item health-card-item--total">
-                <div class="health-card-item__icon">
-                  <n-icon size="16">
-                    <ServerIcon />
-                  </n-icon>
-                </div>
-                <div class="health-card-item__content">
-                  <div class="health-card-item__value">
-                    {{ metrics?.overall_health?.total_channels || 0 }}
-                  </div>
-                  <div class="health-card-item__label">总渠道</div>
-                </div>
-              </div>
-
-              <div class="health-card-item health-card-item--healthy">
-                <div class="health-card-item__icon">
-                  <n-icon size="16">
-                    <CheckmarkCircleIcon />
-                  </n-icon>
-                </div>
-                <div class="health-card-item__content">
-                  <div class="health-card-item__value">
-                    {{ metrics?.overall_health?.healthy_channels || 0 }}
-                  </div>
-                  <div class="health-card-item__label">健康</div>
-                </div>
-              </div>
-
-              <div class="health-card-item health-card-item--degraded">
-                <div class="health-card-item__icon">
-                  <n-icon size="16">
-                    <WarningIcon />
-                  </n-icon>
-                </div>
-                <div class="health-card-item__content">
-                  <div class="health-card-item__value">
-                    {{ metrics?.overall_health?.degraded_channels || 0 }}
-                  </div>
-                  <div class="health-card-item__label">降级</div>
-                </div>
-              </div>
-
-              <div class="health-card-item health-card-item--unhealthy">
-                <div class="health-card-item__icon">
-                  <n-icon size="16">
-                    <CloseCircleIcon />
-                  </n-icon>
-                </div>
-                <div class="health-card-item__content">
-                  <div class="health-card-item__value">
-                    {{ metrics?.overall_health?.unhealthy_channels || 0 }}
-                  </div>
-                  <div class="health-card-item__label">异常</div>
-                </div>
-              </div>
-            </div>
-
-            <n-divider style="margin: 12px 0;" />
-
-            <!-- 密钥状态 -->
-            <div class="key-status">
-              <div class="key-status__header">
-                <div class="key-status__icon">
-                  <n-icon size="18" color="#8b5cf6">
-                    <KeyIcon />
-                  </n-icon>
-                </div>
-                <div class="key-status__title">密钥状态</div>
-              </div>
-              <div class="key-status__metrics">
-                <div class="key-status__metric">
-                  <span class="key-status__metric-value key-status__metric-value--success">
-                    {{ metrics?.overall_health?.healthy_keys || 0 }}
-                  </span>
-                  <span class="key-status__metric-label">健康</span>
-                </div>
-                <div class="key-status__divider"></div>
-                <div class="key-status__metric">
-                  <span class="key-status__metric-value">
-                    {{ metrics?.overall_health?.total_keys || 0 }}
-                  </span>
-                  <span class="key-status__metric-label">总数</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 健康度进度条 -->
-            <div class="health-overview">
-              <div class="health-overview__label">
-                整体健康度
-                <span class="health-overview__percentage">
-                  {{ calculatePercentage(metrics?.overall_health?.healthy_channels || 0, metrics?.overall_health?.total_channels || 1) }}%
-                </span>
-              </div>
-              <n-progress
-                type="line"
-                :percentage="calculatePercentage(metrics?.overall_health?.healthy_channels || 0, metrics?.overall_health?.total_channels || 1)"
-                :show-indicator="false"
-                :color="getHealthColor(calculatePercentage(metrics?.overall_health?.healthy_channels || 0, metrics?.overall_health?.total_channels || 1))"
-                :height="8"
-                :border-radius="4"
-              />
-            </div>
-          </n-space>
-        </n-card>
-      </n-grid-item>
-    </n-grid>
-
-    <!-- 渠道健康状态 -->
+    <!-- QPS 趋势图 -->
     <n-card
-      title="渠道状态详情"
-      size="small"
-      :bordered="false"
-      class="channels-card channels-card--spaced"
+        title="QPS 趋势"
+        size="small"
+        :bordered="false"
+        class="chart-card"
     >
       <template #header-extra>
-        <n-tag :bordered="false" type="default" size="small">
-          共 {{ metrics?.channel_health_list?.length || 0 }} 个渠道
+        <n-tag :bordered="false" type="info" size="small">
+          近 1 小时
         </n-tag>
       </template>
-      <ChannelHealthWall :channels="metrics?.channel_health_list || []" />
+      <QpsChart :data="metrics?.qps_time_series || []"/>
+    </n-card>
+
+    <!-- 渠道统计概览 -->
+    <n-card
+        title="渠道统计"
+        size="small"
+        :bordered="false"
+        class="channel-stats-card">
+      <n-space vertical :size="24">
+        <n-data-table
+            :columns="channelColumns"
+            :data="metrics?.channel_health_list || []"
+            :pagination="false"
+            :bordered="true"
+            :single-line="true"
+            striped
+            size="small"
+        />
+      </n-space>
+    </n-card>
+
+    <!-- 模型统计 -->
+    <n-card
+        title="模型统计"
+        size="small"
+        :bordered="false"
+        class="model-stats-card"
+    >
+      <n-space vertical :size="24">
+        <n-grid :cols="4" :x-gap="16" :y-gap="16" responsive="screen" style="max-width: 1040px;">
+          <n-grid-item>
+            <div class="stat-item stat-item--primary">
+              <div class="stat-item__icon">
+                <n-icon size="24">
+                  <CubeIcon/>
+                </n-icon>
+              </div>
+              <div class="stat-item__content">
+                <div class="stat-item__value">{{ metrics?.model_stats?.active_models || 0 }}</div>
+                <div class="stat-item__label">活跃模型</div>
+              </div>
+            </div>
+          </n-grid-item>
+          <n-grid-item>
+            <div class="stat-item stat-item--info">
+              <div class="stat-item__icon">
+                <n-icon size="24">
+                  <StatsChartIcon/>
+                </n-icon>
+              </div>
+              <div class="stat-item__content">
+                <div class="stat-item__value">{{ formatNumber(metrics?.model_stats?.total_requests || 0) }}</div>
+                <div class="stat-item__label">请求总数</div>
+              </div>
+            </div>
+          </n-grid-item>
+          <n-grid-item>
+            <div class="stat-item stat-item--success">
+              <div class="stat-item__icon">
+                <n-icon size="24">
+                  <CheckmarkCircleIcon/>
+                </n-icon>
+              </div>
+              <div class="stat-item__content">
+                <div class="stat-item__value">{{ formatNumber(metrics?.model_stats?.success_requests || 0) }}</div>
+                <div class="stat-item__label">成功请求</div>
+              </div>
+            </div>
+          </n-grid-item>
+          <n-grid-item>
+            <div class="stat-item stat-item--error">
+              <div class="stat-item__icon">
+                <n-icon size="24">
+                  <CloseCircleIcon/>
+                </n-icon>
+              </div>
+              <div class="stat-item__content">
+                <div class="stat-item__value">{{ formatNumber(metrics?.model_stats?.failed_requests || 0) }}</div>
+                <div class="stat-item__label">失败请求</div>
+              </div>
+            </div>
+          </n-grid-item>
+        </n-grid>
+
+        <n-data-table
+            :columns="modelColumns"
+            :data="metrics?.model_stats?.model_list || []"
+            :pagination="false"
+            :bordered="true"
+            :single-line="true"
+            striped
+            size="small"
+        />
+      </n-space>
     </n-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import {h, onMounted} from 'vue'
 import {
+  type DataTableColumns,
   NCard,
+  NDataTable,
   NGrid,
   NGridItem,
   NIcon,
-  NSpace,
-  NProgress,
-  NDivider,
   NNumberAnimation,
-  NTag,
-  NText
+  NProgress,
+  NSpace,
+  NTag
 } from 'naive-ui'
 import {
-  Flash as FlashIcon,
-  TrendingUp as TrendingUpIcon,
   CheckmarkCircle as CheckmarkCircleIcon,
-  Server as ServerIcon,
-  Warning as WarningIcon,
   CloseCircle as CloseCircleIcon,
-  Key as KeyIcon
+  Cube as CubeIcon,
+  Flash as FlashIcon,
+  Server as ServerIcon,
+  StatsChart as StatsChartIcon,
+  TrendingUp as TrendingUpIcon
 } from '@vicons/ionicons5'
+import type {ChannelHealthInfo, DashboardMetrics, ModelDetailInfo} from '@/services/dashboardService'
 import dashboardService from '@/services/dashboardService'
-import { usePolling } from '@/composables/usePolling'
-import type { DashboardMetrics } from '@/services/dashboardService'
+import {usePolling} from '@/composables/usePolling'
 import QpsChart from '@/components/QpsChart.vue'
-import ChannelHealthWall from '@/components/ChannelHealthWall.vue'
 
 // 使用轮询获取仪表盘数据（每 5 秒）
-const { data: metrics, error } = usePolling<DashboardMetrics>(
-  () => dashboardService.getMetrics(),
-  5000,
-  true
+const {data: metrics, error} = usePolling<DashboardMetrics>(
+    () => dashboardService.getMetrics(),
+    5000,
+    true
 )
+
+// 渠道表格列定义
+const channelColumns: DataTableColumns<ChannelHealthInfo> = [
+  {
+    title: '渠道名称',
+    key: 'channel_name',
+    width: 120,
+    ellipsis: {tooltip: true},
+    sorter: (a, b) => a.channel_name.localeCompare(b.channel_name)
+  },
+  {
+    title: '状态',
+    key: 'status',
+    width: 80,
+    align: 'center',
+    render: (row) => {
+      const statusMap: Record<string, { type: 'success' | 'warning' | 'error', text: string }> = {
+        'active': {type: 'success', text: '激活'},
+        'disabled': {type: 'warning', text: '禁用'}
+      }
+      const status = statusMap[row.status] || {type: 'error', text: '未知'}
+      return h(NTag, {type: status.type, size: 'small', bordered: false}, {default: () => status.text})
+    }
+  },
+  {
+    title: '请求总数',
+    key: 'total_requests',
+    width: 80,
+    align: 'right',
+    render: (row) => formatNumber(row.total_requests),
+    sorter: (a, b) => a.total_requests - b.total_requests
+  },
+  {
+    title: '成功率',
+    key: 'success_rate',
+    align: 'center',
+    width: 120,
+    sorter: (a, b) => a.success_rate - b.success_rate,
+    render: (row) => {
+      const rate = row.success_rate
+      const type = rate >= 95 ? 'success' : rate >= 80 ? 'warning' : 'error'
+      return h('div', {class: 'flex items-center gap-2 pl-2 pr-2'}, [
+        h(NProgress, {
+          type: 'line',
+          percentage: rate,
+          showIndicator: true,
+          height: 12,
+          borderRadius: 3,
+          indicatorPlacement: "inside",
+          color: type === 'success' ? '#10b981' : type === 'warning' ? '#f59e0b' : '#ef4444'
+        })
+      ])
+    }
+  },
+  {
+    title: '密钥健康',
+    key: 'healthy_keys',
+    width: 80,
+    align: 'right',
+    render: (row) => `${row.healthy_keys} / ${row.total_keys}`
+  },
+  {
+    title: '健康度',
+    key: 'health_percentage',
+    width: 80,
+    align: 'right',
+    render: (row) => {
+      const percentage = row.health_percentage
+      const type = percentage >= 80 ? 'success' : percentage >= 50 ? 'warning' : 'error'
+      return h(NTag, {type, size: 'small', bordered: false}, {default: () => `${percentage.toFixed(0)}%`})
+    }
+  },
+  {
+    title: '优先级',
+    key: 'priority',
+    width: 80,
+    align: 'right'
+  },
+  {
+    title: '权重',
+    key: 'weight',
+    width: 80,
+    align: 'right'
+  }
+]
+
+// 模型表格列定义
+const modelColumns: DataTableColumns<ModelDetailInfo> = [
+  {
+    title: '模型名称',
+    key: 'model_name',
+    width: 120,
+    ellipsis: {tooltip: true},
+    sorter: (a, b) => a.model_name.localeCompare(b.model_name)
+  },
+  {
+    title: '请求总数',
+    key: 'total_requests',
+    width: 120,
+    align: 'right',
+    render: (row) => formatNumber(row.total_requests),
+    sorter: (a, b) => a.total_requests - b.total_requests
+  },
+  {
+    title: '成功请求',
+    key: 'success_requests',
+    width: 120,
+    align: 'right',
+    render: (row) => formatNumber(row.success_requests),
+    sorter: (a, b) => a.success_requests - b.success_requests
+  },
+  {
+    title: '失败请求',
+    key: 'failed_requests',
+    width: 120,
+    align: 'right',
+    render: (row) => formatNumber(row.failed_requests),
+    sorter: (a, b) => a.failed_requests - b.failed_requests
+  },
+  {
+    title: '成功率',
+    key: 'success_rate',
+    align: 'center',
+    width: 120,
+    sorter: (a, b) => a.success_rate - b.success_rate,
+    render: (row) => {
+      const rate = row.success_rate
+      const type = rate >= 95 ? 'success' : rate >= 80 ? 'warning' : 'error'
+      return h('div', {class: 'flex items-center gap-2 pl-2 pr-2'}, [
+        h(NProgress, {
+          type: 'line',
+          percentage: rate,
+          showIndicator: true,
+          height: 12,
+          borderRadius: 3,
+          indicatorPlacement: "inside",
+          color: type === 'success' ? '#10b981' : type === 'warning' ? '#f59e0b' : '#ef4444'
+        })
+      ])
+    }
+  }
+]
 
 // 计算百分比
 function calculatePercentage(value: number, total: number): number {
@@ -349,10 +444,14 @@ onMounted(() => {
 /* 统计网格 */
 .stats-grid {
   margin-bottom: 24px;
+  max-width: 1040px;
 }
 
-/* 内容网格 */
-.content-grid {
+/* 卡片间距 */
+.chart-card,
+.channel-stats-card,
+.channel-details-card,
+.model-stats-card {
   margin-bottom: 24px;
 }
 
@@ -447,8 +546,9 @@ onMounted(() => {
 
 /* 图表卡片 */
 .chart-card,
-.health-card,
-.channels-card {
+.channel-stats-card,
+.channel-details-card,
+.model-stats-card {
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
@@ -457,8 +557,9 @@ onMounted(() => {
 }
 
 .chart-card:hover,
-.health-card:hover,
-.channels-card:hover {
+.channel-stats-card:hover,
+.channel-details-card:hover,
+.model-stats-card:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
@@ -472,249 +573,104 @@ onMounted(() => {
   padding: 20px;
 }
 
-/* 健康进度条 */
-.health-progress {
-  margin-bottom: 4px;
-}
-
-.health-progress__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.health-progress__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #475569;
-}
-
-.health-progress__value {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.health-progress__value--success {
-  color: #10b981;
-}
-
-.health-progress__value--warning {
-  color: #f59e0b;
-}
-
-.health-progress__value--error {
-  color: #ef4444;
-}
-
-/* 健康卡片网格 */
-.health-cards {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.health-card-item {
+/* 统计项样式 */
+.stat-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: 16px;
+  padding: 20px;
   background: #f8fafc;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid #e5e7eb;
   transition: all 0.2s ease;
 }
 
-.health-card-item:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-  border-color: var(--item-color);
+.stat-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--stat-color);
 }
 
-.health-card-item--total {
-  --item-color: #64748b;
+.stat-item--total {
+  --stat-color: #64748b;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
-.health-card-item--healthy {
-  --item-color: #10b981;
+.stat-item--healthy {
+  --stat-color: #10b981;
   background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
   border-color: #86efac;
 }
 
-.health-card-item--degraded {
-  --item-color: #f59e0b;
+.stat-item--degraded {
+  --stat-color: #f59e0b;
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
   border-color: #fcd34d;
 }
 
-.health-card-item--unhealthy {
-  --item-color: #ef4444;
+.stat-item--unhealthy {
+  --stat-color: #ef4444;
   background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
   border-color: #fca5a5;
 }
 
-.health-card-item__icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+.stat-item--primary {
+  --stat-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #93c5fd;
+}
+
+.stat-item--info {
+  --stat-color: #06b6d4;
+  background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+  border-color: #67e8f9;
+}
+
+.stat-item--success {
+  --stat-color: #10b981;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: #86efac;
+}
+
+.stat-item--error {
+  --stat-color: #ef4444;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: #fca5a5;
+}
+
+.stat-item__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: white;
-  color: var(--item-color);
+  color: var(--stat-color);
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.health-card-item__content {
+.stat-item__content {
   flex: 1;
   min-width: 0;
 }
 
-.health-card-item__value {
-  font-size: 20px;
+.stat-item__value {
+  font-size: 28px;
   font-weight: 700;
   color: #0f172a;
   line-height: 1;
-  margin-bottom: 2px;
+  margin-bottom: 6px;
+  letter-spacing: -0.5px;
 }
 
-.health-card-item__label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #64748b;
-}
-
-/* 密钥状态 */
-.key-status {
-  padding: 16px;
-  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
-  border-radius: 10px;
-  border: 1px solid #e9d5ff;
-}
-
-.key-status__header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.key-status__icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-}
-
-.key-status__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #6b21a8;
-}
-
-.key-status__metrics {
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-}
-
-.key-status__metric {
-  flex: 1;
-  text-align: center;
-}
-
-.key-status__metric-value {
-  display: block;
-  font-size: 24px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-
-.key-status__metric-value--success {
-  color: #10b981;
-}
-
-.key-status__metric-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #64748b;
-}
-
-.key-status__divider {
-  width: 1px;
-  height: 40px;
-  background: #e9d5ff;
-  margin: 0 20px;
-}
-
-/* 健康度概览 */
-.health-overview {
-  padding: 12px;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-
-.health-overview__label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.stat-item__label {
   font-size: 13px;
   font-weight: 500;
-  color: #475569;
-  margin-bottom: 12px;
-}
-
-.health-overview__percentage {
-  font-size: 18px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-/* 密钥统计 */
-.key-stats {
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  padding: 16px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-radius: 8px;
-}
-
-.key-stats__item {
-  flex: 1;
-  text-align: center;
-}
-
-.key-stats__label {
-  font-size: 12px;
-  font-weight: 500;
   color: #64748b;
-  margin-bottom: 8px;
 }
 
-.key-stats__value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1;
-}
-
-.key-stats__value--success {
-  color: #10b981;
-}
-
-.key-stats__divider {
-  width: 1px;
-  height: 40px;
-  background: #e2e8f0;
-  margin: 0 20px;
-}
 
 /* 数字动画样式 */
 :deep(.n-number-animation) {

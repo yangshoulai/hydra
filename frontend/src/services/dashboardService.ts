@@ -33,13 +33,26 @@ export interface ChannelHealthInfo {
 
 export interface OverallHealthStatus {
   total_channels: number
-  healthy_channels: number
-  degraded_channels: number
-  unhealthy_channels: number
   overall_health: number
   total_keys: number
   healthy_keys: number
   unhealthy_keys: number
+}
+
+export interface ModelStats {
+  active_models: number
+  total_requests: number
+  success_requests: number
+  failed_requests: number
+  model_list: ModelDetailInfo[]
+}
+
+export interface ModelDetailInfo {
+  model_name: string
+  total_requests: number
+  success_requests: number
+  failed_requests: number
+  success_rate: number
 }
 
 export interface DashboardMetrics {
@@ -48,6 +61,7 @@ export interface DashboardMetrics {
   today_success_rate: SuccessRateStats
   overall_health: OverallHealthStatus
   channel_health_list: ChannelHealthInfo[]
+  model_stats: ModelStats
   total_requests_today: number
   total_channels: number
   total_keys: number

@@ -18,6 +18,11 @@ func NewRequestLogRepository(db *gorm.DB) *RequestLogRepository {
 	return &RequestLogRepository{db: db}
 }
 
+// GetDB 获取数据库连接
+func (r *RequestLogRepository) GetDB() *gorm.DB {
+	return r.db
+}
+
 // Create 创建请求日志
 func (r *RequestLogRepository) Create(ctx context.Context, log *models.RequestLog) error {
 	return r.db.WithContext(ctx).Create(log).Error

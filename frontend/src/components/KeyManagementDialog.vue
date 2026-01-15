@@ -3,7 +3,7 @@
       v-model:show="show"
       preset="card"
       :title="`密钥管理 - ${channelName}`"
-      style="width: 1600px"
+      style="width: 1200px"
       :mask-closable="false"
       :closable="true"
       @close="handleClose"
@@ -53,7 +53,8 @@
               :autosize="{ minRows: 6, maxRows: 12 }"
           />
         </n-form-item>
-        <n-text depth="3" style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
+        <n-text depth="3"
+                style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
           每行输入一个密钥，支持批量添加多个密钥
         </n-text>
 
@@ -65,7 +66,8 @@
               :autosize="{ minRows: 2, maxRows: 4 }"
           />
         </n-form-item>
-        <n-text depth="3" style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
+        <n-text depth="3"
+                style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
           为所有密钥添加统一的备注信息（可选）
         </n-text>
       </n-form>
@@ -123,10 +125,10 @@ const keyForm = reactive({
 const keyLineCount = computed(() => {
   if (!keyForm.key_value.trim()) return 0
   return keyForm.key_value
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0)
-    .length
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .length
 })
 
 const keyRules = {
@@ -187,9 +189,9 @@ async function handleAddKey() {
 
   // 分割多行密钥，去除空行
   const keys = keyForm.key_value
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0)
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
 
   if (keys.length === 0) {
     window.$message?.error('请输入有效的密钥值')
@@ -201,9 +203,9 @@ async function handleAddKey() {
   try {
     // 使用批量添加接口
     const result = await channelApi.batchAddKeys(
-      props.channelId,
-      keys,
-      keyForm.remark
+        props.channelId,
+        keys,
+        keyForm.remark
     )
 
     // 显示结果

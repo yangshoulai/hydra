@@ -16,9 +16,12 @@
     <n-data-table
         :columns="columns"
         :data="models"
-        :pagination="pagination"
+        :pagination="false"
         :bordered="true"
+        striped
+        :single-line="false"
         :loading="loading"
+        :scroll-x="1160"
     />
 
     <!-- 创建模型对话框 -->
@@ -33,11 +36,11 @@
         </n-form-item>
         <n-form-item label="厂商" path="provider_id">
           <n-select
-            v-model:value="createForm.provider_id"
-            :options="providerOptions"
-            placeholder="请选择厂商"
-            :loading="loadingProviders"
-            filterable
+              v-model:value="createForm.provider_id"
+              :options="providerOptions"
+              placeholder="请选择厂商"
+              :loading="loadingProviders"
+              filterable
           />
         </n-form-item>
         <n-form-item label="备注" path="remark">
@@ -70,11 +73,11 @@
         </n-form-item>
         <n-form-item label="厂商" path="provider_id">
           <n-select
-            v-model:value="editForm.provider_id"
-            :options="providerOptions"
-            placeholder="请选择厂商"
-            :loading="loadingProviders"
-            filterable
+              v-model:value="editForm.provider_id"
+              :options="providerOptions"
+              placeholder="请选择厂商"
+              :loading="loadingProviders"
+              filterable
           />
         </n-form-item>
         <n-form-item label="备注" path="remark">
@@ -110,9 +113,9 @@ import {
   NIcon,
   NInput,
   NModal,
+  NSelect,
   NSpace,
-  NText,
-  NSelect
+  NText
 } from 'naive-ui'
 import {AddOutline, CreateOutline, TrashOutline} from '@vicons/ionicons5'
 import {type CreateModelRequest, modelApi, type UpdateModelRequest} from '../services/modelService'
@@ -132,7 +135,7 @@ const showEditDialog = ref(false)
 const currentEditModel = ref<Model | null>(null)
 
 // 厂商选项
-const providerOptions = ref<Array<{label: string, value: string}>>([])
+const providerOptions = ref<Array<{ label: string, value: string }>>([])
 
 // 表单引用
 const createFormRef = ref<FormInst | null>(null)
@@ -182,32 +185,20 @@ const editRules: FormRules = {
 }
 
 // 分页配置
-const pagination = reactive({
-  page: 1,
-  pageSize: 20,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
-  onChange: (page: number) => {
-    pagination.page = page
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize
-    pagination.page = 1
-  }
-})
 
 // 表格列
 const columns: DataTableColumns<Model> = [
   {
     title: 'ID',
     key: 'id',
-    width: 120,
+    width: 80,
+    align: 'left',
     sorter: (a, b) => a.id - b.id
   },
   {
     title: '模型名称',
     key: 'name',
-    width: 360,
+    width: 240,
     render: (row) => {
       return h(NText, {code: true}, {default: () => row.name})
     },
@@ -216,7 +207,12 @@ const columns: DataTableColumns<Model> = [
   {
     title: '厂商',
     key: 'provider',
-    width: 280,
+    width: 240,
+    sorter: (a, b) => {
+      const aName = a.provider?.name || ''
+      const bName = b.provider?.name || ''
+      return aName.localeCompare(bName)
+    },
     render: (row) => {
       if (row.provider) {
         return h(NText, {tag: 'strong'}, {default: () => row.provider.name})
@@ -227,6 +223,7 @@ const columns: DataTableColumns<Model> = [
   {
     title: '备注',
     key: 'remark',
+    width: 200,
     ellipsis: {
       tooltip: true
     }
@@ -234,7 +231,8 @@ const columns: DataTableColumns<Model> = [
   {
     title: '创建时间',
     key: 'created_at',
-    width: 240,
+    width: 200,
+    align: 'center',
     render: (row) => {
       return new Date(row.created_at).toLocaleString('zh-CN')
     }
@@ -242,12 +240,13 @@ const columns: DataTableColumns<Model> = [
   {
     title: '操作',
     key: 'actions',
-    width: 320,
+    width: 200,
     fixed: 'right',
+    align: 'center',
     render: (row) => {
       return h(
           NSpace,
-          {size: 'small'},
+          {size: 'small', justify: 'center'},
           {
             default: () => [
               h(

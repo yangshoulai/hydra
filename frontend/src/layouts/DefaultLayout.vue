@@ -45,7 +45,7 @@
     <!-- 主内容区 -->
     <n-layout class="h-screen">
       <!-- 顶部导航栏 -->
-      <n-layout-header bordered class="h-16 flex items-center justify-end px-8">
+      <n-layout-header position="absolute" bordered class="h-16 flex items-center justify-end px-8" :style="{ zIndex: 1000 }">
         <n-dropdown :options="userMenuOptions" @select="handleUserMenuSelect">
           <div
               class="flex items-center gap-3 px-4 py-2 cursor-pointer rounded-xl transition-all duration-200 hover:bg-gray-50">
@@ -61,7 +61,7 @@
       </n-layout-header>
 
       <!-- 内容区域 -->
-      <n-layout-content class="p-4 custom-scrollbar">
+      <n-layout-content class="p-4 custom-scrollbar" :style="{ paddingTop: '72px' }">
         <router-view/>
       </n-layout-content>
     </n-layout>

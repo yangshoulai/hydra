@@ -37,17 +37,19 @@ func NewProviderService(
 
 // CreateProviderRequest 创建厂商请求
 type CreateProviderRequest struct {
-	ID     string `json:"id" binding:"required,min=1,max=50"`
-	Name   string `json:"name" binding:"required,min=1,max=100"`
-	Icon   string `json:"icon" binding:"omitempty,max=500"`
-	Remark string `json:"remark" binding:"omitempty,max=500"`
+	ID       string `json:"id" binding:"required,min=1,max=50"`
+	Name     string `json:"name" binding:"required,min=1,max=100"`
+	Icon     string `json:"icon" binding:"omitempty,max=500"`
+	LobeIcon string `json:"lobeIcon" binding:"omitempty,max=100"`
+	Remark   string `json:"remark" binding:"omitempty,max=500"`
 }
 
 // UpdateProviderRequest 更新厂商请求
 type UpdateProviderRequest struct {
-	Name   string `json:"name" binding:"omitempty,min=1,max=100"`
-	Icon   string `json:"icon" binding:"omitempty,max=500"`
-	Remark string `json:"remark" binding:"omitempty,max=500"`
+	Name     string `json:"name" binding:"omitempty,min=1,max=100"`
+	Icon     string `json:"icon" binding:"omitempty,max=500"`
+	LobeIcon string `json:"lobeIcon" binding:"omitempty,max=100"`
+	Remark   string `json:"remark" binding:"omitempty,max=500"`
 }
 
 // Create 创建厂商
@@ -74,10 +76,11 @@ func (s *ProviderService) Create(ctx context.Context, req CreateProviderRequest)
 	}
 
 	provider := &models.Provider{
-		ID:     id,
-		Name:   name,
-		Icon:   req.Icon,
-		Remark: req.Remark,
+		ID:       id,
+		Name:     name,
+		Icon:     req.Icon,
+		LobeIcon: req.LobeIcon,
+		Remark:   req.Remark,
 	}
 
 	if err := s.providerRepo.Create(ctx, provider); err != nil {
@@ -109,6 +112,9 @@ func (s *ProviderService) Update(ctx context.Context, id string, req UpdateProvi
 	}
 	if req.Icon != "" {
 		provider.Icon = req.Icon
+	}
+	if req.LobeIcon != "" {
+		provider.LobeIcon = req.LobeIcon
 	}
 	if req.Remark != "" {
 		provider.Remark = req.Remark

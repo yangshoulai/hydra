@@ -18,25 +18,25 @@ import (
 
 // ProxyService 代理服务主逻辑
 type ProxyService struct {
-	logger             *slog.Logger
-	loadBalancer       *LoadBalancer
-	requestBuilder     *RequestBuilder
-	httpClient         *HTTPClient
-	responseSniffer    *sniffer.ResponseSniffer
-	sseForwarder       *SSEForwarder
-	responseForwarder  *ResponseForwarder
-	failureClassifier  *FailureClassifier
-	retryCoordinator   *RetryCoordinator
-	circuitManager     *circuit.Manager
-	modelRouter        *ModelRouter
-	auditLogger        *logger.AuditLogger // 审计日志记录器
+	logger            *slog.Logger
+	loadBalancer      *LoadBalancer
+	requestBuilder    *RequestBuilder
+	httpClient        *HTTPClient
+	responseSniffer   *sniffer.ResponseSniffer
+	sseForwarder      *SSEForwarder
+	responseForwarder *ResponseForwarder
+	failureClassifier *FailureClassifier
+	retryCoordinator  *RetryCoordinator
+	circuitManager    *circuit.Manager
+	modelRouter       *ModelRouter
+	auditLogger       *logger.AuditLogger // 审计日志记录器
 }
 
 // ProxyServiceConfig 代理服务配置
 type ProxyServiceConfig struct {
-	MaxRetries      int
-	RetryDelay      time.Duration
-	RequestTimeout  time.Duration
+	MaxRetries     int
+	RetryDelay     time.Duration
+	RequestTimeout time.Duration
 }
 
 // NewProxyService 创建代理服务
@@ -138,9 +138,7 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 		// 构建上游请求
 		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, "/v1/chat/completions")
 		if err != nil {
-			ps.logger.Error("failed to build proxy request",
-				slog.String("error", err.Error()),
-			)
+			ps.logger.Error("failed to build proxy request", slog.String("error", err.Error()))
 			continue
 		}
 
@@ -154,6 +152,9 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 			// 网络错误
 			ps.recordFailure(routeResult, failureType)
 			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, err, failureType)
+
+			// 记录这次失败的尝试
+			ps.logRequestError(ctx, traceID, c, "upstream_request_failed", err, startTime, routeResult, unifiedModel)
 
 			if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 				ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway,
@@ -183,6 +184,9 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID,
 					errors.New("fake 200 response"), FailureTypeSoft)
 
+				// 记录这次失败的尝试
+				ps.logRequestError(ctx, traceID, c, "fake_200_response", errors.New("fake 200 response"), startTime, routeResult, unifiedModel)
+
 				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway,
 						"All upstream attempts failed")
@@ -201,6 +205,9 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 			if ps.failureClassifier.ShouldRetry(failureType) {
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID,
 					errors.New("upstream error"), failureType)
+
+				// 记录这次失败的尝试
+				ps.logRequestError(ctx, traceID, c, "upstream_http_error", errors.New("upstream error"), startTime, routeResult, unifiedModel)
 
 				if ps.retryCoordinator.ShouldRetry(retryCtx) {
 					ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
@@ -226,7 +233,7 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 
 		// 记录成功的审计日志
 		if err == nil {
-			ps.logRequestSuccess(ctx, traceID, c, routeResult, upstreamResp.StatusCode, startTime)
+			ps.logRequestSuccess(ctx, traceID, c, routeResult, upstreamResp.StatusCode, startTime, isStream)
 		} else {
 			ps.logRequestError(ctx, traceID, c, "forward_response", err, startTime, routeResult, unifiedModel)
 		}
@@ -263,6 +270,7 @@ func (ps *ProxyService) logRequestSuccess(
 	routeResult *RouteResult,
 	statusCode int,
 	startTime time.Time,
+	isStream bool,
 ) {
 	responseTime := int(time.Since(startTime).Milliseconds())
 
@@ -280,7 +288,7 @@ func (ps *ProxyService) logRequestSuccess(
 		StatusCode(statusCode).
 		ResponseTime(responseTime).
 		IsSuccess(true).
-		IsStream(ps.requestBuilder.IsStreamRequest(nil)).
+		IsStream(isStream).
 		ClientIP(c.ClientIP()).
 		UserAgent(c.Request.UserAgent()).
 		Build()

@@ -120,12 +120,13 @@ const columns: DataTableColumns<KeyHealthRow> = [
   {
     title: 'ID',
     key: 'key_id',
-    width: 80
+    width: 80,
+    align: 'right'
   },
   {
     title: 'Key',
     key: 'key_preview',
-    width: 300,
+    width: 280,
     render(row) {
       return h(
         'div',
@@ -226,6 +227,7 @@ const columns: DataTableColumns<KeyHealthRow> = [
     key: 'actions',
     align: 'center',
     width: 240,
+    fixed: 'right',
     render(row) {
       return h(
         NSpace,

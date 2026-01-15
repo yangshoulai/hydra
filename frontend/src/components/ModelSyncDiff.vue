@@ -310,13 +310,16 @@ const columns: DataTableColumns<ModelDiffType> = [
   {
     title: '状态',
     key: 'status',
-    width: 100,
+    width: 120,
+    align: 'center',
     render: (row) => getStatusTag(row)
   },
   {
     title: '操作',
     key: 'actions',
     width: 120,
+    align: 'center',
+    fixed: 'right',
     render: (row) => {
       const result = testResults.value[row.upstream_model]
       const isTesting = testingModel.value === row.upstream_model

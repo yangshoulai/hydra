@@ -6,7 +6,7 @@
         <n-button type="primary" @click="showCreateDialog = true">
           <template #icon>
             <n-icon>
-              <AddOutline />
+              <AddOutline/>
             </n-icon>
           </template>
           添加厂商
@@ -14,7 +14,7 @@
         <n-button type="info" @click="handleSync" :loading="syncing">
           <template #icon>
             <n-icon>
-              <SyncOutline />
+              <SyncOutline/>
             </n-icon>
           </template>
           同步厂商
@@ -24,67 +24,76 @@
 
     <!-- 厂商列表 -->
     <n-data-table
-      :columns="columns"
-      :data="providers"
-      :pagination="pagination"
-      :bordered="true"
-      :loading="loading"
+        :columns="columns"
+        :data="providers"
+        :pagination="false"
+        :bordered="true"
+        striped
+        :single-line="false"
+        :scroll-x="960"
+        :loading="loading"
     />
 
     <!-- 创建厂商对话框 -->
     <n-modal v-model:show="showCreateDialog" preset="dialog" title="添加厂商">
-      <n-form ref="createFormRef" :model="createForm" :rules="createRules" label-placement="left" label-width="80px">
+      <n-form ref="createFormRef" :model="createForm" :rules="createRules" label-placement="left" label-width="120px">
         <n-form-item label="厂商ID" path="id">
           <n-input
-            v-model:value="createForm.id"
-            placeholder="请输入厂商ID，如：openai"
-            @input="createForm.id = createForm.id.toLowerCase()"
+              v-model:value="createForm.id"
+              placeholder="请输入厂商ID，如：openai"
+              @input="createForm.id = createForm.id.toLowerCase()"
           />
         </n-form-item>
         <n-form-item label="厂商名称" path="name">
           <n-input
-            v-model:value="createForm.name"
-            placeholder="请输入厂商名称，如：OpenAI"
+              v-model:value="createForm.name"
+              placeholder="请输入厂商名称，如：OpenAI"
           />
         </n-form-item>
         <n-form-item label="图标 URL" path="icon">
-          <n-input v-model:value="createForm.icon" placeholder="请输入图标 URL（可选）" />
+          <n-input v-model:value="createForm.icon" placeholder="请输入图标 URL（可选）"/>
+        </n-form-item>
+        <n-form-item label="Lobe 图标" path="lobeIcon">
+          <n-input v-model:value="createForm.lobeIcon" placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"/>
         </n-form-item>
         <n-form-item label="备注" path="remark">
-          <n-input v-model:value="createForm.remark" type="textarea" placeholder="请输入备注" />
+          <n-input v-model:value="createForm.remark" type="textarea" placeholder="请输入备注"/>
         </n-form-item>
       </n-form>
       <template #action>
         <n-space>
           <n-button @click="showCreateDialog = false">取消</n-button>
-          <n-button type="primary" @click="handleCreate" :loading="creating"> 确定 </n-button>
+          <n-button type="primary" @click="handleCreate" :loading="creating"> 确定</n-button>
         </n-space>
       </template>
     </n-modal>
 
     <!-- 编辑厂商对话框 -->
     <n-modal v-model:show="showEditDialog" preset="dialog" title="编辑厂商">
-      <n-form ref="editFormRef" :model="editForm" :rules="editRules" label-placement="left" label-width="80px">
+      <n-form ref="editFormRef" :model="editForm" :rules="editRules" label-placement="left" label-width="120px">
         <n-form-item label="厂商ID">
-          <n-input :value="currentEditProvider?.id" disabled />
+          <n-input :value="currentEditProvider?.id" disabled/>
         </n-form-item>
         <n-form-item label="厂商名称" path="name">
           <n-input
-            v-model:value="editForm.name"
-            placeholder="请输入厂商名称"
+              v-model:value="editForm.name"
+              placeholder="请输入厂商名称"
           />
         </n-form-item>
         <n-form-item label="图标 URL" path="icon">
-          <n-input v-model:value="editForm.icon" placeholder="请输入图标 URL（可选）" />
+          <n-input v-model:value="editForm.icon" placeholder="请输入图标 URL（可选）"/>
+        </n-form-item>
+        <n-form-item label="Lobe 图标" path="lobeIcon">
+          <n-input v-model:value="editForm.lobeIcon" placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"/>
         </n-form-item>
         <n-form-item label="备注" path="remark">
-          <n-input v-model:value="editForm.remark" type="textarea" placeholder="请输入备注" />
+          <n-input v-model:value="editForm.remark" type="textarea" placeholder="请输入备注"/>
         </n-form-item>
       </n-form>
       <template #action>
         <n-space>
           <n-button @click="showEditDialog = false">取消</n-button>
-          <n-button type="primary" @click="handleUpdate" :loading="updating"> 确定 </n-button>
+          <n-button type="primary" @click="handleUpdate" :loading="updating"> 确定</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -96,35 +105,26 @@
       </n-alert>
 
       <n-space vertical :size="16">
-        <!-- 统计信息 -->
-        <n-statistic label="可添加厂商数">
-          <template #default>
-            <n-text type="info" strong style="font-size: 20px">
-              {{ availableProviders.length }}
-            </n-text>
-          </template>
-        </n-statistic>
-
         <!-- 厂商列表 -->
         <n-data-table
-          :columns="syncColumns"
-          :data="availableProviders"
-          :pagination="syncPagination"
-          :bordered="true"
-          :loading="syncing"
-          :row-key="(row: RemoteProvider) => row.id"
-          v-model:checked-row-keys="checkedProviderIds"
-          size="small"
+            :columns="syncColumns"
+            :data="availableProviders"
+            :pagination="syncPagination"
+            :bordered="true"
+            :loading="syncing"
+            :row-key="(row: RemoteProvider) => row.id"
+            v-model:checked-row-keys="checkedProviderIds"
+            size="small"
         />
 
         <!-- 操作按钮 -->
         <n-space justify="end">
           <n-button @click="showSyncDialog = false">取消</n-button>
           <n-button
-            type="primary"
-            @click="handleAddSyncProviders"
-            :loading="adding"
-            :disabled="checkedProviderIds.length === 0"
+              type="primary"
+              @click="handleAddSyncProviders"
+              :loading="adding"
+              :disabled="checkedProviderIds.length === 0"
           >
             添加选中的厂商 ({{ checkedProviderIds.length }})
           </n-button>
@@ -135,25 +135,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import type { DataTableColumns, FormInst, FormRules } from 'naive-ui'
-import {
-  NAlert,
-  NButton,
-  NDataTable,
-  NForm,
-  NFormItem,
-  NIcon,
-  NInput,
-  NModal,
-  NSpace,
-  NStatistic,
-  NTag,
-  NText,
-} from 'naive-ui'
-import { AddOutline, CreateOutline, SyncOutline, TrashOutline } from '@vicons/ionicons5'
+import {computed, h, nextTick, onMounted, reactive, ref, watch} from 'vue'
+import type {DataTableColumns, FormInst, FormRules} from 'naive-ui'
+import {NAlert, NButton, NDataTable, NForm, NFormItem, NIcon, NInput, NModal, NSpace, NText,} from 'naive-ui'
+import {AddOutline, CreateOutline, SyncOutline, TrashOutline} from '@vicons/ionicons5'
 import providerApi from '@/services/providerService'
-import type { Provider, CreateProviderRequest, UpdateProviderRequest, RemoteProvider } from '@/types/model'
+import type {CreateProviderRequest, Provider, RemoteProvider, UpdateProviderRequest} from '@/types/model'
+import ProviderIcon from '@/components/ProviderIcon.vue'
 
 // 状态
 const loading = ref(false)
@@ -178,6 +166,7 @@ const createForm = reactive<CreateProviderRequest>({
   id: '',
   name: '',
   icon: '',
+  lobeIcon: '',
   remark: ''
 })
 
@@ -185,6 +174,7 @@ const createForm = reactive<CreateProviderRequest>({
 const editForm = reactive<UpdateProviderRequest>({
   name: '',
   icon: '',
+  lobeIcon: '',
   remark: ''
 })
 
@@ -211,20 +201,6 @@ const editRules: FormRules = {
   }
 }
 
-// 分页配置
-const pagination = reactive({
-  page: 1,
-  pageSize: 20,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
-  onChange: (page: number) => {
-    pagination.page = page
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize
-    pagination.page = 1
-  }
-})
 
 // 同步对话框分页配置
 const syncPagination = reactive({
@@ -250,43 +226,39 @@ const availableProviders = computed(() => {
 // 表格列
 const columns: DataTableColumns<Provider> = [
   {
+    title: '图标',
+    key: 'icon',
+    width: 80,
+    align: 'center',
+    render: (row) => {
+      return h(ProviderIcon, {
+        lobeIcon: row.lobeIcon,
+        iconURL: row.icon,
+        alt: row.name,
+        size: 24
+      })
+    }
+  },
+  {
     title: 'ID',
     key: 'id',
-    width: 120,
+    width: 160,
+    align: 'left',
     sorter: (a, b) => a.id.localeCompare(b.id)
   },
   {
     title: '厂商名称',
     key: 'name',
-    width: 280,
+    width: 160,
     render: (row) => {
-      return h(NText, { tag: 'strong' }, { default: () => row.name })
+      return h(NText, {tag: 'strong'}, {default: () => row.name})
     },
     sorter: (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())
   },
   {
-    title: '图标',
-    key: 'icon',
-    width: 60,
-    render: (row) => {
-      if (!row.icon) {
-        return h(NText, { depth: 3 }, { default: () => '无' })
-      }
-      return h('img', {
-        src: row.icon,
-        alt: row.name,
-        style: {
-          width: '24px',
-          height: '24px',
-          objectFit: 'contain',
-          verticalAlign: 'middle'
-        }
-      })
-    }
-  },
-  {
     title: '备注',
     key: 'remark',
+    width: 200,
     ellipsis: {
       tooltip: true
     }
@@ -294,7 +266,8 @@ const columns: DataTableColumns<Provider> = [
   {
     title: '创建时间',
     key: 'created_at',
-    width: 240,
+    align: 'center',
+    width: 200,
     render: (row) => {
       return new Date(row.created_at).toLocaleString('zh-CN')
     }
@@ -302,39 +275,40 @@ const columns: DataTableColumns<Provider> = [
   {
     title: '操作',
     key: 'actions',
-    width: 320,
+    width: 160,
     fixed: 'right',
+    align: 'center',
     render: (row) => {
       return h(
-        NSpace,
-        { size: 'small' },
-        {
-          default: () => [
-            h(
-              NButton,
-              {
-                size: 'small',
-                onClick: () => handleEdit(row)
-              },
-              {
-                default: () => '编辑',
-                icon: () => h(NIcon, null, { default: () => h(CreateOutline) })
-              }
-            ),
-            h(
-              NButton,
-              {
-                size: 'small',
-                type: 'error',
-                onClick: () => handleDelete(row)
-              },
-              {
-                default: () => '删除',
-                icon: () => h(NIcon, null, { default: () => h(TrashOutline) })
-              }
-            )
-          ]
-        }
+          NSpace,
+          {size: 'small', justify: 'center'},
+          {
+            default: () => [
+              h(
+                  NButton,
+                  {
+                    size: 'small',
+                    onClick: () => handleEdit(row)
+                  },
+                  {
+                    default: () => '编辑',
+                    icon: () => h(NIcon, null, {default: () => h(CreateOutline)})
+                  }
+              ),
+              h(
+                  NButton,
+                  {
+                    size: 'small',
+                    type: 'error',
+                    onClick: () => handleDelete(row)
+                  },
+                  {
+                    default: () => '删除',
+                    icon: () => h(NIcon, null, {default: () => h(TrashOutline)})
+                  }
+              )
+            ]
+          }
       )
     }
   }
@@ -344,6 +318,20 @@ const columns: DataTableColumns<Provider> = [
 const syncColumns: DataTableColumns<RemoteProvider> = [
   {
     type: 'selection'
+  },
+  {
+    title: '图标',
+    key: 'iconURL',
+    width: 80,
+    align: 'center',
+    render: (row) => {
+      return h(ProviderIcon, {
+        lobeIcon: row.lobeIcon,
+        iconURL: row.iconURL,
+        alt: row.name,
+        size: 20
+      })
+    }
   },
   {
     title: 'ID',
@@ -356,26 +344,6 @@ const syncColumns: DataTableColumns<RemoteProvider> = [
     width: 280,
     render: (row) => {
       return h(NText, {tag: 'strong'}, {default: () => row.name})
-    }
-  },
-  {
-    title: '图标',
-    key: 'iconURL',
-    width: 80,
-    render: (row) => {
-      if (!row.iconURL) {
-        return h(NText, {depth: 3}, {default: () => '无'})
-      }
-      return h('img', {
-        src: row.iconURL,
-        alt: row.name,
-        style: {
-          width: '32px',
-          height: '32px',
-          objectFit: 'contain',
-          verticalAlign: 'middle'
-        }
-      })
     }
   }
 ]
@@ -410,6 +378,7 @@ async function handleCreate() {
     createForm.id = ''
     createForm.name = ''
     createForm.icon = ''
+    createForm.lobeIcon = ''
     createForm.remark = ''
 
     await loadProviders()
@@ -430,6 +399,7 @@ function handleEdit(provider: Provider) {
   currentEditProvider.value = provider
   editForm.name = provider.name
   editForm.icon = provider.icon
+  editForm.lobeIcon = provider.lobeIcon || ''
   editForm.remark = provider.remark
   showEditDialog.value = true
 }
@@ -497,25 +467,13 @@ async function handleSync() {
     // 设置远程厂商数据
     remoteProviders.value = remoteData
 
-    // 等待 Vue 更新后，设置默认选中的厂商
+    // 等待 Vue 更新
     await nextTick()
-
-    // 计算本地已存在的厂商 ID
-    const localIds = new Set(providers.value.map(p => p.id))
-
-    // 只选中本地不存在的厂商
-    const toAdd = remoteData.filter((rp: RemoteProvider) => !localIds.has(rp.id))
-    checkedProviderIds.value = toAdd.map(rp => rp.id)
-
-    console.log('本地厂商:', providers.value.map(p => p.id))
-    console.log('远程厂商:', remoteData.map(rp => rp.id))
-    console.log('可添加厂商:', toAdd.map(rp => rp.id))
-    console.log('选中厂商:', checkedProviderIds.value)
 
     // 显示同步对话框
     showSyncDialog.value = true
 
-    window.$message?.success(`成功获取 ${remoteData.length} 个远程厂商，其中 ${toAdd.length} 个可添加`)
+    window.$message?.success(`成功获取 ${remoteData.length} 个远程厂商`)
   } catch (error: any) {
     console.error('Failed to sync providers:', error)
     window.$message?.error(error.response?.data?.error || '同步远程厂商失败')
@@ -535,7 +493,7 @@ async function handleAddSyncProviders() {
   try {
     // 根据选中的 ID 找到对应的远程厂商数据
     const selectedProviders = remoteProviders.value.filter((rp: RemoteProvider) =>
-      checkedProviderIds.value.includes(rp.id)
+        checkedProviderIds.value.includes(rp.id)
     )
 
     // 转换为创建请求格式
@@ -543,6 +501,7 @@ async function handleAddSyncProviders() {
       id: sp.id,
       name: sp.name,
       icon: sp.iconURL,
+      lobeIcon: sp.lobeIcon,
       remark: sp.name
     }))
 

@@ -78,7 +78,8 @@ func (r *ModelRepository) List(ctx context.Context) ([]models.Model, error) {
 	err := r.db.WithContext(ctx).
 		Preload("Provider").
 		Table("models").
-		Order("created_at DESC").
+		Joins("LEFT JOIN providers ON models.provider_id = providers.id").
+		Order("providers.name ASC, models.name ASC").
 		Find(&models).Error
 	if err != nil {
 		r.logger.Error("failed to list models",

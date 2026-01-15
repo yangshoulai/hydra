@@ -3,7 +3,7 @@
       v-model:show="show"
       preset="card"
       :title="`模型管理 - ${channelName}`"
-      style="width: 1600px"
+      style="width: 1200px"
       :mask-closable="false"
       :closable="true"
       @close="handleClose"

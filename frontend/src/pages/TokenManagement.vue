@@ -1,5 +1,4 @@
 <template>
-
   <div class="space-y-4 animate-fade-in">
     <!-- 操作栏 -->
     <div class="flex">
@@ -16,8 +15,9 @@
     <n-data-table
         :columns="columns"
         :data="tokens"
-        bordered
-        size="small"
+        :scroll-x="1680"
+        :single-line="false"
+        striped
         :loading="isLoading"
         :row-key="(row: Channel) => row.id"
     />
@@ -43,7 +43,8 @@
               show-count
           />
         </n-form-item>
-        <n-text depth="3" style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
+        <n-text depth="3"
+                style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
           为令牌取一个易于识别的名称，便于管理
         </n-text>
 
@@ -70,7 +71,8 @@
               style="width: 100%"
           />
         </n-form-item>
-        <n-text v-if="expireType === 'custom'" depth="3" style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
+        <n-text v-if="expireType === 'custom'" depth="3"
+                style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
           选择令牌的过期时间，过期后令牌将无法使用
         </n-text>
       </n-form>
@@ -210,7 +212,8 @@ const columns: DataTableColumns<Token> = [
   {
     title: 'ID',
     key: 'id',
-    width: 100,
+    width: 120,
+    align: 'left'
   },
   {
     title: '名称',
@@ -220,7 +223,7 @@ const columns: DataTableColumns<Token> = [
   {
     title: '令牌',
     key: 'token_preview',
-    minWidth: 200,
+    width: 280,
     render: (row) => {
       return h(NText, {code: true}, {default: () => row.token_preview})
     },
@@ -247,16 +250,17 @@ const columns: DataTableColumns<Token> = [
       }
 
       return h(
-        NTag,
-        {type, size: 'small'},
-        {default: () => text}
+          NTag,
+          {type, size: 'small'},
+          {default: () => text}
       )
     },
   },
   {
     title: '过期时间',
     key: 'expires_at',
-    width: 180,
+    align: 'center',
+    width: 200,
     render: (row) => {
       if (!row.expires_at) {
         return h('span', {style: 'color: #9ca3af;'}, '永不过期')
@@ -269,12 +273,14 @@ const columns: DataTableColumns<Token> = [
   {
     title: '创建时间',
     key: 'created_at',
-    width: 180,
+    width: 200,
+    align: 'center',
   },
   {
     title: '最后使用',
     key: 'last_used_at',
-    width: 180,
+    width: 200,
+    align: 'center',
     render: (row) => {
       return row.last_used_at || '-'
     },
@@ -282,7 +288,8 @@ const columns: DataTableColumns<Token> = [
   {
     title: '操作',
     key: 'actions',
-    width: 300,
+    width: 200,
+    align: 'center',
     fixed: 'right',
     render: (row) => {
       return h('div', {class: 'action-buttons'}, [
@@ -465,264 +472,4 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ===================
-   令牌管理容器
-   =================== */
-.token-management-container {
-  animation: fadeIn 0.4s ease-out;
-}
-
-/* ===================
-   操作按钮区域
-   =================== */
-.action-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 24px;
-}
-
-.action-bar :deep(.n-button) {
-  min-width: 120px;
-  height: 40px;
-  font-size: 15px;
-  font-weight: 600;
-  padding: 0 24px;
-  color: white;
-}
-
-/* ===================
-   卡片样式
-   =================== */
-.token-card {
-  background: #ffffff;
-  border-radius: var(--radius-xl);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
-  overflow: hidden;
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ===================
-   表格样式
-   =================== */
-:deep(.n-data-table) {
-  border: none;
-  border-radius: 0;
-}
-
-:deep(.n-data-table .n-data-table-th) {
-  background: #f3f4f6;
-  font-weight: 600;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 18px 16px;
-  color: #1f2937;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-:deep(.n-data-table .n-data-table-td) {
-  padding: 16px;
-  border-bottom: 1px solid #e5e7eb;
-  color: #4b5563;
-  font-size: 14px;
-  vertical-align: middle;
-}
-
-:deep(.n-data-table .n-data-table-tr:last-child .n-data-table-td) {
-  border-bottom: none;
-}
-
-:deep(.n-data-table .n-data-table-tr:hover .n-data-table-td) {
-  background: #f9fafb;
-}
-
-:deep(.n-data-table .n-data-table-tr) {
-  transition: background var(--transition-fast);
-}
-
-/* ===================
-   操作按钮
-   =================== */
-.action-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.action-buttons :deep(.n-button) {
-  min-width: auto;
-  padding: 6px 14px;
-  height: 32px;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: var(--radius-md);
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  color: #1f2937;
-}
-
-.action-buttons :deep(.n-button:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.action-buttons :deep(.n-button--error) {
-  background: var(--error-color);
-  border-color: var(--error-color);
-  color: white;
-}
-
-.action-buttons :deep(.n-button--error:hover) {
-  background: #dc2626;
-  border-color: #dc2626;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-  color: white;
-}
-
-/* ===================
-   标签样式
-   =================== */
-:deep(.n-tag) {
-  border-radius: var(--radius-md);
-  padding: 6px 14px;
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  border: none;
-}
-
-:deep(.n-tag--success) {
-  background: var(--success-light);
-  color: var(--success-color);
-}
-
-:deep(.n-tag--default) {
-  background: var(--gray-200);
-  color: var(--gray-600);
-}
-
-/* ===================
-   令牌信息样式
-   =================== */
-.token-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 8px;
-}
-
-.token-value {
-  font-size: 14px;
-  color: #4b5563;
-  padding: 12px 16px;
-  background: #f3f4f6;
-  border-radius: var(--radius-md);
-  border: 1px solid #e5e7eb;
-  line-height: 1.6;
-}
-
-.token-display-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #f8fafc;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.token-display-container:hover {
-  border-color: #3b82f6;
-  background: #eff6ff;
-}
-
-.token-display {
-  flex: 1;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
-  font-size: 13px;
-  color: #1e293b;
-  word-break: break-all;
-  line-height: 1.6;
-}
-
-.copy-icon-button {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
-  color: #64748b;
-  transition: all 0.2s ease;
-}
-
-.copy-icon-button:hover {
-  color: #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
-}
-
-.copy-icon-button:active {
-  transform: scale(0.95);
-}
-
-
-/* ===================
-   模态框样式
-   =================== */
-:deep(.n-modal) {
-  border-radius: var(--radius-xl);
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
-}
-
-:deep(.n-dialog) {
-  border-radius: var(--radius-xl);
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
-  padding: 32px;
-}
-
-:deep(.n-dialog .n-dialog__title) {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-/* ===================
-   警告提示样式
-   =================== */
-:deep(.n-alert) {
-  border-radius: var(--radius-lg);
-  border: none;
-}
-
-:deep(.n-alert--warning) {
-  background: var(--warning-light);
-  color: #92400e;
-}
-
-/* ===================
-   响应式设计
-   =================== */
-@media (max-width: 768px) {
-  .action-bar {
-    justify-content: stretch;
-  }
-
-  .action-bar :deep(.n-button) {
-    width: 100%;
-  }
-
-  :deep(.n-data-table .n-data-table-th),
-  :deep(.n-data-table .n-data-table-td) {
-    padding: 12px 8px;
-    font-size: 13px;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .action-buttons :deep(.n-button) {
-    width: 100%;
-  }
-}
 </style>

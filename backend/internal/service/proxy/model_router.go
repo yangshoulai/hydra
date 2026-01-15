@@ -3,6 +3,7 @@ package proxy
 import (
 	"errors"
 	"log/slog"
+	"math/rand/v2"
 
 	"github.com/yangshoulai/hydra/internal/models"
 )
@@ -60,10 +61,10 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel) 
 		return "", ErrModelNotFound
 	}
 
-	// 如果有多个配置,选择第一个(理论上不应该出现重复配置)
-	selectedConfig := matchedConfigs[0]
+	// 如果有多个配置,随机选择一个实现负载均衡
+	selectedConfig := matchedConfigs[rand.IntN(len(matchedConfigs))]
 	if len(matchedConfigs) > 1 {
-		mr.logger.Warn("multiple model configurations found, using first one",
+		mr.logger.Debug("multiple model configurations found, randomly selected one",
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("unified_model", unifiedModel),
 			slog.Int("count", len(matchedConfigs)),

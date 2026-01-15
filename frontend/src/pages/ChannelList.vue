@@ -18,45 +18,51 @@
         :data="channels"
         :loading="loading"
         :pagination="pagination"
+        :single-line="false"
+        bordered
+        :scroll-x="1560"
+        striped
         :row-key="(row: Channel) => row.id"
+    />
+
+    <!-- 渠道对话框 -->
+    <ChannelDialog
+        v-if="showDialog"
+        :channel="editingChannel"
+        @confirm="handleDialogConfirm"
+        @cancel="handleDialogCancel"
+    />
+
+    <!-- 密钥管理对话框 -->
+    <KeyManagementDialog
+        v-if="selectedChannel"
+        v-model="showKeyManagement"
+        :channel-id="selectedChannel.id"
+        :channel-name="selectedChannel.name"
+        @refresh="fetchChannels"
+    />
+
+    <!-- 模型管理对话框 -->
+    <ModelManagementDialog
+        v-model="showModelManagement"
+        :channel-id="selectedChannel?.id || 0"
+        :channel-name="selectedChannel?.name || ''"
+        @refresh="fetchChannels"
     />
   </div>
 
-  <!-- 渠道对话框 -->
-  <ChannelDialog
-      v-if="showDialog"
-      :channel="editingChannel"
-      @confirm="handleDialogConfirm"
-      @cancel="handleDialogCancel"
-  />
 
-  <!-- 密钥管理对话框 -->
-  <KeyManagementDialog
-      v-if="selectedChannel"
-      v-model="showKeyManagement"
-      :channel-id="selectedChannel.id"
-      :channel-name="selectedChannel.name"
-      @refresh="fetchChannels"
-  />
-
-  <!-- 模型管理对话框 -->
-  <ModelManagementDialog
-      v-model="showModelManagement"
-      :channel-id="selectedChannel?.id || 0"
-      :channel-name="selectedChannel?.name || ''"
-      @refresh="fetchChannels"
-  />
 </template>
 
 <script setup lang="ts">
 import {h, onMounted, reactive, ref} from 'vue'
 import {type DataTableColumns, NButton, NDataTable, NIcon, NTag} from 'naive-ui'
-import {AddOutline, KeyOutline, GridOutline} from '@vicons/ionicons5'
+import {AddOutline, GridOutline, KeyOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import type {Channel} from '../types/channel'
 import ChannelDialog from '../components/ChannelDialog.vue'
 import KeyManagementDialog from '../components/KeyManagementDialog.vue'
-import ModelManagementDialog from '../components/ModelManagementDialog.vue'
+import ModelManagementDialog from '../components/ModelManagementDialog.vue' // State
 
 // State
 const channels = ref<Channel[]>([])
@@ -90,7 +96,8 @@ const columns: DataTableColumns<Channel> = [
   {
     title: 'ID',
     key: 'id',
-    width: 120
+    width: 80,
+    align: 'left'
   },
   {
     title: '名称',
@@ -100,21 +107,10 @@ const columns: DataTableColumns<Channel> = [
   {
     title: 'BASE URL',
     key: 'base_url',
+    width: 320,
     ellipsis: {
       tooltip: true
     }
-  },
-  {
-    title: '优先级',
-    key: 'priority',
-    width: 160,
-    align: 'right'
-  },
-  {
-    title: '权重',
-    key: 'weight',
-    width: 160,
-    align: 'right'
   },
   {
     title: '状态',
@@ -135,6 +131,18 @@ const columns: DataTableColumns<Channel> = [
     }
   },
   {
+    title: '优先级',
+    key: 'priority',
+    width: 160,
+    align: 'right'
+  },
+  {
+    title: '权重',
+    key: 'weight',
+    width: 160,
+    align: 'right'
+  },
+  {
     title: '密钥数量',
     key: 'keys_count',
     width: 120,
@@ -146,8 +154,9 @@ const columns: DataTableColumns<Channel> = [
   {
     title: '操作',
     key: 'actions',
-    width: 400,
+    width: 320,
     align: 'center',
+    fixed: 'right',
     render(row) {
       return h(
           'div',

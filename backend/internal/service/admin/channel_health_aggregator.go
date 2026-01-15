@@ -171,14 +171,11 @@ func (cha *ChannelHealthAggregator) aggregateChannelHealth(
 
 // GetOverallHealthStatus 获取整体健康状态摘要
 type OverallHealthStatus struct {
-	TotalChannels      int     `json:"total_channels"`
-	HealthyChannels    int     `json:"healthy_channels"`
-	DegradedChannels   int     `json:"degraded_channels"`
-	UnhealthyChannels  int     `json:"unhealthy_channels"`
-	OverallHealth      float64 `json:"overall_health"`
-	TotalKeys          int     `json:"total_keys"`
-	HealthyKeys        int     `json:"healthy_keys"`
-	UnhealthyKeys      int     `json:"unhealthy_keys"`
+	TotalChannels int     `json:"total_channels"`
+	OverallHealth float64 `json:"overall_health"`
+	TotalKeys     int     `json:"total_keys"`
+	HealthyKeys   int     `json:"healthy_keys"`
+	UnhealthyKeys int     `json:"unhealthy_keys"`
 }
 
 func (cha *ChannelHealthAggregator) GetOverallHealthStatus(ctx context.Context) (*OverallHealthStatus, error) {
@@ -197,15 +194,6 @@ func (cha *ChannelHealthAggregator) GetOverallHealthStatus(ctx context.Context) 
 		status.TotalKeys += info.TotalKeys
 		status.HealthyKeys += info.HealthyKeys
 		status.UnhealthyKeys += info.UnhealthyKeys
-
-		// 根据健康百分比分类渠道状态
-		if info.HealthPercentage >= 80 {
-			status.HealthyChannels++
-		} else if info.HealthPercentage >= 50 {
-			status.DegradedChannels++
-		} else {
-			status.UnhealthyChannels++
-		}
 	}
 
 	// 计算整体健康度
@@ -215,10 +203,7 @@ func (cha *ChannelHealthAggregator) GetOverallHealthStatus(ctx context.Context) 
 
 	cha.logger.Debug("overall health status calculated",
 		slog.Int("total_channels", status.TotalChannels),
-		slog.Int("healthy_channels", status.HealthyChannels),
-		slog.Int("degraded_channels", status.DegradedChannels),
-		slog.Int("unhealthy_channels", status.UnhealthyChannels),
-		slog.Float64("overall_health", status.OverallHealth),
+		slog.Int("total_keys", status.TotalKeys),
 	)
 
 	return status, nil
