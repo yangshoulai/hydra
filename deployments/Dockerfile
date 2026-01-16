@@ -5,18 +5,18 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm install -g pnpm && pnpm install
 
 COPY frontend/ ./
-RUN npm run build
+RUN pnpm run build
 
 # Stage 2: Backend Build
-FROM golang:1.21-alpine AS backend-builder
+FROM golang:1.25.6-alpine AS backend-builder
 
 WORKDIR /app
 
-# Install dependencies
-RUN apk add --no-cache git
+# Install dependencies (gcc and musl-dev for CGO)
+RUN apk add --no-cache gcc musl-dev
 
 # Copy Go modules
 COPY backend/go.mod backend/go.sum ./
@@ -39,15 +39,18 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates sqlite-libs
 
-# Copy binary and config
+# Copy binary and static files
 COPY --from=backend-builder /app/hydra .
+COPY --from=backend-builder /app/static ./static
 COPY configs/config.example.yaml ./configs/config.yaml
 
 # Create logs and data directories
-RUN mkdir -p /app/logs /app/data
+RUN mkdir -p /app/data
+
+VOLUME /app/data
 
 # Expose port
 EXPOSE 8080
 
 # Run
-CMD ["./hydra", "-c", "./configs/config.yaml"]
+CMD ["./hydra", "-config", "./configs/config.yaml"]

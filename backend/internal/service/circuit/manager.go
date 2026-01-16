@@ -3,7 +3,9 @@ package circuit
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/repository"
@@ -26,8 +28,11 @@ type Manager struct {
 	keyBreakers     map[uint]*KeyBreaker
 	channelBreakers map[uint]*ChannelBreaker
 
-	probeInterval time.Duration // 探测间隔
-	stopChan      chan struct{}
+	probeInterval      time.Duration // 探测间隔
+	probeMaxConcurrent int           // 最大并发探测数
+	probing            int32         // 探测进行中标志 (0=空闲, 1=探测中)
+	stopChan           chan struct{}
+	restartChan        chan struct{} // 重启探测调度器信号
 }
 
 // NewManager 创建熔断器管理器
@@ -42,17 +47,19 @@ func NewManager(
 	probeInterval time.Duration,
 ) *Manager {
 	return &Manager{
-		db:               db,
-		logger:           logger,
-		keyRepo:          keyRepo,
-		channelRepo:      channelRepo,
-		settingService:   settingService,
-		failureThreshold: failureThreshold,
-		coolingDuration:  coolingDuration,
-		probeInterval:    probeInterval,
-		keyBreakers:      make(map[uint]*KeyBreaker),
-		channelBreakers:  make(map[uint]*ChannelBreaker),
-		stopChan:         make(chan struct{}),
+		db:                 db,
+		logger:             logger,
+		keyRepo:            keyRepo,
+		channelRepo:        channelRepo,
+		settingService:     settingService,
+		failureThreshold:   failureThreshold,
+		coolingDuration:    coolingDuration,
+		probeInterval:      probeInterval,
+		probeMaxConcurrent: 10, // 默认值
+		keyBreakers:        make(map[uint]*KeyBreaker),
+		channelBreakers:    make(map[uint]*ChannelBreaker),
+		stopChan:           make(chan struct{}),
+		restartChan:        make(chan struct{}),
 	}
 }
 
@@ -185,20 +192,33 @@ func (m *Manager) ResetKey(keyID uint) {
 
 // StartProbeScheduler 启动探测调度器
 func (m *Manager) StartProbeScheduler() {
-	ticker := time.NewTicker(m.probeInterval)
-	defer ticker.Stop()
-
-	m.logger.Info("circuit breaker probe scheduler started",
-		slog.Duration("interval", m.probeInterval),
-	)
+	m.logger.Info("circuit breaker probe scheduler starting")
 
 	for {
-		select {
-		case <-ticker.C:
-			m.probeHalfOpenKeys()
-		case <-m.stopChan:
-			m.logger.Info("circuit breaker probe scheduler stopped")
-			return
+		m.mu.RLock()
+		interval := m.probeInterval
+		m.mu.RUnlock()
+
+		ticker := time.NewTicker(interval)
+
+		m.logger.Info("circuit breaker probe scheduler started",
+			slog.Duration("interval", interval),
+		)
+
+	loop:
+		for {
+			select {
+			case <-ticker.C:
+				m.probeHalfOpenKeys()
+			case <-m.restartChan:
+				ticker.Stop()
+				m.logger.Info("circuit breaker probe scheduler restarting due to config change")
+				break loop
+			case <-m.stopChan:
+				ticker.Stop()
+				m.logger.Info("circuit breaker probe scheduler stopped")
+				return
+			}
 		}
 	}
 }
@@ -208,40 +228,124 @@ func (m *Manager) Stop() {
 	close(m.stopChan)
 }
 
+// keyProbeCandidate 探测候选 Key
+type keyProbeCandidate struct {
+	keyID       uint
+	lastFailure time.Time
+}
+
 // probeHalfOpenKeys 探测半开状态的 Key
 func (m *Manager) probeHalfOpenKeys() {
+	// 检查是否已有探测在进行中
+	if !atomic.CompareAndSwapInt32(&m.probing, 0, 1) {
+		m.logger.Warn("skipping probe cycle, previous probe still in progress")
+		return
+	}
+
+	// 获取当前配置的最大并发探测数
 	m.mu.RLock()
-	halfOpenKeys := make([]uint, 0)
+	maxConcurrentProbes := m.probeMaxConcurrent
+	m.mu.RUnlock()
+
+	m.mu.RLock()
+	candidates := make([]keyProbeCandidate, 0)
 	for keyID, breaker := range m.keyBreakers {
 		if breaker.GetState() == KeyStateHalfOpen {
-			halfOpenKeys = append(halfOpenKeys, keyID)
+			stats := breaker.GetStats()
+			if lastFailure, ok := stats["last_failure"].(time.Time); ok {
+				candidates = append(candidates, keyProbeCandidate{
+					keyID:       keyID,
+					lastFailure: lastFailure,
+				})
+			}
 		}
 	}
 	m.mu.RUnlock()
 
-	if len(halfOpenKeys) == 0 {
+	if len(candidates) == 0 {
+		atomic.StoreInt32(&m.probing, 0)
 		return
 	}
 
+	// 按冷却时间排序，优先探测冷却时间最长的 Key
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].lastFailure.Before(candidates[j].lastFailure)
+	})
+
+	// 限制并发探测数量
+	probeCount := len(candidates)
+	if probeCount > maxConcurrentProbes {
+		probeCount = maxConcurrentProbes
+	}
+
 	m.logger.Info("probing half-open keys",
-		slog.Int("count", len(halfOpenKeys)),
+		slog.Int("total", len(candidates)),
+		slog.Int("probing", probeCount),
+		slog.Int("max_concurrent", maxConcurrentProbes),
 	)
 
-	for _, keyID := range halfOpenKeys {
-		go m.probeKey(keyID)
+	// 使用 WaitGroup 等待所有探测完成
+	var wg sync.WaitGroup
+	wg.Add(probeCount)
+
+	// 探测优先级最高的 N 个 Key
+	for i := 0; i < probeCount; i++ {
+		go func(keyID uint) {
+			defer wg.Done()
+			m.probeKey(keyID)
+		}(candidates[i].keyID)
 	}
+
+	// 在后台等待所有探测完成后清除标志
+	go func() {
+		wg.Wait()
+		atomic.StoreInt32(&m.probing, 0)
+		m.logger.Debug("probe cycle completed")
+	}()
 }
 
 // probeKey 探测单个 Key
 func (m *Manager) probeKey(keyID uint) {
-	// TODO: 实现实际的探测逻辑(调用上游 API)
-	// 这里简化处理,假设探测成功
-	m.logger.Debug("probing key",
-		slog.Uint64("key_id", uint64(keyID)),
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 
-	// 探测成功后,状态会自动转换为 Active
-	// 如果探测失败,状态会重新转换为 Cooling
+	// 获取 Key 信息
+	key, err := m.keyRepo.FindByID(ctx, keyID)
+	if err != nil {
+		m.logger.Error("failed to find key for probe",
+			slog.Uint64("key_id", uint64(keyID)),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+
+	// 获取 Channel 信息
+	channel, err := m.channelRepo.FindByID(ctx, key.ChannelID)
+	if err != nil {
+		m.logger.Error("failed to find channel for probe",
+			slog.Uint64("key_id", uint64(keyID)),
+			slog.Uint64("channel_id", uint64(key.ChannelID)),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+
+	// 创建探测处理器
+	probeHandler := NewProbeHandler(m, m.logger)
+
+	// 执行探测(带重试)
+	success, isHardFailure, err := probeHandler.ProbeKeyWithRetry(ctx, key, channel, 2)
+
+	// 处理探测结果
+	probeHandler.HandleProbeResult(keyID, key.ChannelID, success, isHardFailure)
+
+	if err != nil {
+		m.logger.Debug("probe completed with error",
+			slog.Uint64("key_id", uint64(keyID)),
+			slog.Bool("success", success),
+			slog.String("error", err.Error()),
+		)
+	}
 }
 
 // updateKeyStatus 更新数据库中的 Key 状态
@@ -288,14 +392,21 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 	// 从配置服务获取最新的熔断器配置
 	failureThreshold := m.settingService.GetInt(ctx, "circuit_breaker_failure_threshold", m.failureThreshold)
 	coolingDuration := m.settingService.GetDuration(ctx, "circuit_breaker_cooling_duration", m.coolingDuration)
+	probeInterval := m.settingService.GetDuration(ctx, "circuit_breaker_probe_interval", m.probeInterval)
+	probeMaxConcurrent := m.settingService.GetInt(ctx, "circuit_breaker_probe_max_concurrent", m.probeMaxConcurrent)
 
 	m.mu.Lock()
 
 	// 更新配置
 	oldFailureThreshold := m.failureThreshold
 	oldCoolingDuration := m.coolingDuration
+	oldProbeInterval := m.probeInterval
+	oldProbeMaxConcurrent := m.probeMaxConcurrent
+
 	m.failureThreshold = failureThreshold
 	m.coolingDuration = coolingDuration
+	m.probeInterval = probeInterval
+	m.probeMaxConcurrent = probeMaxConcurrent
 
 	// 更新所有现有的熔断器配置
 	for _, breaker := range m.keyBreakers {
@@ -312,5 +423,19 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 		slog.Int("new_failure_threshold", failureThreshold),
 		slog.Duration("old_cooling_duration", oldCoolingDuration),
 		slog.Duration("new_cooling_duration", coolingDuration),
+		slog.Duration("old_probe_interval", oldProbeInterval),
+		slog.Duration("new_probe_interval", probeInterval),
+		slog.Int("old_probe_max_concurrent", oldProbeMaxConcurrent),
+		slog.Int("new_probe_max_concurrent", probeMaxConcurrent),
 	)
+
+	// 如果探测间隔发生变化，重启探测调度器
+	if oldProbeInterval != probeInterval {
+		m.logger.Info("probe interval changed, restarting scheduler")
+		select {
+		case m.restartChan <- struct{}{}:
+		default:
+			m.logger.Warn("failed to send restart signal, channel might be full")
+		}
+	}
 }

@@ -166,7 +166,16 @@ const RefreshIcon = RefreshOutline
 const SearchIcon = SearchOutline
 
 // 表单数据
-const formData = reactive<LogQueryRequest>({
+const formData = reactive<{
+  trace_id: string
+  access_token: string
+  requested_model?: string
+  channel_id?: number
+  status_code?: number
+  is_success?: string
+  start_time?: string
+  end_time?: string
+}>({
   trace_id: '',
   access_token: '',
   requested_model: undefined,
@@ -200,9 +209,9 @@ const statusCodeOptions: SelectOption[] = [
 ]
 
 // 成功状态选项
-const successOptions: SelectOption[] = [
-  {label: '成功', value: true},
-  {label: '失败', value: false}
+const successOptions = [
+  {label: '成功', value: 'true'},
+  {label: '失败', value: 'false'}
 ]
 
 // 加载渠道列表
@@ -250,7 +259,11 @@ function handleDateChange(value: [number, number] | null) {
 
 // 处理查询
 function handleQuery() {
-  emit('filter', {...formData})
+  const queryData: LogQueryRequest = {
+    ...formData,
+    is_success: formData.is_success === 'true' ? true : formData.is_success === 'false' ? false : undefined
+  }
+  emit('filter', queryData)
 }
 
 // 重置筛选条件
@@ -266,7 +279,11 @@ function handleReset() {
   dateRange.value = null
 
   // 重置后自动查询
-  emit('filter', {...formData})
+  const queryData: LogQueryRequest = {
+    ...formData,
+    is_success: undefined
+  }
+  emit('filter', queryData)
 }
 
 // 暴露方法供父组件调用

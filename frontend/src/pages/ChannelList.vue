@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 animate-fade-in channel-list-page">
+  <div class="space-y-4">
     <!-- 页面头部 -->
     <n-card :bordered="false" class="page-header-card">
       <n-space justify="space-between" align="center">
@@ -309,16 +309,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 页面样式 */
-.channel-list-page {
-  --primary-color: #18a058;
-  --primary-color-hover: #36ad6a;
-  --info-color: #2080f0;
-  --warning-color: #f0a020;
-  --success-color: #18a058;
-  --error-color: #d03050;
-}
-
 /* 页面头部卡片 */
 .page-header-card {
   background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
@@ -339,19 +329,4 @@ onMounted(() => {
   line-height: 1.6;
 }
 
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .page-header-card {
-    padding: 16px;
-  }
-
-  .page-title {
-    font-size: 20px;
-  }
-
-  .channel-list-page :deep(.n-button) {
-    font-size: 14px;
-  }
-}
 </style>

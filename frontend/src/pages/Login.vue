@@ -12,7 +12,7 @@
     <!-- 内容区域 -->
     <div class="relative z-10 flex flex-col items-center">
       <!-- 登录卡片 -->
-      <div class="w-[420px] bg-white/98 backdrop-blur-xl rounded-3xl p-12 shadow-2xl shadow-black/30 animate-slide-up">
+      <div class="w-[420px] bg-white/98 backdrop-blur-xl rounded-3xl p-12 shadow-2xl shadow-black/30">
         <!-- 头部 -->
         <div class="text-center mb-10">
           <div
@@ -46,6 +46,7 @@
                 placeholder="用户名"
                 size="large"
                 @keydown.enter="handleLogin"
+                :input-props="{ autocomplete: 'username' }"
             >
               <template #prefix>
                 <n-icon>
@@ -63,6 +64,7 @@
                 placeholder="密码"
                 size="large"
                 @keydown.enter="handleLogin"
+                :input-props="{ autocomplete: 'current-password' }"
             >
               <template #prefix>
                 <n-icon>

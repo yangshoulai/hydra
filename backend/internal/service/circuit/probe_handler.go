@@ -43,7 +43,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 
 	// 构造探测请求(调用 /v1/models 接口)
 	probeURL := fmt.Sprintf("%s/v1/models", channel.BaseURL)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", probeURL, nil)
 	if err != nil {
 		ph.logger.Error("failed to create probe request",
@@ -120,7 +120,7 @@ func (ph *ProbeHandler) HandleProbeResult(keyID uint, channelID uint, success bo
 	if success {
 		// 探测成功,记录成功并恢复为正常状态
 		ph.manager.RecordKeySuccess(keyID, channelID)
-		
+
 		ph.logger.Info("key recovered after probe",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.String("previous_state", string(currentState)),
@@ -129,14 +129,14 @@ func (ph *ProbeHandler) HandleProbeResult(keyID uint, channelID uint, success bo
 		if isHardFailure {
 			// 硬故障,标记为永久禁用
 			ph.manager.RecordKeyHardFailure(keyID, channelID)
-			
+
 			ph.logger.Error("key marked as dead after probe",
 				slog.Uint64("key_id", uint64(keyID)),
 			)
 		} else {
 			// 软故障,重新进入冷却状态
 			ph.manager.RecordKeySoftFailure(keyID, channelID)
-			
+
 			newState := keyBreaker.GetState()
 			if newState == KeyStateCooling {
 				ph.logger.Warn("key re-entered cooling state after probe failure",
@@ -161,7 +161,7 @@ func (ph *ProbeHandler) ProbeKeyWithRetry(ctx context.Context, key *models.Key, 
 			case <-ctx.Done():
 				return false, false, ctx.Err()
 			}
-			
+
 			ph.logger.Debug("retrying probe",
 				slog.Uint64("key_id", uint64(key.ID)),
 				slog.Int("attempt", attempt+1),

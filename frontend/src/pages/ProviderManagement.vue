@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 animate-fade-in provider-management-page">
+  <div class="space-y-4">
     <!-- 页面头部 -->
     <n-card :bordered="false" class="page-header-card">
       <n-space justify="space-between" align="center">
@@ -324,46 +324,40 @@
         </n-alert>
 
         <!-- 统计信息 -->
-        <n-card size="small" :bordered="false" class="stats-card">
+        <n-card size="small" :bordered="false">
           <n-grid :cols="3" :x-gap="20" responsive="screen">
             <n-grid-item>
-              <div class="stat-item">
-                <div class="stat-icon stat-icon-info">
-                  <n-icon size="20">
-                    <CloudOutline/>
-                  </n-icon>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-label">远程厂商总数</div>
-                  <div class="stat-value">{{ remoteProviders.length }}</div>
-                </div>
-              </div>
+              <n-space align="center">
+                <n-icon size="20" color="#2080f0">
+                  <CloudOutline/>
+                </n-icon>
+                <n-space vertical :size="4">
+                  <n-text depth="3" style="font-size: 13px;">远程厂商总数</n-text>
+                  <n-text strong style="font-size: 20px;">{{ remoteProviders.length }}</n-text>
+                </n-space>
+              </n-space>
             </n-grid-item>
             <n-grid-item>
-              <div class="stat-item">
-                <div class="stat-icon stat-icon-success">
-                  <n-icon size="20">
-                    <CheckmarkCircleOutline/>
-                  </n-icon>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-label">可添加</div>
-                  <div class="stat-value stat-value-success">{{ availableProviders.length }}</div>
-                </div>
-              </div>
+              <n-space align="center">
+                <n-icon size="20" color="#18a058">
+                  <CheckmarkCircleOutline/>
+                </n-icon>
+                <n-space vertical :size="4">
+                  <n-text depth="3" style="font-size: 13px;">可添加</n-text>
+                  <n-text strong style="font-size: 20px; color: #18a058;">{{ availableProviders.length }}</n-text>
+                </n-space>
+              </n-space>
             </n-grid-item>
             <n-grid-item>
-              <div class="stat-item">
-                <div class="stat-icon stat-icon-primary">
-                  <n-icon size="20">
-                    <CheckboxOutline/>
-                  </n-icon>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-label">已选中</div>
-                  <div class="stat-value stat-value-primary">{{ checkedProviderIds.length }}</div>
-                </div>
-              </div>
+              <n-space align="center">
+                <n-icon size="20" color="#2080f0">
+                  <CheckboxOutline/>
+                </n-icon>
+                <n-space vertical :size="4">
+                  <n-text depth="3" style="font-size: 13px;">已选中</n-text>
+                  <n-text strong style="font-size: 20px; color: #2080f0;">{{ checkedProviderIds.length }}</n-text>
+                </n-space>
+              </n-space>
             </n-grid-item>
           </n-grid>
         </n-card>
@@ -864,27 +858,4 @@ watch(showSyncDialog, (newVal) => {
   line-height: 1.6;
 }
 
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .page-header-card {
-    padding: 16px;
-  }
-
-  .page-title {
-    font-size: 20px;
-  }
-
-  .provider-dialog,
-  .sync-dialog {
-    width: 95vw !important;
-  }
-
-  .stats-card :deep(.n-grid-item) {
-    min-width: 100%;
-  }
-
-  .provider-management-page :deep(.n-button) {
-    font-size: 14px;
-  }
-}
 </style>

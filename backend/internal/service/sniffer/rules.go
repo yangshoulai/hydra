@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // SniffRule 嗅探规则接口
@@ -83,31 +84,44 @@ func (r *HTMLResponseRule) Check(body []byte, contentType string) bool {
 
 // PlainTextErrorRule 明文错误消息规则
 type PlainTextErrorRule struct {
+	mu            sync.RWMutex
 	errorKeywords []string
 }
 
 func NewPlainTextErrorRule() *PlainTextErrorRule {
 	return &PlainTextErrorRule{
-		errorKeywords: []string{
-			"无可用后端",
-			"额度不足",
-			"maintenance",
-			"service unavailable",
-			"bad gateway",
-			"gateway timeout",
-			"quota exceeded",
-			"rate limit",
-			"unauthorized",
-			"forbidden",
-			"not found",
-			"invalid api key",
-			"invalid key",
-			"authentication failed",
-			"insufficient funds",
-			"insufficient quota",
-			"billing issue",
-		},
+		errorKeywords: GetDefaultPlainTextErrorKeywords(),
 	}
+}
+
+// GetDefaultPlainTextErrorKeywords 获取默认的错误关键词
+func GetDefaultPlainTextErrorKeywords() []string {
+	return []string{
+		"无可用后端",
+		"额度不足",
+		"maintenance",
+		"service unavailable",
+		"bad gateway",
+		"gateway timeout",
+		"quota exceeded",
+		"rate limit",
+		"unauthorized",
+		"forbidden",
+		"not found",
+		"invalid api key",
+		"invalid key",
+		"authentication failed",
+		"insufficient funds",
+		"insufficient quota",
+		"billing issue",
+	}
+}
+
+// UpdateKeywords 更新错误关键词
+func (r *PlainTextErrorRule) UpdateKeywords(keywords []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.errorKeywords = keywords
 }
 
 func (r *PlainTextErrorRule) Name() string {
@@ -117,8 +131,12 @@ func (r *PlainTextErrorRule) Name() string {
 func (r *PlainTextErrorRule) Check(body []byte, contentType string) bool {
 	bodyLower := strings.ToLower(string(body))
 
+	r.mu.RLock()
+	keywords := r.errorKeywords
+	r.mu.RUnlock()
+
 	// 检查是否包含任何错误关键词
-	for _, keyword := range r.errorKeywords {
+	for _, keyword := range keywords {
 		if strings.Contains(bodyLower, strings.ToLower(keyword)) {
 			return true
 		}

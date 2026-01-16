@@ -34,4 +34,5 @@ const (
 	SettingProxyRequestTimeout            = "proxy.request_timeout"
 	SettingProxyMaxResponseSize           = "proxy.max_response_size"
 	SettingProxyMaxConcurrent             = "proxy.max_concurrent"
+	SettingSnifferPlainTextErrorRules     = "sniffer.plain_text_error_rules"
 )

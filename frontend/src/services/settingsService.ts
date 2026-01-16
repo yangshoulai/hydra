@@ -18,6 +18,15 @@ export interface Setting {
   updated_at: string
 }
 
+// 明文错误规则相关类型
+export interface PlainTextErrorRulesResponse {
+  data: string[]
+}
+
+export interface UpdatePlainTextErrorRulesRequest {
+  keywords: string[]
+}
+
 // Settings API client
 class SettingsService {
   // 获取所有系统设置
@@ -40,6 +49,18 @@ class SettingsService {
   // 更新单个设置
   async updateSetting(key: string, value: string): Promise<void> {
     await axios.put(`${BASE_URL}/settings/${key}`, { value })
+  }
+
+  // 获取明文错误规则
+  async getPlainTextErrorRules(): Promise<string[]> {
+    const response = await axios.get<PlainTextErrorRulesResponse>(`${BASE_URL}/settings/sniffer/plain-text-rules`)
+    return response.data.data
+  }
+
+  // 更新明文错误规则
+  async updatePlainTextErrorRules(keywords: string[]): Promise<void> {
+    const request: UpdatePlainTextErrorRulesRequest = { keywords }
+    await axios.put(`${BASE_URL}/settings/sniffer/plain-text-rules`, request)
   }
 }
 

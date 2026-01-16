@@ -1,11 +1,13 @@
 package proxy
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/repository"
+	configService "github.com/yangshoulai/hydra/internal/service/config"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
 	"github.com/yangshoulai/hydra/internal/service/logger"
 	"github.com/yangshoulai/hydra/internal/service/proxy"
@@ -20,6 +22,7 @@ func RegisterRoutes(
 	circuitManager *circuit.Manager,
 	auditLogger *logger.AuditLogger,
 	proxyServiceConfig *proxy.ProxyServiceConfig,
+	settingService *configService.SettingService,
 ) {
 	// 创建 repositories
 	channelRepo := repository.NewChannelRepository(db)
@@ -27,10 +30,23 @@ func RegisterRoutes(
 	accessTokenRepo := repository.NewAccessTokenRepository(db)
 
 	// 创建代理服务
-	proxyService := proxy.NewProxyService(logger, channelRepo, circuitManager, auditLogger, proxyServiceConfig)
+	proxySvc := proxy.NewProxyService(logger, channelRepo, circuitManager, auditLogger, proxyServiceConfig)
+
+	// 注册到 SnifferManager 以支持热更新
+	configService.GetSnifferManager().RegisterUpdater(proxySvc)
+
+	// 从系统设置加载明文错误规则
+	ctx := context.Background()
+	keywords := settingService.GetPlainTextErrorRules(ctx)
+	if len(keywords) > 0 {
+		proxySvc.UpdateSnifferKeywords(keywords)
+		logger.Info("plain text error rules loaded from system settings",
+			slog.Int("count", len(keywords)),
+		)
+	}
 
 	// 创建 handlers
-	chatCompletionsHandler := NewChatCompletionsHandler(logger, proxyService)
+	chatCompletionsHandler := NewChatCompletionsHandler(logger, proxySvc)
 	modelsHandler := NewModelsHandler(logger, modelRepo)
 
 	// 创建 v1 路由组

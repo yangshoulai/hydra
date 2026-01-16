@@ -2,11 +2,13 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
+	"github.com/yangshoulai/hydra/internal/service/sniffer"
 )
 
 // Initializer 系统设置初始化器
@@ -86,12 +88,34 @@ var DefaultSettings = []models.SystemSetting{
 	},
 }
 
+// GetDefaultPlainTextErrorRulesSetting 获取默认的明文错误规则设置
+func GetDefaultPlainTextErrorRulesSetting() models.SystemSetting {
+	// 将默认关键词转换为 JSON
+	keywords := sniffer.GetDefaultPlainTextErrorKeywords()
+	jsonBytes, err := json.Marshal(keywords)
+	if err != nil {
+		// 如果序列化失败，使用空数组
+		jsonBytes = []byte("[]")
+	}
+
+	return models.SystemSetting{
+		Key:       models.SettingSnifferPlainTextErrorRules,
+		Value:     string(jsonBytes),
+		ValueType: "json",
+		Category:  "sniffer",
+		Remark:    "明文错误关键词规则(每行一个关键词)",
+	}
+}
+
 // Initialize 初始化系统设置
 // 如果设置不存在则创建,存在则跳过
 func (i *Initializer) Initialize(ctx context.Context) error {
 	i.logger.Info("initializing system settings")
 
-	for _, setting := range DefaultSettings {
+	// 合并默认设置和明文错误规则设置
+	allSettings := append(DefaultSettings, GetDefaultPlainTextErrorRulesSetting())
+
+	for _, setting := range allSettings {
 		// 检查设置是否已存在
 		existing, err := i.systemSettingRepo.GetByKey(ctx, setting.Key)
 		if err != nil {
@@ -135,7 +159,7 @@ func (i *Initializer) Initialize(ctx context.Context) error {
 	}
 
 	i.logger.Info("system settings initialized successfully",
-		slog.Int("total_settings", len(DefaultSettings)),
+		slog.Int("total_settings", len(allSettings)),
 	)
 
 	return nil

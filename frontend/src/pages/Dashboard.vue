@@ -43,12 +43,7 @@
             </div>
           </div>
           <div class="metric-card__value">
-            <n-number-animation
-                :from="0"
-                :to="metrics?.total_requests_today || 0"
-                :active="true"
-                :format="formatNumber"
-            />
+            {{ formatNumber(metrics?.total_requests_today || 0) }}
           </div>
           <div class="metric-card__label">今日请求总数</div>
         </div>
@@ -292,7 +287,7 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
       return h('div', {class: 'flex items-center gap-2 pl-2 pr-2'}, [
         h(NProgress, {
           type: 'line',
-          percentage: rate,
+          percentage: parseFloat(rate.toFixed(2)),
           showIndicator: true,
           height: 12,
           borderRadius: 3,
@@ -379,7 +374,7 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
       return h('div', {class: 'flex items-center gap-2 pl-2 pr-2'}, [
         h(NProgress, {
           type: 'line',
-          percentage: rate,
+          percentage: parseFloat(rate.toFixed(2)),
           showIndicator: true,
           height: 12,
           borderRadius: 3,
@@ -391,23 +386,12 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
   }
 ]
 
-// 计算百分比
-function calculatePercentage(value: number, total: number): number {
-  if (total === 0) return 0
-  return Math.round((value / total) * 100)
-}
 
 // 格式化数字（添加千分位）
 function formatNumber(value: number): string {
   return value.toLocaleString()
 }
 
-// 根据健康度返回颜色
-function getHealthColor(percentage: number): string {
-  if (percentage >= 80) return '#10b981'
-  if (percentage >= 50) return '#f59e0b'
-  return '#ef4444'
-}
 
 onMounted(() => {
   if (error.value) {
@@ -417,29 +401,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 容器 */
-.dashboard-container {
-  padding: 0;
-  margin: 0 auto;
-}
-
-/* 页面标题 */
-.page-header {
-  margin-bottom: 24px;
-}
-
-.page-title {
-  font-size: 28px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 8px 0;
-  letter-spacing: -0.5px;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  color: #64748b;
-}
 
 /* 统计网格 */
 .stats-grid {
@@ -693,54 +654,4 @@ onMounted(() => {
   background: #f1f5f9;
 }
 
-/* 响应式设计 */
-@media (max-width: 1024px) {
-  .stats-grid :deep(.n-grid) {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-
-@media (max-width: 640px) {
-  .stats-grid :deep(.n-grid) {
-    grid-template-columns: 1fr !important;
-  }
-
-  .health-cards {
-    grid-template-columns: 1fr !important;
-  }
-
-  .page-title {
-    font-size: 24px;
-  }
-
-  .metric-card {
-    padding: 16px;
-  }
-
-  .metric-card__value {
-    font-size: 28px;
-  }
-
-  .key-stats {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .key-stats__divider {
-    width: 100%;
-    height: 1px;
-    margin: 0;
-  }
-
-  .key-status__metrics {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .key-status__divider {
-    width: 100%;
-    height: 1px;
-    margin: 0;
-  }
-}
 </style>

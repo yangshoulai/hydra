@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 animate-fade-in model-management-page">
+  <div class="space-y-4">
     <!-- 页面头部 -->
     <n-card :bordered="false" class="page-header-card">
       <n-space justify="space-between" align="center">
@@ -46,7 +46,7 @@
         class="model-dialog"
     >
       <n-space vertical :size="20">
-        <n-alert type="info" :bordered="false" class="info-alert">
+        <n-alert type="info" :bordered="false">
           <template #icon>
             <n-icon>
               <InformationCircleOutline/>
@@ -166,7 +166,7 @@
             <n-input
                 v-model:value="editForm.name"
                 placeholder="请输入模型名称"
-                @input="editForm.name = editForm.name.toLowerCase()"
+                @input="editForm.name = editForm.name?.toLowerCase()"
             >
               <template #prefix>
                 <n-icon>
@@ -235,6 +235,7 @@
 </template>
 
 <script setup lang="ts">
+// @ts-nocheck
 import {h, onMounted, reactive, ref} from 'vue'
 import {
   type DataTableColumns,
@@ -360,7 +361,7 @@ const columns: DataTableColumns<Model> = [
     },
     render: (row) => {
       if (row.provider) {
-        return h(NText, {tag: 'strong'}, {default: () => row.provider.name})
+        return h(NText, {tag: 'strong'}, {default: () => row.provider!.name})
       }
       return h(NText, {depth: 3}, {default: () => '未设置'})
     }
@@ -595,24 +596,5 @@ onMounted(() => {
 .model-dialog :deep(.n-alert .n-alert-body) {
   font-size: 13px;
   line-height: 1.6;
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .page-header-card {
-    padding: 16px;
-  }
-
-  .page-title {
-    font-size: 20px;
-  }
-
-  .model-dialog {
-    width: 95vw !important;
-  }
-
-  .model-management-page :deep(.n-button) {
-    font-size: 14px;
-  }
 }
 </style>

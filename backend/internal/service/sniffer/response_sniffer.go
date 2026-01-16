@@ -104,6 +104,30 @@ func (s *ResponseSniffer) AddRule(rule SniffRule) {
 	s.rules = append(s.rules, rule)
 }
 
+// UpdatePlainTextErrorKeywords 更新明文错误关键词
+func (s *ResponseSniffer) UpdatePlainTextErrorKeywords(keywords []string) {
+	for _, rule := range s.rules {
+		if plainTextRule, ok := rule.(*PlainTextErrorRule); ok {
+			plainTextRule.UpdateKeywords(keywords)
+			return
+		}
+	}
+}
+
+// GetPlainTextErrorKeywords 获取当前的明文错误关键词
+func (s *ResponseSniffer) GetPlainTextErrorKeywords() []string {
+	for _, rule := range s.rules {
+		if plainTextRule, ok := rule.(*PlainTextErrorRule); ok {
+			plainTextRule.mu.RLock()
+			keywords := make([]string, len(plainTextRule.errorKeywords))
+			copy(keywords, plainTextRule.errorKeywords)
+			plainTextRule.mu.RUnlock()
+			return keywords
+		}
+	}
+	return GetDefaultPlainTextErrorKeywords()
+}
+
 // truncateString 截断字符串用于日志输出
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {

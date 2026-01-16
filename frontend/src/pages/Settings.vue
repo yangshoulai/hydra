@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 animate-fade-in settings-page">
+  <div class="space-y-4 settings-page">
     <!-- 页面头部 -->
     <n-card :bordered="false" class="page-header-card">
       <n-space justify="space-between" align="center">
@@ -14,7 +14,7 @@
 
     <div class="settings-content">
       <!-- 熔断器设置 -->
-      <n-card class="settings-card" :bordered="false">
+      <n-card class="settings-card" :bordered="true">
         <template #header>
           <div class="card-header">
             <div class="card-title">
@@ -29,7 +29,7 @@
         </template>
         <n-text class="card-description">保护系统免受级联故障影响，自动隔离异常服务</n-text>
 
-        <n-form ref="circuitFormRef" :model="formData" label-placement="left" label-width="140px" class="settings-form">
+        <n-form :model="formData" label-placement="left" label-width="140px" class="settings-form">
           <n-grid :cols="24" :x-gap="24">
             <n-grid-item :span="24" :md="12">
               <div class="form-item-wrapper">
@@ -78,12 +78,44 @@
                 <n-text class="field-hint">单个请求失败后的最大重试次数</n-text>
               </div>
             </n-grid-item>
+
+            <n-grid-item :span="24" :md="12">
+              <div class="form-item-wrapper">
+                <n-form-item label="探测间隔" path="circuit_breaker_probe_interval">
+                  <n-input-number
+                      v-model:value="formData.circuit_breaker_probe_interval"
+                      :min="10"
+                      :max="300"
+                      style="width: 100%"
+                  >
+                    <template #suffix>秒</template>
+                  </n-input-number>
+                </n-form-item>
+                <n-text class="field-hint">探测半开状态 Key 的时间间隔</n-text>
+              </div>
+            </n-grid-item>
+
+            <n-grid-item :span="24" :md="12">
+              <div class="form-item-wrapper">
+                <n-form-item label="最大并发探测数" path="circuit_breaker_probe_max_concurrent">
+                  <n-input-number
+                      v-model:value="formData.circuit_breaker_probe_max_concurrent"
+                      :min="1"
+                      :max="50"
+                      style="width: 100%"
+                  >
+                    <template #suffix>个</template>
+                  </n-input-number>
+                </n-form-item>
+                <n-text class="field-hint">每次探测周期最多同时探测的 Key 数量</n-text>
+              </div>
+            </n-grid-item>
           </n-grid>
         </n-form>
       </n-card>
 
       <!-- 代理设置 -->
-      <n-card class="settings-card" :bordered="false">
+      <n-card class="settings-card" :bordered="true">
         <template #header>
           <div class="card-header">
             <div class="card-title">
@@ -154,8 +186,43 @@
         </n-form>
       </n-card>
 
+      <!-- 响应嗅探设置 -->
+      <n-card class="settings-card" :bordered="true">
+        <template #header>
+          <div class="card-header">
+            <div class="card-title">
+              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>响应嗅探设置</span>
+            </div>
+            <n-tag size="small" :bordered="false" type="error">Sniffer</n-tag>
+          </div>
+        </template>
+        <n-text class="card-description">配置明文错误关键词，用于识别假 200 响应</n-text>
+
+        <n-form label-placement="left" label-width="140px" class="settings-form">
+          <n-grid :cols="24" :x-gap="24">
+            <n-grid-item :span="24">
+              <div class="form-item-wrapper">
+                <n-form-item label="错误关键词" path="sniffer_plain_text_error_keywords">
+                  <n-input
+                      v-model:value="snifferKeywords"
+                      type="textarea"
+                      placeholder="每行一个关键词，不区分大小写"
+                      :autosize="{ minRows: 10, maxRows: 20 }"
+                      style="width: 100%"
+                  />
+                </n-form-item>
+                <n-text class="field-hint">响应 Body 包含这些关键词时将被识别为错误响应，每行一个关键词</n-text>
+              </div>
+            </n-grid-item>
+          </n-grid>
+        </n-form>
+      </n-card>
+
       <!-- 日志设置 -->
-      <n-card class="settings-card" :bordered="false">
+      <n-card class="settings-card" :bordered="true">
         <template #header>
           <div class="card-header">
             <div class="card-title">
@@ -299,6 +366,8 @@ const message = useMessage()
 interface SettingsData {
   circuit_breaker_failure_threshold: number
   circuit_breaker_cooling_duration: number
+  circuit_breaker_probe_interval: number
+  circuit_breaker_probe_max_concurrent: number
   proxy_max_retry: number
   proxy_request_timeout: number
   proxy_max_concurrent: number
@@ -306,17 +375,19 @@ interface SettingsData {
   log_retention_days: number
 }
 
-const circuitFormRef = ref()
 const isLoading = ref(false)
 const isSaving = ref(false)
 const debugModeEnabled = ref(false)
 const originalDebugModeValue = ref(false) // 用于保存原始值
 const showDebugModeConfirm = ref(false)
 const isConfirming = ref(false) // 标志位：是否正在确认中，防止 watch 循环
+const snifferKeywords = ref('') // 嗅探器错误关键词（每行一个）
 
 const formData = ref<SettingsData>({
   circuit_breaker_failure_threshold: 3,
   circuit_breaker_cooling_duration: 60,
+  circuit_breaker_probe_interval: 30,
+  circuit_breaker_probe_max_concurrent: 10,
   proxy_max_retry: 3,
   proxy_request_timeout: 60,
   proxy_max_concurrent: 1000,
@@ -342,6 +413,16 @@ const loadSettings = async () => {
     if (settings.circuit_breaker_cooling_duration) {
       formData.value.circuit_breaker_cooling_duration = parseInt(
           settings.circuit_breaker_cooling_duration
+      )
+    }
+    if (settings.circuit_breaker_probe_interval) {
+      formData.value.circuit_breaker_probe_interval = parseInt(
+          settings.circuit_breaker_probe_interval
+      )
+    }
+    if (settings.circuit_breaker_probe_max_concurrent) {
+      formData.value.circuit_breaker_probe_max_concurrent = parseInt(
+          settings.circuit_breaker_probe_max_concurrent
       )
     }
     if (settings.proxy_max_retry) {
@@ -371,6 +452,53 @@ const loadSettings = async () => {
       const debugMode = settings.debug_mode === 'true'
       debugModeEnabled.value = debugMode
       originalDebugModeValue.value = debugMode // 保存原始值
+    }
+
+    // 加载嗅探器关键词（使用专用 API）
+    try {
+      const keywords = await settingsService.getPlainTextErrorRules()
+      if (keywords && keywords.length > 0) {
+        snifferKeywords.value = keywords.join('\n')
+      } else {
+        // 提供默认关键词
+        snifferKeywords.value = `无可用后端
+额度不足
+maintenance
+service unavailable
+bad gateway
+gateway timeout
+quota exceeded
+rate limit
+unauthorized
+forbidden
+not found
+invalid api key
+invalid key
+authentication failed
+insufficient funds
+insufficient quota
+billing issue`
+      }
+    } catch (error) {
+      console.error('Failed to load sniffer rules:', error)
+      // 使用默认关键词
+      snifferKeywords.value = `无可用后端
+额度不足
+maintenance
+service unavailable
+bad gateway
+gateway timeout
+quota exceeded
+rate limit
+unauthorized
+forbidden
+not found
+invalid api key
+invalid key
+authentication failed
+insufficient funds
+insufficient quota
+billing issue`
     }
 
     // 重置标志位
@@ -428,12 +556,17 @@ const cancelDebugMode = () => {
 const handleSave = async () => {
   isSaving.value = true
   try {
+    // 保存通用设置（不包含嗅探器关键词）
     await settingsService.updateSettings({
       settings: {
         circuit_breaker_failure_threshold:
             formData.value.circuit_breaker_failure_threshold.toString(),
         circuit_breaker_cooling_duration:
             formData.value.circuit_breaker_cooling_duration.toString(),
+        circuit_breaker_probe_interval:
+            formData.value.circuit_breaker_probe_interval.toString(),
+        circuit_breaker_probe_max_concurrent:
+            formData.value.circuit_breaker_probe_max_concurrent.toString(),
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
         proxy_request_timeout:
             formData.value.proxy_request_timeout.toString(),
@@ -445,6 +578,14 @@ const handleSave = async () => {
         debug_mode: debugModeEnabled.value.toString(),
       },
     })
+
+    // 保存嗅探器关键词（使用专用 API）
+    const keywords = snifferKeywords.value
+      .split('\n')
+      .map(k => k.trim())
+      .filter(k => k.length > 0)
+
+    await settingsService.updatePlainTextErrorRules(keywords)
 
     // 保存成功后更新原始值，避免重复弹窗
     originalDebugModeValue.value = debugModeEnabled.value
@@ -582,6 +723,7 @@ onMounted(() => {
   font-size: 12px;
   color: #a1a1aa;
   line-height: 1.5;
+  text-align: right;
 }
 
 .switch-wrapper {
@@ -593,75 +735,6 @@ onMounted(() => {
 .action-bar {
   display: flex;
   justify-content: flex-end;
-  padding: 24px;
-  border-radius: 12px;
-  margin-top: 8px;
 }
 
-/* 深色主题适配 */
-:deep(.n-card__content) {
-  padding: 24px;
-}
-
-:deep(.n-form-item-label) {
-  font-weight: 500;
-  color: #52525b;
-}
-
-:deep(.n-input-number) {
-  border-radius: 8px;
-}
-
-:deep(.n-button) {
-  border-radius: 8px;
-  font-weight: 500;
-  transition: all 0.3s;
-}
-
-.settings-page :deep(.n-button:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.settings-page :deep(.n-button--primary) {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
-  border: none;
-}
-
-.settings-page :deep(.n-button--primary:hover) {
-  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .page-header-card {
-    padding: 16px;
-  }
-
-  .page-title {
-    font-size: 20px;
-  }
-
-  .card-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .settings-card {
-    border-radius: 8px;
-  }
-
-  :deep(.n-card__content) {
-    padding: 16px;
-  }
-
-  .action-bar {
-    padding: 16px;
-  }
-
-  .settings-page :deep(.n-button) {
-    font-size: 14px;
-  }
-}
 </style>

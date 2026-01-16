@@ -83,7 +83,7 @@
       <n-pagination
         v-model:page="pagination.page"
         v-model:page-size="pagination.pageSize"
-        :page-count="pagination.pageCount"
+        :page-count="pageCount"
         :page-sizes="[10, 20, 50, 100]"
         show-size-picker
       />
@@ -199,7 +199,7 @@ function initEditMap() {
 async function loadUnifiedModels() {
   loadingModels.value = true
   try {
-    unifiedModels.value = await modelApi.getEnabled()
+    unifiedModels.value = await modelApi.list()
   } catch (error: any) {
     console.error('Failed to load unified models:', error)
     window.$message?.error('加载统一模型列表失败')
@@ -217,17 +217,16 @@ onMounted(async () => {
 // 分页
 const pagination = reactive({
   page: 1,
-  pageSize: 20,
-  pageCount: computed(() => Math.ceil(props.syncResult.diff.diffs.length / pagination.pageSize))
+  pageSize: 20
 })
 
-// 分页数据
+const pageCount = computed(() => Math.ceil(props.syncResult.diff.diffs.length / pagination.pageSize))
+
 const paginatedData = computed(() => {
   // 按上游模型名称排序
   const sortedDiffs = [...props.syncResult.diff.diffs].sort((a, b) => {
     return a.upstream_model.localeCompare(b.upstream_model)
   })
-
   const start = (pagination.page - 1) * pagination.pageSize
   const end = start + pagination.pageSize
   return sortedDiffs.slice(start, end)
@@ -286,7 +285,7 @@ const columns: DataTableColumns<ModelDiffType> = [
       // 对于移除的模型，显示现有的 unified_model（不可编辑）
       if (row.type === 'removed' && row.existing_config) {
         return h(NText, null, {
-          default: () => row.existing_config.unified_model
+          default: () => row.existing_config!.unified_model
         })
       }
 

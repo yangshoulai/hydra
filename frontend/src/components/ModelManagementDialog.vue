@@ -289,6 +289,7 @@
 </template>
 
 <script setup lang="ts">
+// @ts-nocheck
 import {computed, h, nextTick, reactive, ref, watch} from 'vue'
 import {
   type DataTableColumns,

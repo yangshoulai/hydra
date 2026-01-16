@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 animate-fade-in token-management-page">
+  <div class="space-y-4">
     <!-- 页面头部 -->
     <n-card :bordered="false" class="page-header-card">
       <n-space justify="space-between" align="center">
@@ -36,7 +36,7 @@
         v-model:show="showCreateDialog"
         preset="card"
         title="新建访问令牌"
-        :style="{ width: '600px' }"
+        :style="{ width: '720px' }"
         :mask-closable="false"
         :closable="true"
         @close="showCreateDialog = false"
@@ -45,7 +45,7 @@
         class="token-dialog"
     >
       <n-space vertical :size="20">
-        <n-alert type="info" :bordered="false" class="info-alert">
+        <n-alert type="info" :bordered="false">
           <template #icon>
             <n-icon>
               <InformationCircleOutline/>
@@ -146,14 +146,14 @@
         v-model:show="showSuccessDialog"
         preset="card"
         title="令牌创建成功"
-        :style="{ width: '600px' }"
+        :style="{ width: '720px' }"
         :bordered="false"
         :mask-closable="false"
         class="success-dialog"
     >
       <n-space vertical :size="24">
         <!-- 成功提示 -->
-        <n-alert type="success" :bordered="false" class="success-alert">
+        <n-alert type="success" :bordered="false">
           <template #icon>
             <n-icon>
               <CheckmarkCircleOutline/>
@@ -203,7 +203,7 @@
         </n-card>
 
         <!-- 警告提示 -->
-        <n-alert type="warning" :bordered="false" class="warning-alert">
+        <n-alert type="warning" :bordered="false">
           <template #icon>
             <n-icon>
               <WarningOutline/>
@@ -401,7 +401,7 @@ const columns: DataTableColumns<Token> = [
     align: 'center',
     fixed: 'right',
     render: (row) => {
-      return h('div', {class: 'action-buttons'}, [
+      return h('div', {style: 'display: flex; gap: 8px; justify-content: center;'}, [
         h(
             NButton,
             {
@@ -696,21 +696,4 @@ onMounted(() => {
 }
 
 
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .page-header-card {
-    padding: 16px;
-  }
-
-  .page-title {
-    font-size: 20px;
-  }
-
-  .token-dialog,
-  .success-dialog {
-    width: 95vw !important;
-  }
-
-
-}
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 animate-fade-in">
+  <div class="space-y-6">
     <!-- 筛选器 -->
     <LogFilter ref="filterRef" @filter="handleFilter"/>
 
@@ -25,8 +25,8 @@
 </template>
 
 <script setup lang="ts">
-import {computed, h, onMounted, reactive, ref} from 'vue'
-import {type DataTableColumns, type DataTableRowProps, NButton, NDataTable, NTag, NText, NTime} from 'naive-ui'
+import {h, onMounted, reactive, ref} from 'vue'
+import {type DataTableColumns, NButton, NDataTable, NTag, NText, NTime} from 'naive-ui'
 import {EyeOutline} from '@vicons/ionicons5'
 import {logApi} from '../services/logService'
 import type {LogQueryRequest, RequestLog} from '../types/log'
@@ -38,17 +38,9 @@ const logs = ref<RequestLog[]>([])
 const loading = ref(false)
 const selectedLog = ref<RequestLog | null>(null)
 const showDetailDrawer = ref(false)
-const filterRef = ref()
 
 // 当前筛选条件
 const currentFilters = ref<LogQueryRequest>({})
-
-// 是否有激活的筛选条件
-const hasActiveFilters = computed(() => {
-  return Object.values(currentFilters.value).some(
-      (value) => value !== undefined && value !== '' && value !== null
-  )
-})
 
 // 分页
 const pagination = reactive({
@@ -69,7 +61,7 @@ const pagination = reactive({
 })
 
 // 表格行属性（支持点击行查看详情）
-const rowProps = (row: RequestLog): DataTableRowProps => {
+const rowProps = (row: RequestLog) => {
   return {
     style: 'cursor: pointer;',
     onClick: () => {

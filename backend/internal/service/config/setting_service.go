@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -217,6 +218,8 @@ func (s *SettingService) getCategoryByKey(key string) string {
 		key == models.SettingProxyMaxResponseSize ||
 		key == models.SettingProxyMaxConcurrent:
 		return "proxy"
+	case key == models.SettingSnifferPlainTextErrorRules:
+		return "sniffer"
 	default:
 		return "unknown"
 	}
@@ -264,4 +267,47 @@ func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout tim
 	maxResponseSize = s.GetInt(ctx, models.SettingProxyMaxResponseSize, 10*1024*1024)
 	maxConcurrent = s.GetInt(ctx, models.SettingProxyMaxConcurrent, 1000)
 	return
+}
+
+// GetPlainTextErrorRules 获取明文错误规则
+func (s *SettingService) GetPlainTextErrorRules(ctx context.Context) []string {
+	value, err := s.get(ctx, models.SettingSnifferPlainTextErrorRules)
+	if err != nil || value == "" {
+		// 返回默认规则
+		return []string{}
+	}
+
+	// 解析 JSON
+	var keywords []string
+	if err := json.Unmarshal([]byte(value), &keywords); err != nil {
+		s.logger.Warn("failed to parse plain text error rules",
+			slog.String("value", value),
+			slog.String("error", err.Error()),
+		)
+		return []string{}
+	}
+
+	return keywords
+}
+
+// SetPlainTextErrorRules 设置明文错误规则
+func (s *SettingService) SetPlainTextErrorRules(ctx context.Context, keywords []string) error {
+	// 转换为 JSON
+	jsonBytes, err := json.Marshal(keywords)
+	if err != nil {
+		s.logger.Error("failed to marshal plain text error rules",
+			slog.String("error", err.Error()),
+		)
+		return fmt.Errorf("failed to marshal keywords: %w", err)
+	}
+
+	// 保存到数据库
+	if err := s.Set(ctx, models.SettingSnifferPlainTextErrorRules, string(jsonBytes)); err != nil {
+		return err
+	}
+
+	// 通知 SnifferManager 更新规则
+	GetSnifferManager().UpdateKeywords(ctx, keywords)
+
+	return nil
 }

@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import {
   NDrawer,
   NDrawerContent,
@@ -172,8 +172,7 @@ import {
   NTag,
   NAlert,
   NEmpty,
-  NIcon,
-  type SelectOption
+  NIcon
 } from 'naive-ui'
 import {GlobeOutline, KeyOutline, TimeOutline} from '@vicons/ionicons5'
 import type { RequestLog } from '../types/log'

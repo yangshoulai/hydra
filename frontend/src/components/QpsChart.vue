@@ -42,6 +42,7 @@ const updateChart = () => {
         return `时间: ${param.axisValue}<br/>QPS: ${param.value.toFixed(2)}`
       },
     },
+    dataZoom: [],
     grid: {
       left: '3%',
       right: '4%',

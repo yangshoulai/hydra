@@ -15,8 +15,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, withDefaults } from 'vue'
-
 interface Props {
   lobeIcon?: string  // 保留接口兼容性，但不再使用
   iconURL?: string

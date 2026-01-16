@@ -268,6 +268,12 @@ func (ps *ProxyService) Close() {
 	ps.httpClient.Close()
 }
 
+// UpdateSnifferKeywords 更新嗅探器的明文错误关键词
+func (ps *ProxyService) UpdateSnifferKeywords(keywords []string) {
+	ps.responseSniffer.UpdatePlainTextErrorKeywords(keywords)
+	ps.logger.Info("sniffer keywords updated", "count", len(keywords))
+}
+
 // logRequestSuccess 记录成功的请求审计日志
 func (ps *ProxyService) logRequestSuccess(
 	ctx context.Context,

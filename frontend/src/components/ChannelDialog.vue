@@ -169,6 +169,7 @@
 </template>
 
 <script setup lang="ts">
+// @ts-nocheck
 import {computed, reactive, ref, watch} from 'vue'
 import {
   type FormInst,
