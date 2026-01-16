@@ -1,10 +1,16 @@
 <template>
-  <div class="settings-container">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1 class="page-title">系统设置</h1>
-      <p class="page-description">配置系统运行参数和行为策略</p>
-    </div>
+  <div class="space-y-4 animate-fade-in settings-page">
+    <!-- 页面头部 -->
+    <n-card :bordered="false" class="page-header-card">
+      <n-space justify="space-between" align="center">
+        <n-space vertical :size="4">
+          <n-text class="page-title">系统设置</n-text>
+          <n-text depth="3" class="page-subtitle">
+            配置系统运行参数和行为策略
+          </n-text>
+        </n-space>
+      </n-space>
+    </n-card>
 
     <div class="settings-content">
       <!-- 熔断器设置 -->
@@ -472,9 +478,14 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.settings-container {
-  max-width: 1200px;
-  margin: 0 auto;
+/* 页面样式 */
+.settings-page {
+  --primary-color: #18a058;
+  --primary-color-hover: #36ad6a;
+  --info-color: #2080f0;
+  --warning-color: #f0a020;
+  --success-color: #18a058;
+  --error-color: #d03050;
   animation: fadeIn 0.3s ease-in;
 }
 
@@ -489,23 +500,24 @@ onMounted(() => {
   }
 }
 
-.page-header {
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+/* 页面头部卡片 */
+.page-header-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  padding: 24px;
 }
 
 .page-title {
-  font-size: 28px;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-  color: #18181b;
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.4;
 }
 
-.page-description {
+.page-subtitle {
   font-size: 14px;
-  color: #71717a;
-  margin: 0;
+  line-height: 1.6;
 }
 
 .settings-content {
@@ -603,12 +615,31 @@ onMounted(() => {
 :deep(.n-button) {
   border-radius: 8px;
   font-weight: 500;
+  transition: all 0.3s;
+}
+
+.settings-page :deep(.n-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.settings-page :deep(.n-button--primary) {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
+  border: none;
+}
+
+.settings-page :deep(.n-button--primary:hover) {
+  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .page-header-card {
+    padding: 16px;
+  }
+
   .page-title {
-    font-size: 24px;
+    font-size: 20px;
   }
 
   .card-header {
@@ -627,6 +658,10 @@ onMounted(() => {
 
   .action-bar {
     padding: 16px;
+  }
+
+  .settings-page :deep(.n-button) {
+    font-size: 14px;
   }
 }
 </style>

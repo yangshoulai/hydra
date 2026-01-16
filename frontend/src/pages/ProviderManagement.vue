@@ -427,8 +427,8 @@ import {
 import {
   AddOutline,
   BuildOutline,
-  CheckmarkCircleOutline,
   CheckboxOutline,
+  CheckmarkCircleOutline,
   CloudOutline,
   CreateOutline,
   ImageOutline,
@@ -844,16 +844,6 @@ watch(showSyncDialog, (newVal) => {
 </script>
 
 <style scoped>
-/* 页面样式 */
-.provider-management-page {
-  --primary-color: #18a058;
-  --primary-color-hover: #36ad6a;
-  --info-color: #2080f0;
-  --warning-color: #f0a020;
-  --success-color: #18a058;
-  --error-color: #d03050;
-}
-
 /* 页面头部卡片 */
 .page-header-card {
   background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
@@ -872,168 +862,6 @@ watch(showSyncDialog, (newVal) => {
 .page-subtitle {
   font-size: 14px;
   line-height: 1.6;
-}
-
-/* 对话框样式 */
-.provider-dialog,
-.sync-dialog {
-  --n-border-radius: 12px;
-}
-
-.provider-dialog :deep(.n-card__content),
-.sync-dialog :deep(.n-card__content) {
-  padding: 24px;
-}
-
-/* 提示信息样式 */
-.info-alert {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-left: 4px solid var(--info-color);
-}
-
-/* 统计卡片样式 */
-.stats-card {
-  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  border-radius: 8px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.stat-icon-info {
-  background: linear-gradient(135deg, #e8f4ff 0%, #d4e9ff 100%);
-  color: var(--info-color);
-}
-
-.stat-icon-success {
-  background: linear-gradient(135deg, #e8f7ef 0%, #d4f1e4 100%);
-  color: var(--success-color);
-}
-
-.stat-icon-primary {
-  background: linear-gradient(135deg, #e8f0ff 0%, #d4e0ff 100%);
-  color: var(--primary-color);
-}
-
-.stat-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-  color: #333;
-}
-
-.stat-value-success {
-  color: var(--success-color);
-}
-
-.stat-value-primary {
-  color: var(--primary-color);
-}
-
-/* 表单项样式优化 */
-.provider-dialog :deep(.n-form-item-label) {
-  font-weight: 600;
-  color: #333;
-  font-size: 14px;
-  padding-bottom: 8px;
-}
-
-.provider-dialog :deep(.n-form-item-feedback) {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
-}
-
-/* 输入框样式优化 */
-.provider-dialog :deep(.n-input),
-.provider-dialog :deep(.n-base-selection) {
-  border-radius: 8px;
-  transition: all 0.3s;
-}
-
-.provider-dialog :deep(.n-input:focus),
-.provider-dialog :deep(.n-base-selection:focus) {
-  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.1);
-}
-
-/* 图标样式 */
-.provider-dialog :deep(.n-input__prefix) {
-  color: #999;
-  margin-right: 8px;
-}
-
-.provider-dialog :deep(.n-input:focus .n-input__prefix) {
-  color: var(--primary-color);
-}
-
-/* 按钮样式优化 */
-.provider-management-page :deep(.n-button) {
-  transition: all 0.3s;
-  border-radius: 8px;
-}
-
-.provider-management-page :deep(.n-button:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.provider-management-page :deep(.n-button--primary) {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
-  border: none;
-}
-
-.provider-management-page :deep(.n-button--primary:hover) {
-  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
-}
-
-/* Alert 样式优化 */
-.provider-dialog :deep(.n-alert),
-.sync-dialog :deep(.n-alert) {
-  border-radius: 8px;
-  padding: 16px 20px;
-}
-
-.provider-dialog :deep(.n-alert .n-alert-body),
-.sync-dialog :deep(.n-alert .n-alert-body) {
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-/* 表格样式优化 */
-:deep(.n-data-table) {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-:deep(.n-data-table__n-pagination) {
-  margin-top: 16px;
 }
 
 /* 响应式调整 */

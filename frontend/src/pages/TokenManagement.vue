@@ -190,7 +190,6 @@
                     text
                     size="small"
                     @click="handleCopyToken"
-                    class="copy-icon-button"
                 >
                   <template #icon>
                     <n-icon>
@@ -407,7 +406,7 @@ const columns: DataTableColumns<Token> = [
             NButton,
             {
               size: 'small',
-              type: 'info',
+              type: 'primary',
               onClick: () => handleCopyTokenFromList(row),
             },
             {default: () => '复制'}
@@ -583,14 +582,6 @@ onMounted(() => {
 
 <style scoped>
 /* 页面样式 */
-.token-management-page {
-  --primary-color: #18a058;
-  --primary-color-hover: #36ad6a;
-  --info-color: #2080f0;
-  --warning-color: #f0a020;
-  --success-color: #18a058;
-  --error-color: #d03050;
-}
 
 /* 页面头部卡片 */
 .page-header-card {
@@ -612,32 +603,6 @@ onMounted(() => {
   line-height: 1.6;
 }
 
-/* 对话框样式 */
-.token-dialog,
-.success-dialog {
-  --n-border-radius: 12px;
-}
-
-.token-dialog :deep(.n-card__content),
-.success-dialog :deep(.n-card__content) {
-  padding: 24px;
-}
-
-/* 提示信息样式 */
-.info-alert {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-left: 4px solid var(--info-color);
-}
-
-.success-alert {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-left: 4px solid var(--success-color);
-}
-
-.warning-alert {
-  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-  border-left: 4px solid var(--warning-color);
-}
 
 /* 表单项样式优化 */
 .token-dialog :deep(.n-form-item-label) {
@@ -682,26 +647,6 @@ onMounted(() => {
 
 .token-dialog :deep(.n-input:focus .n-input__prefix) {
   color: var(--primary-color);
-}
-
-/* 按钮样式优化 */
-.token-management-page :deep(.n-button) {
-  transition: all 0.3s;
-  border-radius: 8px;
-}
-
-.token-management-page :deep(.n-button:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.token-management-page :deep(.n-button--primary) {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
-  border: none;
-}
-
-.token-management-page :deep(.n-button--primary:hover) {
-  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
 }
 
 /* 令牌信息卡片 */
@@ -750,40 +695,6 @@ onMounted(() => {
   flex: 1;
 }
 
-.copy-icon-button {
-  flex-shrink: 0;
-  color: var(--primary-color);
-}
-
-.copy-icon-button:hover {
-  color: var(--primary-color-hover);
-}
-
-/* Alert 样式优化 */
-.token-dialog :deep(.n-alert),
-.success-dialog :deep(.n-alert) {
-  border-radius: 8px;
-  padding: 16px 20px;
-}
-
-.token-dialog :deep(.n-alert .n-alert-body),
-.success-dialog :deep(.n-alert .n-alert-body) {
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-/* 表格样式优化 */
-:deep(.n-data-table) {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-/* 操作按钮样式 */
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
 
 /* 响应式调整 */
 @media (max-width: 768px) {
@@ -800,8 +711,6 @@ onMounted(() => {
     width: 95vw !important;
   }
 
-  .token-management-page :deep(.n-button) {
-    font-size: 14px;
-  }
+
 }
 </style>

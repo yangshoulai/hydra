@@ -258,5 +258,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 使用 Tailwind CSS，无需自定义样式 */
+
+
 </style>

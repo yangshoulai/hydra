@@ -138,7 +138,18 @@
 
 <script setup lang="ts">
 import {onMounted, reactive, ref} from 'vue'
-import {NButton, NCard, NDatePicker, NForm, NFormItem, NIcon, NInput, NSelect, NSpace, type SelectOption} from 'naive-ui'
+import {
+  NButton,
+  NCard,
+  NDatePicker,
+  NForm,
+  NFormItem,
+  NIcon,
+  NInput,
+  NSelect,
+  NSpace,
+  type SelectOption
+} from 'naive-ui'
 import {FilterOutline, KeyOutline, PulseOutline, RefreshOutline, SearchOutline} from '@vicons/ionicons5'
 import type {LogQueryRequest} from '../types/log'
 import {channelApi} from '../services/channelService'
@@ -308,35 +319,4 @@ onMounted(() => {
   padding: 20px;
 }
 
-:deep(.n-form-item) {
-  margin-bottom: 0;
-}
-
-:deep(.n-form-item .n-form-item-label) {
-  font-weight: 500;
-  color: #64748b;
-}
-
-:deep(.n-input),
-:deep(.n-select) {
-  border-radius: 8px;
-}
-
-/* 查询按钮样式 */
-:deep(.n-button--primary-type) {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  border: none;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-  transition: all 0.3s ease;
-}
-
-:deep(.n-button--primary-type:hover) {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-  transform: translateY(-1px);
-}
-
-:deep(.n-button--primary-type:active) {
-  transform: translateY(0);
-}
 </style>

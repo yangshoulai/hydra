@@ -1,16 +1,24 @@
 <template>
-  <div class="space-y-4 animate-fade-in">
-    <!-- 操作栏 -->
-    <div class="flex">
-      <n-button type="primary" @click="handleCreate">
-        <template #icon>
-          <n-icon>
-            <AddOutline/>
-          </n-icon>
-        </template>
-        新建渠道
-      </n-button>
-    </div>
+  <div class="space-y-4 animate-fade-in channel-list-page">
+    <!-- 页面头部 -->
+    <n-card :bordered="false" class="page-header-card">
+      <n-space justify="space-between" align="center">
+        <n-space vertical :size="4">
+          <n-text class="page-title">渠道管理</n-text>
+          <n-text depth="3" class="page-subtitle">
+            管理 AI 服务渠道，配置接入地址、密钥和模型映射
+          </n-text>
+        </n-space>
+        <n-button type="primary" @click="handleCreate" size="large" strong>
+          <template #icon>
+            <n-icon>
+              <AddOutline/>
+            </n-icon>
+          </template>
+          新建渠道
+        </n-button>
+      </n-space>
+    </n-card>
 
     <!-- 数据表格 -->
     <n-data-table
@@ -20,7 +28,7 @@
         :pagination="pagination"
         :single-line="false"
         bordered
-        :scroll-x="1560"
+        :scroll-x="1600"
         striped
         :row-key="(row: Channel) => row.id"
     />
@@ -56,7 +64,7 @@
 
 <script setup lang="ts">
 import {h, onMounted, reactive, ref} from 'vue'
-import {type DataTableColumns, NButton, NDataTable, NIcon, NTag} from 'naive-ui'
+import {type DataTableColumns, NButton, NCard, NDataTable, NIcon, NSpace, NTag, NText} from 'naive-ui'
 import {AddOutline, GridOutline, KeyOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import type {Channel} from '../types/channel'
@@ -154,7 +162,7 @@ const columns: DataTableColumns<Channel> = [
   {
     title: '操作',
     key: 'actions',
-    width: 320,
+    width: 360,
     align: 'center',
     fixed: 'right',
     render(row) {
@@ -301,5 +309,49 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 使用 Tailwind CSS 完全样式化，无需自定义样式 */
+/* 页面样式 */
+.channel-list-page {
+  --primary-color: #18a058;
+  --primary-color-hover: #36ad6a;
+  --info-color: #2080f0;
+  --warning-color: #f0a020;
+  --success-color: #18a058;
+  --error-color: #d03050;
+}
+
+/* 页面头部卡片 */
+.page-header-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.4;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .page-header-card {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .channel-list-page :deep(.n-button) {
+    font-size: 14px;
+  }
+}
 </style>

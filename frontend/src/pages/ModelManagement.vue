@@ -550,16 +550,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 页面样式 */
-.model-management-page {
-  --primary-color: #18a058;
-  --primary-color-hover: #36ad6a;
-  --info-color: #2080f0;
-  --warning-color: #f0a020;
-  --success-color: #18a058;
-  --error-color: #d03050;
-}
-
 /* 页面头部卡片 */
 .page-header-card {
   background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
@@ -595,63 +585,6 @@ onMounted(() => {
   border-left: 4px solid var(--info-color);
 }
 
-/* 表单项样式优化 */
-.model-dialog :deep(.n-form-item-label) {
-  font-weight: 600;
-  color: #333;
-  font-size: 14px;
-  padding-bottom: 8px;
-}
-
-.model-dialog :deep(.n-form-item-feedback) {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
-}
-
-/* 输入框样式优化 */
-.model-dialog :deep(.n-input),
-.model-dialog :deep(.n-base-selection) {
-  border-radius: 8px;
-  transition: all 0.3s;
-}
-
-.model-dialog :deep(.n-input:focus),
-.model-dialog :deep(.n-base-selection:focus) {
-  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.1);
-}
-
-/* 图标样式 */
-.model-dialog :deep(.n-input__prefix),
-.model-dialog :deep(.n-base-selection__prefix) {
-  color: #999;
-  margin-right: 8px;
-}
-
-.model-dialog :deep(.n-input:focus .n-input__prefix),
-.model-dialog :deep(.n-base-selection:focus .n-base-selection__prefix) {
-  color: var(--primary-color);
-}
-
-/* 按钮样式优化 */
-.model-management-page :deep(.n-button) {
-  transition: all 0.3s;
-  border-radius: 8px;
-}
-
-.model-management-page :deep(.n-button:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.model-management-page :deep(.n-button--primary) {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
-  border: none;
-}
-
-.model-management-page :deep(.n-button--primary:hover) {
-  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
-}
 
 /* Alert 样式优化 */
 .model-dialog :deep(.n-alert) {
@@ -662,16 +595,6 @@ onMounted(() => {
 .model-dialog :deep(.n-alert .n-alert-body) {
   font-size: 13px;
   line-height: 1.6;
-}
-
-/* 表格样式优化 */
-:deep(.n-data-table) {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-:deep(.n-data-table__n-pagination) {
-  margin-top: 16px;
 }
 
 /* 响应式调整 */
