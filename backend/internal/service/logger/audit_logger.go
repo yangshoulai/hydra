@@ -11,15 +11,21 @@ import (
 
 // AuditLogger 审计日志记录器(写入数据库)
 type AuditLogger struct {
-	logger         *slog.Logger
-	requestLogRepo *repository.RequestLogRepository
+	logger           *slog.Logger
+	requestLogRepo   *repository.RequestLogRepository
+	debugModeManager *DebugModeManager
 }
 
 // NewAuditLogger 创建审计日志记录器
-func NewAuditLogger(logger *slog.Logger, requestLogRepo *repository.RequestLogRepository) *AuditLogger {
+func NewAuditLogger(
+	logger *slog.Logger,
+	requestLogRepo *repository.RequestLogRepository,
+	debugModeManager *DebugModeManager,
+) *AuditLogger {
 	return &AuditLogger{
-		logger:         logger,
-		requestLogRepo: requestLogRepo,
+		logger:           logger,
+		requestLogRepo:   requestLogRepo,
+		debugModeManager: debugModeManager,
 	}
 }
 
@@ -64,6 +70,14 @@ func (a *AuditLogger) LogRequestAsync(log *models.RequestLog) {
 			)
 		}
 	}()
+}
+
+// IsDebugModeEnabled 检查调试模式是否启用
+func (a *AuditLogger) IsDebugModeEnabled() bool {
+	if a.debugModeManager == nil {
+		return false
+	}
+	return a.debugModeManager.IsEnabled()
 }
 
 // NewRequestLogBuilder 创建请求日志构建器
@@ -170,6 +184,16 @@ func (b *RequestLogBuilder) ClientIP(ip string) *RequestLogBuilder {
 
 func (b *RequestLogBuilder) UserAgent(ua string) *RequestLogBuilder {
 	b.log.UserAgent = ua
+	return b
+}
+
+func (b *RequestLogBuilder) RequestBody(body string) *RequestLogBuilder {
+	b.log.RequestBody = body
+	return b
+}
+
+func (b *RequestLogBuilder) ResponseBody(body string) *RequestLogBuilder {
+	b.log.ResponseBody = body
 	return b
 }
 

@@ -3,18 +3,22 @@
       v-model:show="show"
       preset="card"
       :title="`模型管理 - ${channelName}`"
-      style="width: 1200px"
+      style="width: 1400px"
       :mask-closable="false"
       :closable="true"
       @close="handleClose"
+      :bordered="false"
+      class="model-management-dialog"
   >
     <template #header-extra>
-      <n-space>
+      <n-space class="mr-4">
         <n-button
             type="info"
             @click="handleSyncModels"
             :loading="syncing"
-            size="small"
+            size="medium"
+            secondary
+            strong
         >
           <template #icon>
             <n-icon>
@@ -26,64 +30,87 @@
         <n-button
             type="primary"
             @click="showAddModelDialog = true"
-            size="small"
+            size="medium"
+            strong
         >
+          <template #icon>
+            <n-icon>
+              <AddOutline/>
+            </n-icon>
+          </template>
           添加模型
         </n-button>
       </n-space>
     </template>
 
-    <n-space vertical :size="16">
+    <n-space vertical :size="20">
       <!-- 统计信息卡片 -->
-      <n-card size="small" :bordered="false">
-        <template #header>
-          <n-text strong>统计信息</n-text>
-        </template>
-        <n-grid :cols="5" :x-gap="16" responsive="screen">
+      <n-card size="small" :bordered="false" class="stats-card">
+        <n-grid :cols="5" :x-gap="20" responsive="screen">
           <n-grid-item>
-            <n-statistic label="本地已配置">
-              <template #default>
-                <n-text type="success" strong style="font-size: 24px">
-                  {{ stats.localConfigured }}
-                </n-text>
-              </template>
-            </n-statistic>
+            <div class="stat-item">
+              <div class="stat-icon stat-icon-success">
+                <n-icon size="24">
+                  <CheckmarkCircleOutline/>
+                </n-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">本地已配置</div>
+                <div class="stat-value stat-value-success">{{ stats.localConfigured }}</div>
+              </div>
+            </div>
           </n-grid-item>
           <n-grid-item>
-            <n-statistic label="上游模型总数">
-              <template #default>
-                <n-text type="info" strong style="font-size: 24px">
-                  {{ stats.upstreamTotal }}
-                </n-text>
-              </template>
-            </n-statistic>
+            <div class="stat-item">
+              <div class="stat-icon stat-icon-info">
+                <n-icon size="24">
+                  <CloudOutline/>
+                </n-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">上游模型总数</div>
+                <div class="stat-value stat-value-info">{{ stats.upstreamTotal }}</div>
+              </div>
+            </div>
           </n-grid-item>
           <n-grid-item>
-            <n-statistic label="待添加">
-              <template #default>
-                <n-text type="info" strong style="font-size: 24px">
-                  {{ stats.toAdd }}
-                </n-text>
-              </template>
-            </n-statistic>
+            <div class="stat-item">
+              <div class="stat-icon stat-icon-primary">
+                <n-icon size="24">
+                  <AddCircleOutline/>
+                </n-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">待添加</div>
+                <div class="stat-value stat-value-primary">{{ stats.toAdd }}</div>
+              </div>
+            </div>
           </n-grid-item>
           <n-grid-item>
-            <n-statistic label="待删除">
-              <template #default>
-                <n-text type="warning" strong style="font-size: 24px">
-                  {{ stats.toRemove }}
-                </n-text>
-              </template>
-            </n-statistic>
+            <div class="stat-item">
+              <div class="stat-icon stat-icon-warning">
+                <n-icon size="24">
+                  <RemoveCircleOutline/>
+                </n-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">待删除</div>
+                <div class="stat-value stat-value-warning">{{ stats.toRemove }}</div>
+              </div>
+            </div>
           </n-grid-item>
           <n-grid-item>
-            <n-statistic label="已选中">
-              <template #default>
-                <n-text strong style="font-size: 24px">
-                  {{ checkedKeys.length }}
-                </n-text>
-              </template>
-            </n-statistic>
+            <div class="stat-item">
+              <div class="stat-icon stat-icon-default">
+                <n-icon size="24">
+                  <CheckboxOutline/>
+                </n-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">已选中</div>
+                <div class="stat-value">{{ checkedKeys.length }}</div>
+              </div>
+            </div>
           </n-grid-item>
         </n-grid>
       </n-card>
@@ -92,46 +119,58 @@
       <n-alert
           v-if="!hasSynced"
           type="info"
-          :show-icon="false"
+          :bordered="false"
+          class="info-alert"
       >
-        <n-text>
-          当前显示本地已配置的模型列表。点击"同步上游模型"按钮可获取渠道的最新模型列表并合并显示。
-        </n-text>
+        <template #icon>
+          <n-icon>
+            <InformationCircleOutline/>
+          </n-icon>
+        </template>
+        当前显示本地已配置的模型列表。点击"同步上游模型"按钮可获取渠道的最新模型列表并合并显示。
       </n-alert>
 
       <n-alert
           v-else-if="syncFailed"
           type="warning"
-          :show-icon="false"
+          :bordered="false"
+          class="warning-alert"
       >
-        <n-text>
-          无法从上游渠道获取模型列表，仅显示本地已配置的模型。
-        </n-text>
+        <template #icon>
+          <n-icon>
+            <WarningOutline/>
+          </n-icon>
+        </template>
+        无法从上游渠道获取模型列表，仅显示本地已配置的模型。
       </n-alert>
 
       <n-alert
           v-else
-          type="info"
-          :show-icon="false"
+          type="success"
+          :bordered="false"
+          class="success-alert"
       >
-        <n-text depth="3">
-          <n-ul style="margin: 0; padding-left: 20px;">
-            <n-li>
-              <n-text strong>已配置模型</n-text>
-              ：上游和本地都存在的模型，默认选中
-            </n-li>
-            <n-li>
-              <n-text strong>待添加模型</n-text>
-              ：仅上游存在的模型，需要手动勾选
-            </n-li>
-            <n-li>
-              <n-text strong>待删除模型</n-text>
-              ：仅本地存在的模型，默认选中且禁用（将被删除）
-            </n-li>
-          </n-ul>
-          <n-text depth="3" style="margin-top: 8px; display: block">
-            修改统一模型后，点击"保存更改"按钮批量保存选中的模型配置。
-          </n-text>
+        <template #icon>
+          <n-icon>
+            <CheckmarkCircleOutline/>
+          </n-icon>
+        </template>
+        <n-ul style="margin: 0; padding-left: 20px;">
+          <n-li>
+            <n-text strong>已配置模型</n-text>
+            ：上游和本地都存在的模型，默认选中
+          </n-li>
+          <n-li>
+            <n-text strong>待添加模型</n-text>
+            ：仅上游存在的模型，需要手动勾选
+          </n-li>
+          <n-li>
+            <n-text strong>待删除模型</n-text>
+            ：仅本地存在的模型，默认选中且禁用（将被删除）
+          </n-li>
+        </n-ul>
+        <n-text depth="3" style="margin-top: 8px; display: block">
+          修改统一模型后，点击"保存更改"按钮批量保存选中的模型配置。
         </n-text>
       </n-alert>
 
@@ -144,41 +183,104 @@
           :row-key="(row: ModelDisplayType) => row.key"
           size="small"
           v-model:checked-row-keys="checkedKeys"
+          :bordered="true"
       />
 
       <!-- 操作按钮 -->
-      <n-space justify="end">
-        <n-button @click="handleClose">取消</n-button>
-        <n-button type="primary" @click="handleSave" :loading="saving">
+      <n-space justify="end" :size="12">
+        <n-button @click="handleClose" size="large">取消</n-button>
+        <n-button
+            type="primary"
+            @click="handleSave"
+            :loading="saving"
+            size="large"
+            strong
+        >
+          <template #icon>
+            <n-icon>
+              <SaveOutline/>
+            </n-icon>
+          </template>
           保存更改 ({{ checkedKeys.length }})
         </n-button>
       </n-space>
     </n-space>
 
     <!-- 添加模型对话框 -->
-    <n-modal v-model:show="showAddModelDialog" preset="dialog" title="添加模型配置">
-      <n-form ref="modelFormRef" :model="modelForm" :rules="modelRules" label-placement="left" label-width="100px">
-        <n-form-item label="上游模型" path="upstream_model">
-          <n-input
-              v-model:value="modelForm.upstream_model"
-              placeholder="请输入上游模型名称，如：gpt-4-turbo-preview"
-          />
-        </n-form-item>
-        <n-form-item label="统一模型" path="unified_model">
-          <n-select
-              v-model:value="modelForm.unified_model"
-              :options="modelOptions"
-              placeholder="请选择统一模型"
-              :loading="loadingModels"
-              filterable
-          />
-        </n-form-item>
-      </n-form>
-      <template #action>
-        <n-space>
-          <n-button @click="showAddModelDialog = false">取消</n-button>
-          <n-button type="primary" @click="handleAddModel">
-            确定
+    <n-modal
+        v-model:show="showAddModelDialog"
+        preset="card"
+        title="添加模型配置"
+        style="width: 600px"
+        :bordered="false"
+        class="add-model-dialog"
+    >
+      <n-space vertical :size="20">
+        <n-alert type="info" :bordered="false">
+          <template #icon>
+            <n-icon>
+              <InformationCircleOutline/>
+            </n-icon>
+          </template>
+          手动添加上游模型配置。请确保上游模型名称正确。
+        </n-alert>
+
+        <n-form
+            ref="modelFormRef"
+            :model="modelForm"
+            :rules="modelRules"
+            label-placement="top"
+            size="large"
+        >
+          <n-form-item label="上游模型名称" path="upstream_model">
+            <n-input
+                v-model:value="modelForm.upstream_model"
+                placeholder="例如：gpt-4-turbo-preview"
+                :input-props="{autocomplete: 'off'}"
+            >
+              <template #prefix>
+                <n-icon>
+                  <CloudOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              上游渠道提供的原始模型名称，如 gpt-4、claude-3-opus 等
+            </template>
+          </n-form-item>
+
+          <n-form-item label="统一模型" path="unified_model">
+            <n-select
+                v-model:value="modelForm.unified_model"
+                :options="modelOptions"
+                placeholder="请选择统一模型"
+                :loading="loadingModels"
+                filterable
+                :input-props="{autocomplete: 'off'}"
+            >
+              <template #prefix>
+                <n-icon>
+                  <LayersOutline/>
+                </n-icon>
+              </template>
+            </n-select>
+            <template #feedback>
+              选择系统中的统一模型，用于将不同渠道的相同模型映射到统一名称
+            </template>
+          </n-form-item>
+        </n-form>
+      </n-space>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showAddModelDialog = false" size="large">取消</n-button>
+          <n-button type="primary" @click="handleAddModel" size="large" strong>
+            <template #icon>
+              <n-icon>
+                <AddOutline/>
+              </n-icon>
+            </template>
+            确定添加
           </n-button>
         </n-space>
       </template>
@@ -204,12 +306,24 @@ import {
   NModal,
   NSelect,
   NSpace,
-  NStatistic,
   NTag,
   NText,
   NUl
 } from 'naive-ui'
-import {SyncOutline} from '@vicons/ionicons5'
+import {
+  AddCircleOutline,
+  AddOutline,
+  CheckboxOutline,
+  CheckmarkCircleOutline,
+  CloudOutline,
+  InformationCircleOutline,
+  LayersOutline,
+  PlayCircleOutline,
+  RemoveCircleOutline,
+  SaveOutline,
+  SyncOutline,
+  WarningOutline
+} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import {modelApi} from '../services/modelService'
 import type {SyncResult} from '../types/channel'
@@ -243,6 +357,7 @@ const syncResult = ref<SyncResult | null>(null)
 const localConfigs = ref<any[]>([])
 const unifiedModels = ref<Model[]>([])
 const loadingModels = ref(false)
+const testStatus = ref<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({})
 
 // 选中的行
 const checkedKeys = ref<string[]>([])
@@ -272,8 +387,8 @@ const modelRules = {
 const modelOptions = computed(() => {
   return unifiedModels.value.map(model => ({
     label: model.provider
-      ? `${model.name} (${model.provider.name})`
-      : model.name,
+        ? `${model.name} (${model.provider.name})`
+        : model.name,
     value: model.name
   }))
 })
@@ -388,7 +503,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '上游模型',
     key: 'upstream_model',
-    width: 400,
+    width: 200,
     render(row) {
       return h(NText, {code: true}, {default: () => row.upstream_model})
     }
@@ -396,10 +511,9 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '统一模型',
     key: 'unified_model',
-    width: 400,
+    width: 200,
     render(row) {
       const value = editMap.value[row.key] || row.unified_model
-
       return h(NSelect, {
         value: value,
         options: modelOptions.value,
@@ -426,6 +540,41 @@ const columns: DataTableColumns<ModelDisplayType> = [
       }
       const config = statusConfig[row.status]
       return h(NTag, {type: config.type, size: 'small'}, {default: () => config.text})
+    }
+  },
+  {
+    title: '测试状态',
+    key: 'test_status',
+    width: 100,
+    align: 'center',
+    render(row) {
+      const status = testStatus.value[row.key] || 'idle'
+      const statusMap = {
+        idle: {type: 'default' as const, text: '未测试'},
+        testing: {type: 'info' as const, text: '测试中'},
+        success: {type: 'success' as const, text: '成功'},
+        error: {type: 'error' as const, text: '失败'}
+      }
+      const config = statusMap[status]
+      return h(NTag, {type: config.type, size: 'small'}, {default: () => config.text})
+    }
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 100,
+    align: 'center',
+    render(row) {
+      return h(NButton, {
+        size: 'small',
+        type: 'info',
+        loading: testStatus.value[row.key] === 'testing',
+        secondary: true,
+        onClick: () => handleTest(row)
+      }, {
+        icon: () => h(NIcon, null, {default: () => h(PlayCircleOutline)}),
+        default: () => '测试'
+      })
     }
   }
 ]
@@ -555,9 +704,9 @@ async function handleSave() {
         } else if (currentUnifiedModel && currentUnifiedModel !== config.unified_model) {
           // 选中且统一模型有修改，更新配置
           updatePromises.push(
-            channelApi.updateModelConfig(config.id, {
-              unified_model: currentUnifiedModel
-            })
+              channelApi.updateModelConfig(config.id, {
+                unified_model: currentUnifiedModel
+              })
           )
         }
       }
@@ -624,12 +773,12 @@ async function handleSave() {
 
       // 调用 API
       await channelApi.applySync(
-        props.channelId,
-        {
-          add_models: addModels,
-          update_models: updateModels,
-          delete_model_ids: deleteModelIDs
-        }
+          props.channelId,
+          {
+            add_models: addModels,
+            update_models: updateModels,
+            delete_model_ids: deleteModelIDs
+          }
       )
 
       window.$message?.success('保存成功')
@@ -642,6 +791,39 @@ async function handleSave() {
     window.$message?.error(error.response?.data?.error || '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+// 测试模型
+async function handleTest(row: ModelDisplayType) {
+  testStatus.value[row.key] = 'testing'
+
+  try {
+    // 获取当前选择的统一模型
+    const unifiedModel = editMap.value[row.key] || row.unified_model
+
+    // 调用后端测试接口
+    const result = await channelApi.testModel(
+        props.channelId,
+        row.upstream_model,
+        unifiedModel
+    )
+
+    console.log('[Test Model] Result:', result)
+
+    // 更新测试状态
+    // result 的格式: { success: boolean, message: string, upstream_model: string, unified_model: string, latency: string }
+    if (result.success) {
+      testStatus.value[row.key] = 'success'
+      window.$message?.success(`模型 "${row.upstream_model}" 测试成功`)
+    } else {
+      testStatus.value[row.key] = 'error'
+      window.$message?.error(result.message || `模型 "${row.upstream_model}" 测试失败`)
+    }
+  } catch (error: any) {
+    console.error('Failed to test model:', error)
+    testStatus.value[row.key] = 'error'
+    window.$message?.error(error.response?.data?.error || '测试失败')
   }
 }
 
@@ -696,5 +878,194 @@ watch(() => props.modelValue, async (newVal) => {
 </script>
 
 <style scoped>
-/* 使用 Tailwind CSS */
+/* 对话框样式 */
+.model-management-dialog {
+  --primary-color: #18a058;
+  --primary-color-hover: #36ad6a;
+  --info-color: #2080f0;
+  --warning-color: #f0a020;
+  --success-color: #18a058;
+  --error-color: #d03050;
+}
+
+/* 统计卡片样式 */
+.stats-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.stat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-icon-success {
+  background: linear-gradient(135deg, #e8f7ef 0%, #d4f1e4 100%);
+  color: var(--success-color);
+}
+
+.stat-icon-info {
+  background: linear-gradient(135deg, #e8f4ff 0%, #d4e9ff 100%);
+  color: var(--info-color);
+}
+
+.stat-icon-primary {
+  background: linear-gradient(135deg, #e8f0ff 0%, #d4e0ff 100%);
+  color: var(--primary-color);
+}
+
+.stat-icon-warning {
+  background: linear-gradient(135deg, #fff7e8 0%, #ffedd4 100%);
+  color: var(--warning-color);
+}
+
+.stat-icon-default {
+  background: linear-gradient(135deg, #f5f5f6 0%, #e8e8e9 100%);
+  color: #666;
+}
+
+.stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: #333;
+}
+
+.stat-value-success {
+  color: var(--success-color);
+}
+
+.stat-value-info {
+  color: var(--info-color);
+}
+
+.stat-value-primary {
+  color: var(--primary-color);
+}
+
+.stat-value-warning {
+  color: var(--warning-color);
+}
+
+/* 提示信息样式 */
+.info-alert {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-left: 4px solid var(--info-color);
+}
+
+.warning-alert {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-left: 4px solid var(--warning-color);
+}
+
+.success-alert {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-left: 4px solid var(--success-color);
+}
+
+
+/* 添加模型对话框样式 */
+.add-model-dialog {
+  --n-border-radius: 12px;
+}
+
+.add-model-dialog :deep(.n-card__content) {
+  padding: 24px;
+}
+
+.add-model-dialog :deep(.n-input),
+.add-model-dialog :deep(.n-base-selection) {
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.add-model-dialog :deep(.n-input:focus),
+.add-model-dialog :deep(.n-base-selection:focus) {
+  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.1);
+}
+
+.add-model-dialog :deep(.n-form-item-label) {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  padding-bottom: 8px;
+}
+
+.add-model-dialog :deep(.n-form-item-feedback) {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* 按钮样式优化 */
+.model-management-dialog :deep(.n-button) {
+  transition: all 0.3s;
+}
+
+.model-management-dialog :deep(.n-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.model-management-dialog :deep(.n-button--primary) {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
+  border: none;
+}
+
+.model-management-dialog :deep(.n-button--primary:hover) {
+  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
+}
+
+/* 加载动画 */
+.model-management-dialog :deep(.n-spin) {
+  color: var(--primary-color);
+}
+
+/* 响应式调整 */
+@media (max-width: 1440px) {
+  .model-management-dialog {
+    width: 1200px !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  .model-management-dialog {
+    width: 95vw !important;
+  }
+
+  .stats-card :deep(.n-grid-item) {
+    min-width: 50%;
+  }
+}
+
+/* 标签样式优化 */
+.model-management-dialog :deep(.n-tag) {
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 4px 12px;
+}
 </style>

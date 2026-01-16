@@ -87,18 +87,19 @@ func (rf *ResponseForwarder) copyResponseHeaders(upstreamResp *http.Response, c 
 
 // ForwardJSONResponse 转发 JSON 响应(带模型名替换)
 // 将上游模型名替换回统一模型名
+// 返回响应body字符串用于日志记录
 func (rf *ResponseForwarder) ForwardJSONResponse(
 	c *gin.Context,
 	upstreamResp *http.Response,
 	upstreamModel string,
 	unifiedModel string,
-) ([]byte, error) {
+) (string, error) {
 	defer upstreamResp.Body.Close()
 
 	// 读取响应 Body
 	body, err := io.ReadAll(upstreamResp.Body)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	// 如果是 JSON 响应,尝试替换模型名
@@ -124,10 +125,10 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 
 	// 写入响应
 	if _, err := c.Writer.Write(body); err != nil {
-		return body, err
+		return string(body), err
 	}
 
-	return body, nil
+	return string(body), nil
 }
 
 // replaceModelInJSON 在 JSON 响应中替换模型名

@@ -1,16 +1,24 @@
 <template>
-  <div class="space-y-4 animate-fade-in">
-    <!-- 操作栏 -->
-    <div class="flex">
-      <n-button type="primary" @click="showCreateDialog = true">
-        <template #icon>
-          <n-icon>
-            <AddOutline/>
-          </n-icon>
-        </template>
-        新建令牌
-      </n-button>
-    </div>
+  <div class="space-y-4 animate-fade-in token-management-page">
+    <!-- 页面头部 -->
+    <n-card :bordered="false" class="page-header-card">
+      <n-space justify="space-between" align="center">
+        <n-space vertical :size="4">
+          <n-text class="page-title">访问令牌管理</n-text>
+          <n-text depth="3" class="page-subtitle">
+            管理系统的访问令牌，用于 API 调用和身份验证
+          </n-text>
+        </n-space>
+        <n-button type="primary" @click="showCreateDialog = true" size="large" strong>
+          <template #icon>
+            <n-icon>
+              <AddOutline/>
+            </n-icon>
+          </template>
+          新建令牌
+        </n-button>
+      </n-space>
+    </n-card>
 
     <n-data-table
         :columns="columns"
@@ -28,59 +36,105 @@
         v-model:show="showCreateDialog"
         preset="card"
         title="新建访问令牌"
-        :style="{ width: '800px' }"
+        :style="{ width: '600px' }"
         :mask-closable="false"
         :closable="true"
         @close="showCreateDialog = false"
         @keydown.esc="showCreateDialog = false"
+        :bordered="false"
+        class="token-dialog"
     >
-      <n-form ref="formRef" :model="formData" :rules="rules" label-placement="left" label-width="120">
-        <n-form-item label="令牌名称" path="name">
-          <n-input
-              v-model:value="formData.name"
-              placeholder="请输入令牌名称（用于识别此令牌的用途）"
-              maxlength="20"
-              show-count
-          />
-        </n-form-item>
-        <n-text depth="3"
-                style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
-          为令牌取一个易于识别的名称，便于管理
-        </n-text>
+      <n-space vertical :size="20">
+        <n-alert type="info" :bordered="false" class="info-alert">
+          <template #icon>
+            <n-icon>
+              <InformationCircleOutline/>
+            </n-icon>
+          </template>
+          创建访问令牌用于 API 调用。令牌创建成功后将显示完整的访问令牌，请妥善保管。
+        </n-alert>
 
-        <n-form-item label="过期时间" path="expires_at">
-          <n-radio-group v-model:value="expireType" @update:value="handleExpireTypeChange">
-            <n-space vertical :size="12">
-              <n-radio value="never">
-                永不过期
-              </n-radio>
-              <n-radio value="custom">
-                自定义过期时间
-              </n-radio>
-            </n-space>
-          </n-radio-group>
-        </n-form-item>
+        <n-form
+            ref="formRef"
+            :model="formData"
+            :rules="rules"
+            label-placement="top"
+            size="large"
+        >
+          <n-form-item label="令牌名称" path="name">
+            <n-input
+                v-model:value="formData.name"
+                placeholder="请输入令牌名称（用于识别此令牌的用途）"
+                maxlength="20"
+                show-count
+            >
+              <template #prefix>
+                <n-icon>
+                  <TextOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              为令牌取一个易于识别的名称，便于管理
+            </template>
+          </n-form-item>
 
-        <n-form-item v-if="expireType === 'custom'" label="选择过期时间" path="expires_at">
-          <n-date-picker
-              v-model:value="expiresAtValue"
-              type="datetime"
-              placeholder="请选择过期时间"
-              :is-date-disabled="isDateDisabled"
-              :time-picker-props="{ format: 'HH:mm:ss' }"
-              style="width: 100%"
-          />
-        </n-form-item>
-        <n-text v-if="expireType === 'custom'" depth="3"
-                style="font-size: 12px; margin-top: -16px; margin-bottom: 16px; display: block; padding-left: 120px;">
-          选择令牌的过期时间，过期后令牌将无法使用
-        </n-text>
-      </n-form>
+          <n-form-item label="过期时间" path="expires_at">
+            <n-radio-group v-model:value="expireType" @update:value="handleExpireTypeChange">
+              <n-space vertical :size="12">
+                <n-radio value="never" class="radio-item">
+                  <n-space align="center">
+                    <n-icon size="18">
+                      <InfiniteOutline/>
+                    </n-icon>
+                    永不过期
+                  </n-space>
+                </n-radio>
+                <n-radio value="custom" class="radio-item">
+                  <n-space align="center">
+                    <n-icon size="18">
+                      <CalendarOutline/>
+                    </n-icon>
+                    自定义过期时间
+                  </n-space>
+                </n-radio>
+              </n-space>
+            </n-radio-group>
+          </n-form-item>
+
+          <n-form-item v-if="expireType === 'custom'" label="选择过期时间" path="expires_at">
+            <n-date-picker
+                v-model:value="expiresAtValue"
+                type="datetime"
+                placeholder="请选择过期时间"
+                :is-date-disabled="isDateDisabled"
+                :time-picker-props="{ format: 'HH:mm:ss' }"
+                style="width: 100%"
+            >
+              <template #date-icon>
+                <n-icon>
+                  <CalendarOutline/>
+                </n-icon>
+              </template>
+            </n-date-picker>
+            <template #feedback>
+              选择令牌的过期时间，过期后令牌将无法使用
+            </template>
+          </n-form-item>
+        </n-form>
+      </n-space>
 
       <template #footer>
-        <n-space justify="end">
-          <n-button @click="showCreateDialog = false">取消</n-button>
-          <n-button type="primary" :loading="isCreating" @click="handleCreate">
+        <n-space justify="end" :size="12">
+          <n-button @click="showCreateDialog = false" size="large">
+            取消
+          </n-button>
+          <n-button type="primary" :loading="isCreating" @click="handleCreate" size="large" strong>
+            <template #icon>
+              <n-icon>
+                <AddOutline/>
+              </n-icon>
+            </template>
             创建令牌
           </n-button>
         </n-space>
@@ -90,44 +144,87 @@
     <!-- 令牌创建成功对话框 -->
     <n-modal
         v-model:show="showSuccessDialog"
-        preset="dialog"
+        preset="card"
         title="令牌创建成功"
+        :style="{ width: '600px' }"
+        :bordered="false"
+        :mask-closable="false"
+        class="success-dialog"
     >
-      <n-space vertical :size="20" style="margin-top: 16px">
-        <div>
-          <div class="token-label">名称</div>
-          <div class="token-value">{{ createdToken?.name }}</div>
-        </div>
-
-        <div>
-          <div class="token-label">访问令牌</div>
-          <div class="token-display-container">
-            <n-text code class="token-display">{{ createdToken?.access_token }}</n-text>
-            <n-button
-                text
-                size="small"
-                @click="handleCopyToken"
-                class="copy-icon-button"
-            >
-              <template #icon>
-                <n-icon>
-                  <CopyOutline/>
-                </n-icon>
-              </template>
-            </n-button>
-          </div>
-        </div>
-      </n-space>
-
-      <template #action>
-        <n-button type="primary" @click="handleCopyAndClose">
+      <n-space vertical :size="24">
+        <!-- 成功提示 -->
+        <n-alert type="success" :bordered="false" class="success-alert">
           <template #icon>
             <n-icon>
-              <CopyOutline/>
+              <CheckmarkCircleOutline/>
             </n-icon>
           </template>
-          复制并关闭
-        </n-button>
+          访问令牌已成功创建。请立即复制并妥善保管，此令牌只会显示一次！
+        </n-alert>
+
+        <!-- 令牌信息卡片 -->
+        <n-card :bordered="true" class="token-info-card">
+          <n-space vertical :size="16">
+            <div class="token-info-item">
+              <div class="token-info-label">
+                <n-icon size="16">
+                  <TextOutline/>
+                </n-icon>
+                令牌名称
+              </div>
+              <div class="token-info-value">{{ createdToken?.name }}</div>
+            </div>
+
+            <n-divider style="margin: 0"/>
+
+            <div class="token-info-item">
+              <div class="token-info-label">
+                <n-icon size="16">
+                  <KeyOutline/>
+                </n-icon>
+                访问令牌
+              </div>
+              <div class="token-display-container">
+                <n-text code class="token-display">{{ createdToken?.access_token }}</n-text>
+                <n-button
+                    text
+                    size="small"
+                    @click="handleCopyToken"
+                    class="copy-icon-button"
+                >
+                  <template #icon>
+                    <n-icon>
+                      <CopyOutline/>
+                    </n-icon>
+                  </template>
+                </n-button>
+              </div>
+            </div>
+          </n-space>
+        </n-card>
+
+        <!-- 警告提示 -->
+        <n-alert type="warning" :bordered="false" class="warning-alert">
+          <template #icon>
+            <n-icon>
+              <WarningOutline/>
+            </n-icon>
+          </template>
+          请立即复制并保存此令牌。关闭此对话框后，您将无法再次查看完整的令牌内容。
+        </n-alert>
+      </n-space>
+
+      <template #footer>
+        <n-space justify="end" :size="12">
+          <n-button type="primary" @click="handleCopyAndClose" size="large" strong>
+            <template #icon>
+              <n-icon>
+                <CopyOutline/>
+              </n-icon>
+            </template>
+            复制并关闭
+          </n-button>
+        </n-space>
       </template>
     </n-modal>
   </div>
@@ -137,9 +234,12 @@
 import {h, onMounted, ref} from 'vue'
 import {
   type DataTableColumns,
+  NAlert,
   NButton,
+  NCard,
   NDataTable,
   NDatePicker,
+  NDivider,
   NForm,
   NFormItem,
   NIcon,
@@ -153,7 +253,17 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import {AddOutline, CopyOutline} from '@vicons/ionicons5'
+import {
+  AddOutline,
+  CalendarOutline,
+  CheckmarkCircleOutline,
+  CopyOutline,
+  InfiniteOutline,
+  InformationCircleOutline,
+  KeyOutline,
+  TextOutline,
+  WarningOutline
+} from '@vicons/ionicons5'
 import type {CreateTokenResponse, Token} from '@/services/tokensService'
 import tokensService from '@/services/tokensService'
 import type {Channel} from "@/types/channel.ts";
@@ -472,4 +582,226 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 页面样式 */
+.token-management-page {
+  --primary-color: #18a058;
+  --primary-color-hover: #36ad6a;
+  --info-color: #2080f0;
+  --warning-color: #f0a020;
+  --success-color: #18a058;
+  --error-color: #d03050;
+}
+
+/* 页面头部卡片 */
+.page-header-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.4;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 对话框样式 */
+.token-dialog,
+.success-dialog {
+  --n-border-radius: 12px;
+}
+
+.token-dialog :deep(.n-card__content),
+.success-dialog :deep(.n-card__content) {
+  padding: 24px;
+}
+
+/* 提示信息样式 */
+.info-alert {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-left: 4px solid var(--info-color);
+}
+
+.success-alert {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-left: 4px solid var(--success-color);
+}
+
+.warning-alert {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-left: 4px solid var(--warning-color);
+}
+
+/* 表单项样式优化 */
+.token-dialog :deep(.n-form-item-label) {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  padding-bottom: 8px;
+}
+
+.token-dialog :deep(.n-form-item-feedback) {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* Radio 样式优化 */
+.radio-item {
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.radio-item:hover {
+  background: #f5f5f6;
+}
+
+/* 输入框样式优化 */
+.token-dialog :deep(.n-input) {
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.token-dialog :deep(.n-input:focus) {
+  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.1);
+}
+
+/* 图标样式 */
+.token-dialog :deep(.n-input__prefix) {
+  color: #999;
+  margin-right: 8px;
+}
+
+.token-dialog :deep(.n-input:focus .n-input__prefix) {
+  color: var(--primary-color);
+}
+
+/* 按钮样式优化 */
+.token-management-page :deep(.n-button) {
+  transition: all 0.3s;
+  border-radius: 8px;
+}
+
+.token-management-page :deep(.n-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.token-management-page :deep(.n-button--primary) {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
+  border: none;
+}
+
+.token-management-page :deep(.n-button--primary:hover) {
+  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
+}
+
+/* 令牌信息卡片 */
+.token-info-card {
+  background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+  border-radius: 8px;
+}
+
+.token-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.token-info-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.token-info-value {
+  font-size: 16px;
+  color: #333;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.token-display-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: #f5f5f6;
+  border-radius: 6px;
+  border: 1px solid #e8e8e9;
+}
+
+.token-display {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  word-break: break-all;
+  flex: 1;
+}
+
+.copy-icon-button {
+  flex-shrink: 0;
+  color: var(--primary-color);
+}
+
+.copy-icon-button:hover {
+  color: var(--primary-color-hover);
+}
+
+/* Alert 样式优化 */
+.token-dialog :deep(.n-alert),
+.success-dialog :deep(.n-alert) {
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.token-dialog :deep(.n-alert .n-alert-body),
+.success-dialog :deep(.n-alert .n-alert-body) {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 表格样式优化 */
+:deep(.n-data-table) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 操作按钮样式 */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .page-header-card {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .token-dialog,
+  .success-dialog {
+    width: 95vw !important;
+  }
+
+  .token-management-page :deep(.n-button) {
+    font-size: 14px;
+  }
+}
 </style>

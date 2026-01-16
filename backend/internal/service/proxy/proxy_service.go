@@ -90,17 +90,20 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Failed to read request body")
-		ps.logRequestError(ctx, traceID, c, "read_request_body", err, startTime, nil, "")
+		ps.logRequestError(ctx, traceID, c, "read_request_body", err, startTime, nil, "", "")
 		return err
 	}
 	// 重置 Body 使其可以再次读取
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
+	// 保存请求 body 字符串用于日志记录
+	requestBodyStr := string(bodyBytes)
+
 	// 2. 解析请求获取模型名
 	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes)
 	if err != nil {
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Invalid request: "+err.Error())
-		ps.logRequestError(ctx, traceID, c, "parse_model", err, startTime, nil, "")
+		ps.logRequestError(ctx, traceID, c, "parse_model", err, startTime, nil, "", requestBodyStr)
 		return err
 	}
 
@@ -131,7 +134,7 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 			)
 			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable,
 				"No available channels for model: "+unifiedModel)
-			ps.logRequestError(ctx, traceID, c, "route_failed", err, startTime, nil, unifiedModel)
+			ps.logRequestError(ctx, traceID, c, "route_failed", err, startTime, nil, unifiedModel, requestBodyStr)
 			return err
 		}
 
@@ -154,7 +157,7 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, err, failureType)
 
 			// 记录这次失败的尝试
-			ps.logRequestError(ctx, traceID, c, "upstream_request_failed", err, startTime, routeResult, unifiedModel)
+			ps.logRequestError(ctx, traceID, c, "upstream_request_failed", err, startTime, routeResult, unifiedModel, requestBodyStr)
 
 			if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 				ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway,
@@ -185,7 +188,7 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 					errors.New("fake 200 response"), FailureTypeSoft)
 
 				// 记录这次失败的尝试
-				ps.logRequestError(ctx, traceID, c, "fake_200_response", errors.New("fake 200 response"), startTime, routeResult, unifiedModel)
+				ps.logRequestError(ctx, traceID, c, "fake_200_response", errors.New("fake 200 response"), startTime, routeResult, unifiedModel, requestBodyStr)
 
 				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway,
@@ -207,7 +210,7 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 					errors.New("upstream error"), failureType)
 
 				// 记录这次失败的尝试
-				ps.logRequestError(ctx, traceID, c, "upstream_http_error", errors.New("upstream error"), startTime, routeResult, unifiedModel)
+				ps.logRequestError(ctx, traceID, c, "upstream_http_error", errors.New("upstream error"), startTime, routeResult, unifiedModel, requestBodyStr)
 
 				if ps.retryCoordinator.ShouldRetry(retryCtx) {
 					ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
@@ -224,18 +227,21 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 		ps.circuitManager.RecordKeySuccess(routeResult.Key.ID, routeResult.Channel.ID)
 
 		// 转发响应
+		var responseBodyStr string
 		if isStream {
-			err = ps.sseForwarder.ForwardStream(c, upstreamResp)
+			// 流式响应：记录流式内容
+			responseBodyStr, err = ps.sseForwarder.ForwardStreamWithCapture(c, upstreamResp)
 		} else {
-			_, err = ps.responseForwarder.ForwardJSONResponse(c, upstreamResp,
+			// 非流式响应：ForwardJSONResponse 返回响应 body
+			responseBodyStr, err = ps.responseForwarder.ForwardJSONResponse(c, upstreamResp,
 				routeResult.UpstreamModel, routeResult.UnifiedModel)
 		}
 
 		// 记录成功的审计日志
 		if err == nil {
-			ps.logRequestSuccess(ctx, traceID, c, routeResult, upstreamResp.StatusCode, startTime, isStream)
+			ps.logRequestSuccess(ctx, traceID, c, routeResult, upstreamResp.StatusCode, startTime, isStream, requestBodyStr, responseBodyStr)
 		} else {
-			ps.logRequestError(ctx, traceID, c, "forward_response", err, startTime, routeResult, unifiedModel)
+			ps.logRequestError(ctx, traceID, c, "forward_response", err, startTime, routeResult, unifiedModel, requestBodyStr)
 		}
 
 		return err
@@ -271,10 +277,12 @@ func (ps *ProxyService) logRequestSuccess(
 	statusCode int,
 	startTime time.Time,
 	isStream bool,
+	requestBody string,
+	responseBody string,
 ) {
 	responseTime := int(time.Since(startTime).Milliseconds())
 
-	log := logger.NewRequestLogBuilder().
+	builder := logger.NewRequestLogBuilder().
 		TraceID(traceID).
 		AccessToken(getAccessTokenFromContext(c)).
 		RequestPath(c.Request.URL.Path).
@@ -290,8 +298,31 @@ func (ps *ProxyService) logRequestSuccess(
 		IsSuccess(true).
 		IsStream(isStream).
 		ClientIP(c.ClientIP()).
-		UserAgent(c.Request.UserAgent()).
-		Build()
+		UserAgent(c.Request.UserAgent())
+
+	// 如果调试模式启用，记录完整的请求和响应 body
+	if ps.auditLogger.IsDebugModeEnabled() {
+		// 限制记录长度，避免过大的 body
+		const maxBodyLength = 10240 // 10KB
+
+		if len(requestBody) > 0 {
+			if len(requestBody) > maxBodyLength {
+				builder.RequestBody(requestBody[:maxBodyLength] + "...(truncated)")
+			} else {
+				builder.RequestBody(requestBody)
+			}
+		}
+
+		if len(responseBody) > 0 {
+			if len(responseBody) > maxBodyLength {
+				builder.ResponseBody(responseBody[:maxBodyLength] + "...(truncated)")
+			} else {
+				builder.ResponseBody(responseBody)
+			}
+		}
+	}
+
+	log := builder.Build()
 
 	// 异步写入数据库
 	ps.auditLogger.LogRequestAsync(log)
@@ -307,6 +338,7 @@ func (ps *ProxyService) logRequestError(
 	startTime time.Time,
 	routeResult *RouteResult,
 	unifiedModel string,
+	requestBody string,
 ) {
 	responseTime := int(time.Since(startTime).Milliseconds())
 
@@ -334,6 +366,16 @@ func (ps *ProxyService) logRequestError(
 		// 如果没有路由结果但有模型名，记录模型信息
 		builder.RequestedModel(unifiedModel).
 			UnifiedModel(unifiedModel)
+	}
+
+	// 如果调试模式启用，记录请求 body
+	if ps.auditLogger.IsDebugModeEnabled() && len(requestBody) > 0 {
+		const maxBodyLength = 10240 // 10KB
+		if len(requestBody) > maxBodyLength {
+			builder.RequestBody(requestBody[:maxBodyLength] + "...(truncated)")
+		} else {
+			builder.RequestBody(requestBody)
+		}
 	}
 
 	log := builder.Build()

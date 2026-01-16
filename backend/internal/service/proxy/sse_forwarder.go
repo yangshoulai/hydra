@@ -29,7 +29,7 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no") // 禁用Nginx缓冲
+	c.Header("X-Accel-Buffering", "no")      // 禁用Nginx缓冲
 	c.Header("Transfer-Encoding", "chunked") // 使用分块传输
 
 	// 获取响应写入器
@@ -43,7 +43,12 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 	// 不使用 bufio.Reader，直接读取以避免缓冲
 	// 创建一个小缓冲区来逐字节/逐小块读取
 	buf := make([]byte, 1) // 每次读取1字节，确保实时性
-	defer upstreamResp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+
+		}
+	}(upstreamResp.Body)
 
 	var lineBuffer bytes.Buffer
 	bytesSent := 0
@@ -66,15 +71,19 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 		if err != nil {
 			if err == io.EOF {
 				// 流结束
-				sf.logger.Info("SSE stream completed",
+				sf.logger.Info("SSE stream completed normally",
 					slog.Int("bytes_sent", bytesSent),
 					slog.Int("event_count", eventCount),
 				)
 				break
 			}
-			sf.logger.Error("error reading SSE stream",
+			// 上游读取错误
+			sf.logger.Error("error reading from upstream SSE stream",
 				slog.String("error", err.Error()),
+				slog.String("error_type", err.Error()),
 				slog.Int("bytes_sent", bytesSent),
+				slog.Int("event_count", eventCount),
+				slog.Int("upstream_status", upstreamResp.StatusCode),
 			)
 			return err
 		}
@@ -91,6 +100,8 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 			sf.logger.Error("error writing to client",
 				slog.String("error", err.Error()),
 				slog.Int("bytes_sent", bytesSent),
+				slog.Int("event_count", eventCount),
+				slog.String("client_ip", c.ClientIP()),
 			)
 			return err
 		}
@@ -120,17 +131,159 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 		// 检查客户端是否断开连接
 		select {
 		case <-c.Request.Context().Done():
-			sf.logger.Warn("client connection closed",
+			contextErr := c.Request.Context().Err()
+			sf.logger.Warn("client connection closed during SSE forwarding",
 				slog.Int("bytes_sent", bytesSent),
 				slog.Int("event_count", eventCount),
+				slog.String("context_error", contextErr.Error()),
+				slog.String("client_ip", c.ClientIP()),
 			)
-			return c.Request.Context().Err()
+			return contextErr
 		default:
 			// 继续处理
 		}
 	}
 
 	return nil
+}
+
+// ForwardStreamWithCapture 转发 SSE 流式响应并捕获内容用于日志记录
+// 返回捕获的响应内容字符串
+func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *http.Response) (string, error) {
+	// 设置响应头 - 必须在写入任何数据之前设置
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")      // 禁用Nginx缓冲
+	c.Header("Transfer-Encoding", "chunked") // 使用分块传输
+
+	// 获取响应写入器
+	writer := c.Writer
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		sf.logger.Error("response writer does not support flushing")
+		return "", io.ErrUnexpectedEOF
+	}
+
+	// 不使用 bufio.Reader，直接读取以避免缓冲
+	// 创建一个小缓冲区来逐字节/逐小块读取
+	buf := make([]byte, 1) // 每次读取1字节，确保实时性
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+
+		}
+	}(upstreamResp.Body)
+
+	var lineBuffer bytes.Buffer
+	var captureBuffer bytes.Buffer // 用于捕获内容
+	bytesSent := 0
+	eventCount := 0
+
+	// 最大捕获长度（10KB）
+	const maxCaptureLength = 10240
+
+	sf.logger.Info("starting SSE stream forwarding with capture",
+		slog.String("content_type", upstreamResp.Header.Get("Content-Type")),
+		slog.String("content_encoding", upstreamResp.Header.Get("Content-Encoding")),
+	)
+
+	// 写入HTTP状态码
+	c.Status(http.StatusOK)
+
+	// 立即刷新一次，确保头部发送
+	flusher.Flush()
+
+	for {
+		// 每次读取1字节
+		n, err := upstreamResp.Body.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				// 流结束
+				sf.logger.Info("SSE stream completed normally",
+					slog.Int("bytes_sent", bytesSent),
+					slog.Int("event_count", eventCount),
+				)
+				break
+			}
+			// 上游读取错误
+			sf.logger.Error("error reading from upstream SSE stream",
+				slog.String("error", err.Error()),
+				slog.String("error_type", err.Error()),
+				slog.Int("bytes_sent", bytesSent),
+				slog.Int("event_count", eventCount),
+				slog.Int("upstream_status", upstreamResp.StatusCode),
+			)
+			return captureBuffer.String(), err
+		}
+
+		if n == 0 {
+			continue
+		}
+
+		ch := buf[0]
+		bytesSent++
+
+		// 写入客户端
+		if _, err := writer.Write(buf); err != nil {
+			sf.logger.Error("error writing to client",
+				slog.String("error", err.Error()),
+				slog.Int("bytes_sent", bytesSent),
+				slog.Int("event_count", eventCount),
+				slog.String("client_ip", c.ClientIP()),
+			)
+			return captureBuffer.String(), err
+		}
+
+		// 追加到行缓冲
+		lineBuffer.WriteByte(ch)
+
+		// 如果还没超过最大长度，也追加到捕获缓冲
+		if captureBuffer.Len() < maxCaptureLength {
+			captureBuffer.WriteByte(ch)
+		}
+
+		// 检测是否是行结束
+		if ch == '\n' {
+			// 检查是否是空行（事件结束）
+			line := lineBuffer.String()
+			if len(line) > 2 { // \r\n 或 \n
+				eventCount++
+				sf.logger.Debug("SSE event forwarded",
+					slog.Int("event_number", eventCount),
+					slog.Int("line_length", len(line)),
+					slog.String("line_prefix", truncateString(line, 50)),
+				)
+			}
+			lineBuffer.Reset()
+		}
+
+		// 每次写入后立即刷新 - 关键！
+		// 这样可以确保每个字节都立即发送给客户端
+		flusher.Flush()
+
+		// 检查客户端是否断开连接
+		select {
+		case <-c.Request.Context().Done():
+			contextErr := c.Request.Context().Err()
+			sf.logger.Warn("client connection closed during SSE forwarding",
+				slog.Int("bytes_sent", bytesSent),
+				slog.Int("event_count", eventCount),
+				slog.String("context_error", contextErr.Error()),
+				slog.String("client_ip", c.ClientIP()),
+			)
+			return captureBuffer.String(), contextErr
+		default:
+			// 继续处理
+		}
+	}
+
+	capturedContent := captureBuffer.String()
+	if captureBuffer.Len() >= maxCaptureLength {
+		capturedContent += "...(truncated)"
+	}
+
+	return capturedContent, nil
 }
 
 // truncateString 截断字符串用于日志显示

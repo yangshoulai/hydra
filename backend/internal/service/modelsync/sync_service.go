@@ -18,6 +18,7 @@ type SyncService struct {
 	logger          *slog.Logger
 	channelRepo     *repository.ChannelRepository
 	modelConfigRepo *repository.ChannelModelConfigRepository
+	keyRepo         *repository.KeyRepository
 	diffCalculator  *DiffCalculator
 	httpClient      *http.Client
 }
@@ -27,11 +28,13 @@ func NewSyncService(
 	logger *slog.Logger,
 	channelRepo *repository.ChannelRepository,
 	modelConfigRepo *repository.ChannelModelConfigRepository,
+	keyRepo *repository.KeyRepository,
 ) *SyncService {
 	return &SyncService{
 		logger:          logger,
 		channelRepo:     channelRepo,
 		modelConfigRepo: modelConfigRepo,
+		keyRepo:         keyRepo,
 		diffCalculator:  NewDiffCalculator(logger),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -152,6 +155,29 @@ func (s *SyncService) fetchUpstreamModels(ctx context.Context, channel *models.C
 	// 设置请求头
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Hydra/1.0")
+
+	// 查询渠道的活跃密钥
+	keys, err := s.keyRepo.FindActiveByChannelID(ctx, channel.ID)
+	if err != nil {
+		s.logger.Warn("failed to fetch active keys for channel",
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("error", err.Error()),
+		)
+	}
+
+	// 如果有可用密钥，选择第一个并添加到认证头
+	if len(keys) > 0 {
+		selectedKey := keys[0]
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", selectedKey.KeyValue))
+		s.logger.Debug("using api key for upstream request",
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.Uint64("key_id", uint64(selectedKey.ID)),
+		)
+	} else {
+		s.logger.Debug("no active api key found for channel, requesting without authentication",
+			slog.Uint64("channel_id", uint64(channel.ID)),
+		)
+	}
 
 	// 发送请求
 	resp, err := s.httpClient.Do(req)

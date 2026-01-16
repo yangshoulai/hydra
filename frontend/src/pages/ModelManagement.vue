@@ -1,16 +1,24 @@
 <template>
-  <div class="space-y-4 animate-fade-in">
-    <!-- 操作栏 -->
-    <div class="flex">
-      <n-button type="primary" @click="showCreateDialog = true">
-        <template #icon>
-          <n-icon>
-            <AddOutline/>
-          </n-icon>
-        </template>
-        添加模型
-      </n-button>
-    </div>
+  <div class="space-y-4 animate-fade-in model-management-page">
+    <!-- 页面头部 -->
+    <n-card :bordered="false" class="page-header-card">
+      <n-space justify="space-between" align="center">
+        <n-space vertical :size="4">
+          <n-text class="page-title">统一模型管理</n-text>
+          <n-text depth="3" class="page-subtitle">
+            管理系统中的所有统一模型，用于将不同渠道的模型映射到统一名称
+          </n-text>
+        </n-space>
+        <n-button type="primary" @click="showCreateDialog = true" size="large" strong>
+          <template #icon>
+            <n-icon>
+              <AddOutline/>
+            </n-icon>
+          </template>
+          添加模型
+        </n-button>
+      </n-space>
+    </n-card>
 
     <!-- 模型列表 -->
     <n-data-table
@@ -25,36 +33,99 @@
     />
 
     <!-- 创建模型对话框 -->
-    <n-modal v-model:show="showCreateDialog" preset="dialog" title="添加模型">
-      <n-form ref="createFormRef" :model="createForm" :rules="createRules" label-placement="left" label-width="80px">
-        <n-form-item label="模型名称" path="name">
-          <n-input
-              v-model:value="createForm.name"
-              placeholder="请输入模型名称，如：gpt-4"
-              @input="createForm.name = createForm.name.toLowerCase()"
-          />
-        </n-form-item>
-        <n-form-item label="厂商" path="provider_id">
-          <n-select
-              v-model:value="createForm.provider_id"
-              :options="providerOptions"
-              placeholder="请选择厂商"
-              :loading="loadingProviders"
-              filterable
-          />
-        </n-form-item>
-        <n-form-item label="备注" path="remark">
-          <n-input
-              v-model:value="createForm.remark"
-              type="textarea"
-              placeholder="请输入备注"
-          />
-        </n-form-item>
-      </n-form>
-      <template #action>
-        <n-space>
-          <n-button @click="showCreateDialog = false">取消</n-button>
-          <n-button type="primary" @click="handleCreate" :loading="creating">
+    <n-modal
+        v-model:show="showCreateDialog"
+        preset="card"
+        title="添加模型"
+        :style="{ width: '600px' }"
+        :mask-closable="false"
+        :closable="true"
+        @close="showCreateDialog = false"
+        @keydown.esc="showCreateDialog = false"
+        :bordered="false"
+        class="model-dialog"
+    >
+      <n-space vertical :size="20">
+        <n-alert type="info" :bordered="false" class="info-alert">
+          <template #icon>
+            <n-icon>
+              <InformationCircleOutline/>
+            </n-icon>
+          </template>
+          创建新的统一模型。统一模型用于将不同渠道的相同模型映射到统一名称。
+        </n-alert>
+
+        <n-form
+            ref="createFormRef"
+            :model="createForm"
+            :rules="createRules"
+            label-placement="top"
+            size="large"
+        >
+          <n-form-item label="模型名称" path="name">
+            <n-input
+                v-model:value="createForm.name"
+                placeholder="请输入模型名称，如：gpt-4"
+                @input="createForm.name = createForm.name.toLowerCase()"
+            >
+              <template #prefix>
+                <n-icon>
+                  <CodeOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              统一的模型标识名称，自动转换为小写
+            </template>
+          </n-form-item>
+
+          <n-form-item label="厂商" path="provider_id">
+            <n-select
+                v-model:value="createForm.provider_id"
+                :options="providerOptions"
+                placeholder="请选择厂商"
+                :loading="loadingProviders"
+                filterable
+            >
+              <template #prefix>
+                <n-icon>
+                  <BuildOutline/>
+                </n-icon>
+              </template>
+            </n-select>
+            <template #feedback>
+              选择模型所属的厂商或提供商
+            </template>
+          </n-form-item>
+
+          <n-form-item label="备注" path="remark">
+            <n-input
+                v-model:value="createForm.remark"
+                type="textarea"
+                placeholder="请输入备注（可选）"
+                :autosize="{ minRows: 3, maxRows: 6 }"
+            >
+              <template #prefix>
+                <n-icon>
+                  <TextOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+          </n-form-item>
+        </n-form>
+      </n-space>
+
+      <template #footer>
+        <n-space justify="end" :size="12">
+          <n-button @click="showCreateDialog = false" size="large">
+            取消
+          </n-button>
+          <n-button type="primary" @click="handleCreate" :loading="creating" size="large" strong>
+            <template #icon>
+              <n-icon>
+                <AddOutline/>
+              </n-icon>
+            </template>
             确定
           </n-button>
         </n-space>
@@ -62,37 +133,100 @@
     </n-modal>
 
     <!-- 编辑模型对话框 -->
-    <n-modal v-model:show="showEditDialog" preset="dialog" title="编辑模型">
-      <n-form ref="editFormRef" :model="editForm" :rules="editRules" label-placement="left" label-width="80px">
-        <n-form-item label="模型名称" path="name">
-          <n-input
-              v-model:value="editForm.name"
-              placeholder="请输入模型名称"
-              @input="editForm.name = editForm.name.toLowerCase()"
-          />
-        </n-form-item>
-        <n-form-item label="厂商" path="provider_id">
-          <n-select
-              v-model:value="editForm.provider_id"
-              :options="providerOptions"
-              placeholder="请选择厂商"
-              :loading="loadingProviders"
-              filterable
-          />
-        </n-form-item>
-        <n-form-item label="备注" path="remark">
-          <n-input
-              v-model:value="editForm.remark"
-              type="textarea"
-              placeholder="请输入备注"
-          />
-        </n-form-item>
-      </n-form>
-      <template #action>
-        <n-space>
-          <n-button @click="showEditDialog = false">取消</n-button>
-          <n-button type="primary" @click="handleUpdate" :loading="updating">
-            确定
+    <n-modal
+        v-model:show="showEditDialog"
+        preset="card"
+        title="编辑模型"
+        :style="{ width: '600px' }"
+        :mask-closable="false"
+        :closable="true"
+        @close="showEditDialog = false"
+        @keydown.esc="showEditDialog = false"
+        :bordered="false"
+        class="model-dialog"
+    >
+      <n-space vertical :size="20">
+        <n-alert type="info" :bordered="false" class="info-alert">
+          <template #icon>
+            <n-icon>
+              <InformationCircleOutline/>
+            </n-icon>
+          </template>
+          修改统一模型的配置信息。
+        </n-alert>
+
+        <n-form
+            ref="editFormRef"
+            :model="editForm"
+            :rules="editRules"
+            label-placement="top"
+            size="large"
+        >
+          <n-form-item label="模型名称" path="name">
+            <n-input
+                v-model:value="editForm.name"
+                placeholder="请输入模型名称"
+                @input="editForm.name = editForm.name.toLowerCase()"
+            >
+              <template #prefix>
+                <n-icon>
+                  <CodeOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              统一的模型标识名称，自动转换为小写
+            </template>
+          </n-form-item>
+
+          <n-form-item label="厂商" path="provider_id">
+            <n-select
+                v-model:value="editForm.provider_id"
+                :options="providerOptions"
+                placeholder="请选择厂商"
+                :loading="loadingProviders"
+                filterable
+            >
+              <template #prefix>
+                <n-icon>
+                  <BuildOutline/>
+                </n-icon>
+              </template>
+            </n-select>
+            <template #feedback>
+              选择模型所属的厂商或提供商
+            </template>
+          </n-form-item>
+
+          <n-form-item label="备注" path="remark">
+            <n-input
+                v-model:value="editForm.remark"
+                type="textarea"
+                placeholder="请输入备注（可选）"
+                :autosize="{ minRows: 3, maxRows: 6 }"
+            >
+              <template #prefix>
+                <n-icon>
+                  <TextOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+          </n-form-item>
+        </n-form>
+      </n-space>
+
+      <template #footer>
+        <n-space justify="end" :size="12">
+          <n-button @click="showEditDialog = false" size="large">
+            取消
+          </n-button>
+          <n-button type="primary" @click="handleUpdate" :loading="updating" size="large" strong>
+            <template #icon>
+              <n-icon>
+                <SaveOutline/>
+              </n-icon>
+            </template>
+            保存
           </n-button>
         </n-space>
       </template>
@@ -106,7 +240,9 @@ import {
   type DataTableColumns,
   type FormInst,
   type FormRules,
+  NAlert,
   NButton,
+  NCard,
   NDataTable,
   NForm,
   NFormItem,
@@ -117,7 +253,16 @@ import {
   NSpace,
   NText
 } from 'naive-ui'
-import {AddOutline, CreateOutline, TrashOutline} from '@vicons/ionicons5'
+import {
+  AddOutline,
+  BuildOutline,
+  CodeOutline,
+  CreateOutline,
+  InformationCircleOutline,
+  SaveOutline,
+  TextOutline,
+  TrashOutline
+} from '@vicons/ionicons5'
 import {type CreateModelRequest, modelApi, type UpdateModelRequest} from '../services/modelService'
 import type {Model} from '../types/model'
 import providerApi from '@/services/providerService'
@@ -405,11 +550,146 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.model-management {
-  padding: 16px;
+/* 页面样式 */
+.model-management-page {
+  --primary-color: #18a058;
+  --primary-color-hover: #36ad6a;
+  --info-color: #2080f0;
+  --warning-color: #f0a020;
+  --success-color: #18a058;
+  --error-color: #d03050;
+}
+
+/* 页面头部卡片 */
+.page-header-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.4;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 对话框样式 */
+.model-dialog {
+  --n-border-radius: 12px;
+}
+
+.model-dialog :deep(.n-card__content) {
+  padding: 24px;
+}
+
+/* 提示信息样式 */
+.info-alert {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-left: 4px solid var(--info-color);
+}
+
+/* 表单项样式优化 */
+.model-dialog :deep(.n-form-item-label) {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  padding-bottom: 8px;
+}
+
+.model-dialog :deep(.n-form-item-feedback) {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* 输入框样式优化 */
+.model-dialog :deep(.n-input),
+.model-dialog :deep(.n-base-selection) {
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.model-dialog :deep(.n-input:focus),
+.model-dialog :deep(.n-base-selection:focus) {
+  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.1);
+}
+
+/* 图标样式 */
+.model-dialog :deep(.n-input__prefix),
+.model-dialog :deep(.n-base-selection__prefix) {
+  color: #999;
+  margin-right: 8px;
+}
+
+.model-dialog :deep(.n-input:focus .n-input__prefix),
+.model-dialog :deep(.n-base-selection:focus .n-base-selection__prefix) {
+  color: var(--primary-color);
+}
+
+/* 按钮样式优化 */
+.model-management-page :deep(.n-button) {
+  transition: all 0.3s;
+  border-radius: 8px;
+}
+
+.model-management-page :deep(.n-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.model-management-page :deep(.n-button--primary) {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
+  border: none;
+}
+
+.model-management-page :deep(.n-button--primary:hover) {
+  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
+}
+
+/* Alert 样式优化 */
+.model-dialog :deep(.n-alert) {
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.model-dialog :deep(.n-alert .n-alert-body) {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 表格样式优化 */
+:deep(.n-data-table) {
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 :deep(.n-data-table__n-pagination) {
   margin-top: 16px;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .page-header-card {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .model-dialog {
+    width: 95vw !important;
+  }
+
+  .model-management-page :deep(.n-button) {
+    font-size: 14px;
+  }
 }
 </style>

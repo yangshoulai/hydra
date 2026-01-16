@@ -9,18 +9,10 @@
             </n-icon>
             <span class="filter-title">日志筛选</span>
           </n-space>
-          <n-button quaternary size="small" @click="handleReset">
-            <template #icon>
-              <n-icon>
-                <RefreshIcon/>
-              </n-icon>
-            </template>
-            重置筛选
-          </n-button>
         </div>
       </template>
 
-      <n-form ref="formRef" :model="formData" :show-label="false">
+      <n-form ref="formRef" :model="formData" :show-label="false" @keyup.enter="handleQuery">
         <n-space vertical :size="16">
           <!-- 第一行：主要筛选条件 -->
           <n-space :size="12" wrap>
@@ -31,7 +23,6 @@
                   placeholder="输入 Trace ID"
                   clearable
                   style="width: 200px"
-                  @update:value="handleFilterChange"
               >
                 <template #prefix>
                   <n-icon color="#60a5fa">
@@ -48,7 +39,6 @@
                   placeholder="输入令牌名称"
                   clearable
                   style="width: 180px"
-                  @update:value="handleFilterChange"
               >
                 <template #prefix>
                   <n-icon color="#10b981">
@@ -68,7 +58,6 @@
                   :loading="loadingModels"
                   filterable
                   style="width: 200px"
-                  @update:value="handleFilterChange"
               />
             </n-form-item>
 
@@ -82,7 +71,6 @@
                   :loading="loadingChannels"
                   filterable
                   style="width: 180px"
-                  @update:value="handleFilterChange"
               />
             </n-form-item>
           </n-space>
@@ -97,7 +85,6 @@
                   clearable
                   :options="statusCodeOptions"
                   style="width: 160px"
-                  @update:value="handleFilterChange"
               />
             </n-form-item>
 
@@ -109,7 +96,6 @@
                   clearable
                   :options="successOptions"
                   style="width: 140px"
-                  @update:value="handleFilterChange"
               />
             </n-form-item>
 
@@ -124,6 +110,26 @@
               />
             </n-form-item>
           </n-space>
+
+          <!-- 操作按钮 -->
+          <n-space :size="12" justify="center">
+            <n-button type="primary" @click="handleQuery">
+              <template #icon>
+                <n-icon>
+                  <SearchIcon/>
+                </n-icon>
+              </template>
+              查询
+            </n-button>
+            <n-button @click="handleReset">
+              <template #icon>
+                <n-icon>
+                  <RefreshIcon/>
+                </n-icon>
+              </template>
+              重置
+            </n-button>
+          </n-space>
         </n-space>
       </n-form>
     </n-card>
@@ -133,7 +139,7 @@
 <script setup lang="ts">
 import {onMounted, reactive, ref} from 'vue'
 import {NButton, NCard, NDatePicker, NForm, NFormItem, NIcon, NInput, NSelect, NSpace, type SelectOption} from 'naive-ui'
-import {FilterOutline, KeyOutline, PulseOutline, RefreshOutline} from '@vicons/ionicons5'
+import {FilterOutline, KeyOutline, PulseOutline, RefreshOutline, SearchOutline} from '@vicons/ionicons5'
 import type {LogQueryRequest} from '../types/log'
 import {channelApi} from '../services/channelService'
 import {modelApi} from '../services/modelService'
@@ -146,6 +152,7 @@ const emit = defineEmits<Emits>()
 
 const FilterIcon = FilterOutline
 const RefreshIcon = RefreshOutline
+const SearchIcon = SearchOutline
 
 // 表单数据
 const formData = reactive<LogQueryRequest>({
@@ -219,11 +226,6 @@ async function loadModels() {
   }
 }
 
-// 处理筛选条件变化
-function handleFilterChange() {
-  emit('filter', {...formData})
-}
-
 // 处理日期变化
 function handleDateChange(value: [number, number] | null) {
   if (value) {
@@ -233,6 +235,10 @@ function handleDateChange(value: [number, number] | null) {
     formData.start_time = undefined
     formData.end_time = undefined
   }
+}
+
+// 处理查询
+function handleQuery() {
   emit('filter', {...formData})
 }
 
@@ -248,6 +254,7 @@ function handleReset() {
   formData.end_time = undefined
   dateRange.value = null
 
+  // 重置后自动查询
   emit('filter', {...formData})
 }
 
@@ -313,5 +320,23 @@ onMounted(() => {
 :deep(.n-input),
 :deep(.n-select) {
   border-radius: 8px;
+}
+
+/* 查询按钮样式 */
+:deep(.n-button--primary-type) {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border: none;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  transition: all 0.3s ease;
+}
+
+:deep(.n-button--primary-type:hover) {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+:deep(.n-button--primary-type:active) {
+  transform: translateY(0);
 }
 </style>

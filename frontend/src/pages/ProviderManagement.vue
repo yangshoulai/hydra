@@ -1,26 +1,34 @@
 <template>
-  <div class="space-y-4 animate-fade-in">
-    <!-- 操作栏 -->
-    <div class="flex justify-between items-center">
-      <n-space>
-        <n-button type="primary" @click="showCreateDialog = true">
-          <template #icon>
-            <n-icon>
-              <AddOutline/>
-            </n-icon>
-          </template>
-          添加厂商
-        </n-button>
-        <n-button type="info" @click="handleSync" :loading="syncing">
-          <template #icon>
-            <n-icon>
-              <SyncOutline/>
-            </n-icon>
-          </template>
-          同步厂商
-        </n-button>
+  <div class="space-y-4 animate-fade-in provider-management-page">
+    <!-- 页面头部 -->
+    <n-card :bordered="false" class="page-header-card">
+      <n-space justify="space-between" align="center">
+        <n-space vertical :size="4">
+          <n-text class="page-title">厂商管理</n-text>
+          <n-text depth="3" class="page-subtitle">
+            管理系统中的所有 AI 服务厂商，支持从远程服务器同步厂商列表
+          </n-text>
+        </n-space>
+        <n-space>
+          <n-button type="info" @click="handleSync" :loading="syncing" size="large" secondary strong>
+            <template #icon>
+              <n-icon>
+                <SyncOutline/>
+              </n-icon>
+            </template>
+            同步厂商
+          </n-button>
+          <n-button type="primary" @click="showCreateDialog = true" size="large" strong>
+            <template #icon>
+              <n-icon>
+                <AddOutline/>
+              </n-icon>
+            </template>
+            添加厂商
+          </n-button>
+        </n-space>
       </n-space>
-    </div>
+    </n-card>
 
     <!-- 厂商列表 -->
     <n-data-table
@@ -35,76 +43,331 @@
     />
 
     <!-- 创建厂商对话框 -->
-    <n-modal v-model:show="showCreateDialog" preset="dialog" title="添加厂商">
-      <n-form ref="createFormRef" :model="createForm" :rules="createRules" label-placement="left" label-width="120px">
-        <n-form-item label="厂商ID" path="id">
-          <n-input
-              v-model:value="createForm.id"
-              placeholder="请输入厂商ID，如：openai"
-              @input="createForm.id = createForm.id.toLowerCase()"
-          />
-        </n-form-item>
-        <n-form-item label="厂商名称" path="name">
-          <n-input
-              v-model:value="createForm.name"
-              placeholder="请输入厂商名称，如：OpenAI"
-          />
-        </n-form-item>
-        <n-form-item label="图标 URL" path="icon">
-          <n-input v-model:value="createForm.icon" placeholder="请输入图标 URL（可选）"/>
-        </n-form-item>
-        <n-form-item label="Lobe 图标" path="lobeIcon">
-          <n-input v-model:value="createForm.lobeIcon" placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"/>
-        </n-form-item>
-        <n-form-item label="备注" path="remark">
-          <n-input v-model:value="createForm.remark" type="textarea" placeholder="请输入备注"/>
-        </n-form-item>
-      </n-form>
-      <template #action>
-        <n-space>
-          <n-button @click="showCreateDialog = false">取消</n-button>
-          <n-button type="primary" @click="handleCreate" :loading="creating"> 确定</n-button>
+    <n-modal
+        v-model:show="showCreateDialog"
+        preset="card"
+        title="添加厂商"
+        :style="{ width: '600px' }"
+        :mask-closable="false"
+        :closable="true"
+        @close="showCreateDialog = false"
+        @keydown.esc="showCreateDialog = false"
+        :bordered="false"
+        class="provider-dialog"
+    >
+      <n-space vertical :size="20">
+        <n-alert type="info" :bordered="false" class="info-alert">
+          <template #icon>
+            <n-icon>
+              <InformationCircleOutline/>
+            </n-icon>
+          </template>
+          创建新的 AI 服务厂商。厂商信息将用于组织和展示不同的模型提供商。
+        </n-alert>
+
+        <n-form
+            ref="createFormRef"
+            :model="createForm"
+            :rules="createRules"
+            label-placement="top"
+            size="large"
+        >
+          <n-form-item label="厂商ID" path="id">
+            <n-input
+                v-model:value="createForm.id"
+                placeholder="请输入厂商ID，如：openai"
+                @input="createForm.id = createForm.id.toLowerCase()"
+            >
+              <template #prefix>
+                <n-icon>
+                  <KeyOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              厂商的唯一标识符，自动转换为小写
+            </template>
+          </n-form-item>
+
+          <n-form-item label="厂商名称" path="name">
+            <n-input
+                v-model:value="createForm.name"
+                placeholder="请输入厂商名称，如：OpenAI"
+            >
+              <template #prefix>
+                <n-icon>
+                  <BuildOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              厂商的显示名称
+            </template>
+          </n-form-item>
+
+          <n-form-item label="图标 URL" path="icon">
+            <n-input
+                v-model:value="createForm.icon"
+                placeholder="请输入图标 URL（可选）"
+            >
+              <template #prefix>
+                <n-icon>
+                  <ImageOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              厂商的图标 URL 地址
+            </template>
+          </n-form-item>
+
+          <n-form-item label="Lobe 图标" path="lobeIcon">
+            <n-input
+                v-model:value="createForm.lobeIcon"
+                placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"
+            >
+              <template #prefix>
+                <n-icon>
+                  <BuildOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              使用 LobeChat 图标组件的名称
+            </template>
+          </n-form-item>
+
+          <n-form-item label="备注" path="remark">
+            <n-input
+                v-model:value="createForm.remark"
+                type="textarea"
+                placeholder="请输入备注（可选）"
+                :autosize="{ minRows: 3, maxRows: 6 }"
+            >
+              <template #prefix>
+                <n-icon>
+                  <TextOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+          </n-form-item>
+        </n-form>
+      </n-space>
+
+      <template #footer>
+        <n-space justify="end" :size="12">
+          <n-button @click="showCreateDialog = false" size="large">
+            取消
+          </n-button>
+          <n-button type="primary" @click="handleCreate" :loading="creating" size="large" strong>
+            <template #icon>
+              <n-icon>
+                <AddOutline/>
+              </n-icon>
+            </template>
+            确定
+          </n-button>
         </n-space>
       </template>
     </n-modal>
 
     <!-- 编辑厂商对话框 -->
-    <n-modal v-model:show="showEditDialog" preset="dialog" title="编辑厂商">
-      <n-form ref="editFormRef" :model="editForm" :rules="editRules" label-placement="left" label-width="120px">
-        <n-form-item label="厂商ID">
-          <n-input :value="currentEditProvider?.id" disabled/>
-        </n-form-item>
-        <n-form-item label="厂商名称" path="name">
-          <n-input
-              v-model:value="editForm.name"
-              placeholder="请输入厂商名称"
-          />
-        </n-form-item>
-        <n-form-item label="图标 URL" path="icon">
-          <n-input v-model:value="editForm.icon" placeholder="请输入图标 URL（可选）"/>
-        </n-form-item>
-        <n-form-item label="Lobe 图标" path="lobeIcon">
-          <n-input v-model:value="editForm.lobeIcon" placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"/>
-        </n-form-item>
-        <n-form-item label="备注" path="remark">
-          <n-input v-model:value="editForm.remark" type="textarea" placeholder="请输入备注"/>
-        </n-form-item>
-      </n-form>
-      <template #action>
-        <n-space>
-          <n-button @click="showEditDialog = false">取消</n-button>
-          <n-button type="primary" @click="handleUpdate" :loading="updating"> 确定</n-button>
+    <n-modal
+        v-model:show="showEditDialog"
+        preset="card"
+        title="编辑厂商"
+        :style="{ width: '600px' }"
+        :mask-closable="false"
+        :closable="true"
+        @close="showEditDialog = false"
+        @keydown.esc="showEditDialog = false"
+        :bordered="false"
+        class="provider-dialog"
+    >
+      <n-space vertical :size="20">
+        <n-alert type="info" :bordered="false" class="info-alert">
+          <template #icon>
+            <n-icon>
+              <InformationCircleOutline/>
+            </n-icon>
+          </template>
+          修改厂商的配置信息。
+        </n-alert>
+
+        <n-form
+            ref="editFormRef"
+            :model="editForm"
+            :rules="editRules"
+            label-placement="top"
+            size="large"
+        >
+          <n-form-item label="厂商ID">
+            <n-input
+                :value="currentEditProvider?.id"
+                disabled
+            >
+              <template #prefix>
+                <n-icon>
+                  <KeyOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              厂商ID不可修改
+            </template>
+          </n-form-item>
+
+          <n-form-item label="厂商名称" path="name">
+            <n-input
+                v-model:value="editForm.name"
+                placeholder="请输入厂商名称"
+            >
+              <template #prefix>
+                <n-icon>
+                  <BuildOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              厂商的显示名称
+            </template>
+          </n-form-item>
+
+          <n-form-item label="图标 URL" path="icon">
+            <n-input
+                v-model:value="editForm.icon"
+                placeholder="请输入图标 URL（可选）"
+            >
+              <template #prefix>
+                <n-icon>
+                  <ImageOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              厂商的图标 URL 地址
+            </template>
+          </n-form-item>
+
+          <n-form-item label="Lobe 图标" path="lobeIcon">
+            <n-input
+                v-model:value="editForm.lobeIcon"
+                placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"
+            >
+              <template #prefix>
+                <n-icon>
+                  <BuildOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+            <template #feedback>
+              使用 LobeChat 图标组件的名称
+            </template>
+          </n-form-item>
+
+          <n-form-item label="备注" path="remark">
+            <n-input
+                v-model:value="editForm.remark"
+                type="textarea"
+                placeholder="请输入备注（可选）"
+                :autosize="{ minRows: 3, maxRows: 6 }"
+            >
+              <template #prefix>
+                <n-icon>
+                  <TextOutline/>
+                </n-icon>
+              </template>
+            </n-input>
+          </n-form-item>
+        </n-form>
+      </n-space>
+
+      <template #footer>
+        <n-space justify="end" :size="12">
+          <n-button @click="showEditDialog = false" size="large">
+            取消
+          </n-button>
+          <n-button type="primary" @click="handleUpdate" :loading="updating" size="large" strong>
+            <template #icon>
+              <n-icon>
+                <SaveOutline/>
+              </n-icon>
+            </template>
+            保存
+          </n-button>
         </n-space>
       </template>
     </n-modal>
 
     <!-- 同步厂商对话框 -->
-    <n-modal v-model:show="showSyncDialog" preset="card" title="同步远程厂商" style="width: 800px">
-      <n-alert type="info" style="margin-bottom: 16px">
-        从远程服务器获取厂商列表，选择需要添加的厂商后点击"添加选中的厂商"。
-      </n-alert>
+    <n-modal
+        v-model:show="showSyncDialog"
+        preset="card"
+        title="同步远程厂商"
+        :style="{ width: '900px' }"
+        :mask-closable="false"
+        :closable="true"
+        @close="showSyncDialog = false"
+        @keydown.esc="showSyncDialog = false"
+        :bordered="false"
+        class="sync-dialog"
+    >
+      <n-space vertical :size="20">
+        <!-- 说明信息 -->
+        <n-alert type="info" :bordered="false" class="info-alert">
+          <template #icon>
+            <n-icon>
+              <InformationCircleOutline/>
+            </n-icon>
+          </template>
+          从远程服务器获取厂商列表，选择需要添加的厂商后点击"添加选中的厂商"。
+        </n-alert>
 
-      <n-space vertical :size="16">
+        <!-- 统计信息 -->
+        <n-card size="small" :bordered="false" class="stats-card">
+          <n-grid :cols="3" :x-gap="20" responsive="screen">
+            <n-grid-item>
+              <div class="stat-item">
+                <div class="stat-icon stat-icon-info">
+                  <n-icon size="20">
+                    <CloudOutline/>
+                  </n-icon>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-label">远程厂商总数</div>
+                  <div class="stat-value">{{ remoteProviders.length }}</div>
+                </div>
+              </div>
+            </n-grid-item>
+            <n-grid-item>
+              <div class="stat-item">
+                <div class="stat-icon stat-icon-success">
+                  <n-icon size="20">
+                    <CheckmarkCircleOutline/>
+                  </n-icon>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-label">可添加</div>
+                  <div class="stat-value stat-value-success">{{ availableProviders.length }}</div>
+                </div>
+              </div>
+            </n-grid-item>
+            <n-grid-item>
+              <div class="stat-item">
+                <div class="stat-icon stat-icon-primary">
+                  <n-icon size="20">
+                    <CheckboxOutline/>
+                  </n-icon>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-label">已选中</div>
+                  <div class="stat-value stat-value-primary">{{ checkedProviderIds.length }}</div>
+                </div>
+              </div>
+            </n-grid-item>
+          </n-grid>
+        </n-card>
+
         <!-- 厂商列表 -->
         <n-data-table
             :columns="syncColumns"
@@ -118,14 +381,23 @@
         />
 
         <!-- 操作按钮 -->
-        <n-space justify="end">
-          <n-button @click="showSyncDialog = false">取消</n-button>
+        <n-space justify="end" :size="12">
+          <n-button @click="showSyncDialog = false" size="large">
+            取消
+          </n-button>
           <n-button
               type="primary"
               @click="handleAddSyncProviders"
               :loading="adding"
               :disabled="checkedProviderIds.length === 0"
+              size="large"
+              strong
           >
+            <template #icon>
+              <n-icon>
+                <AddOutline/>
+              </n-icon>
+            </template>
             添加选中的厂商 ({{ checkedProviderIds.length }})
           </n-button>
         </n-space>
@@ -137,8 +409,36 @@
 <script setup lang="ts">
 import {computed, h, nextTick, onMounted, reactive, ref, watch} from 'vue'
 import type {DataTableColumns, FormInst, FormRules} from 'naive-ui'
-import {NAlert, NButton, NDataTable, NForm, NFormItem, NIcon, NInput, NModal, NSpace, NText,} from 'naive-ui'
-import {AddOutline, CreateOutline, SyncOutline, TrashOutline} from '@vicons/ionicons5'
+import {
+  NAlert,
+  NButton,
+  NCard,
+  NDataTable,
+  NForm,
+  NFormItem,
+  NGrid,
+  NGridItem,
+  NIcon,
+  NInput,
+  NModal,
+  NSpace,
+  NText
+} from 'naive-ui'
+import {
+  AddOutline,
+  BuildOutline,
+  CheckmarkCircleOutline,
+  CheckboxOutline,
+  CloudOutline,
+  CreateOutline,
+  ImageOutline,
+  InformationCircleOutline,
+  KeyOutline,
+  SaveOutline,
+  SyncOutline,
+  TextOutline,
+  TrashOutline
+} from '@vicons/ionicons5'
 import providerApi from '@/services/providerService'
 import type {CreateProviderRequest, Provider, RemoteProvider, UpdateProviderRequest} from '@/types/model'
 import ProviderIcon from '@/components/ProviderIcon.vue'
@@ -544,7 +844,219 @@ watch(showSyncDialog, (newVal) => {
 </script>
 
 <style scoped>
+/* 页面样式 */
+.provider-management-page {
+  --primary-color: #18a058;
+  --primary-color-hover: #36ad6a;
+  --info-color: #2080f0;
+  --warning-color: #f0a020;
+  --success-color: #18a058;
+  --error-color: #d03050;
+}
+
+/* 页面头部卡片 */
+.page-header-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.4;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 对话框样式 */
+.provider-dialog,
+.sync-dialog {
+  --n-border-radius: 12px;
+}
+
+.provider-dialog :deep(.n-card__content),
+.sync-dialog :deep(.n-card__content) {
+  padding: 24px;
+}
+
+/* 提示信息样式 */
+.info-alert {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-left: 4px solid var(--info-color);
+}
+
+/* 统计卡片样式 */
+.stats-card {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-icon-info {
+  background: linear-gradient(135deg, #e8f4ff 0%, #d4e9ff 100%);
+  color: var(--info-color);
+}
+
+.stat-icon-success {
+  background: linear-gradient(135deg, #e8f7ef 0%, #d4f1e4 100%);
+  color: var(--success-color);
+}
+
+.stat-icon-primary {
+  background: linear-gradient(135deg, #e8f0ff 0%, #d4e0ff 100%);
+  color: var(--primary-color);
+}
+
+.stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  color: #333;
+}
+
+.stat-value-success {
+  color: var(--success-color);
+}
+
+.stat-value-primary {
+  color: var(--primary-color);
+}
+
+/* 表单项样式优化 */
+.provider-dialog :deep(.n-form-item-label) {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  padding-bottom: 8px;
+}
+
+.provider-dialog :deep(.n-form-item-feedback) {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* 输入框样式优化 */
+.provider-dialog :deep(.n-input),
+.provider-dialog :deep(.n-base-selection) {
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.provider-dialog :deep(.n-input:focus),
+.provider-dialog :deep(.n-base-selection:focus) {
+  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.1);
+}
+
+/* 图标样式 */
+.provider-dialog :deep(.n-input__prefix) {
+  color: #999;
+  margin-right: 8px;
+}
+
+.provider-dialog :deep(.n-input:focus .n-input__prefix) {
+  color: var(--primary-color);
+}
+
+/* 按钮样式优化 */
+.provider-management-page :deep(.n-button) {
+  transition: all 0.3s;
+  border-radius: 8px;
+}
+
+.provider-management-page :deep(.n-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.provider-management-page :deep(.n-button--primary) {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
+  border: none;
+}
+
+.provider-management-page :deep(.n-button--primary:hover) {
+  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
+}
+
+/* Alert 样式优化 */
+.provider-dialog :deep(.n-alert),
+.sync-dialog :deep(.n-alert) {
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.provider-dialog :deep(.n-alert .n-alert-body),
+.sync-dialog :deep(.n-alert .n-alert-body) {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 表格样式优化 */
+:deep(.n-data-table) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 :deep(.n-data-table__n-pagination) {
   margin-top: 16px;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .page-header-card {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .provider-dialog,
+  .sync-dialog {
+    width: 95vw !important;
+  }
+
+  .stats-card :deep(.n-grid-item) {
+    min-width: 100%;
+  }
+
+  .provider-management-page :deep(.n-button) {
+    font-size: 14px;
+  }
 }
 </style>

@@ -41,6 +41,8 @@ func RunMigrations(db *gorm.DB) error {
 		v1_1_3_add_token_name_unique_index(),
 		// v1.1.4 添加 providers 表的 lobeIcon 字段
 		v1_1_4_add_providers_lobe_icon(),
+		// v1.1.5 添加 request_logs 表的调试字段
+		V1_1_5_AddDebugFields(),
 	})
 
 	if err := m.Migrate(); err != nil {

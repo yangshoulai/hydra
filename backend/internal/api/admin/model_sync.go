@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -251,6 +252,7 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 			},
 		},
 		"max_tokens": 5,
+		"stream":     false,
 	}
 
 	jsonData, err := json.Marshal(requestBody)
@@ -283,19 +285,42 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 
 	// 检查响应状态
 	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Sprintf("upstream returned status %d", resp.StatusCode), latency, nil
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Sprintf("upstream returned status %d: %s", resp.StatusCode, string(body)), latency, nil
+	}
+
+	// 检查 Content-Type，警告非 JSON 响应（可能是流式）
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" && contentType != "application/json" && !bytes.Contains([]byte(contentType), []byte("application/json")) {
+		h.logger.Warn("unexpected content type from upstream",
+			slog.String("content_type", contentType),
+			slog.String("model", upstreamModel),
+		)
 	}
 
 	// 解析响应
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return false, "failed to decode response", latency, err
+		return false, fmt.Sprintf("failed to decode response: %v", err), latency, err
 	}
 
 	// 检查响应中是否有choices
 	choices, ok := result["choices"].([]interface{})
 	if !ok || len(choices) == 0 {
-		return false, "invalid response: no choices", latency, nil
+		// 记录完整响应以便调试
+		responseBody, _ := json.Marshal(result)
+		h.logger.Warn("invalid response from upstream",
+			slog.String("model", upstreamModel),
+			slog.String("response", string(responseBody)),
+		)
+
+		// 检查是否有错误信息
+		if errMsg, ok := result["error"]; ok {
+			errBytes, _ := json.Marshal(errMsg)
+			return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
+		}
+
+		return false, fmt.Sprintf("invalid response: no choices (response: %s)", string(responseBody)), latency, nil
 	}
 
 	return true, "模型测试成功", latency, nil
