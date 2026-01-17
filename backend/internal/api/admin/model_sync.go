@@ -108,15 +108,16 @@ func (h *ModelSyncHandler) RegisterRoutes(r *gin.RouterGroup) {
 type TestModelRequest struct {
 	UpstreamModel string `json:"upstream_model" binding:"required"`
 	UnifiedModel  string `json:"unified_model"`
+	EndpointType  string `json:"endpoint_type" binding:"required"`
 }
 
 // TestModelResponse 测试模型响应
 type TestModelResponse struct {
-	Success      bool   `json:"success"`
-	Message      string `json:"message"`
+	Success       bool   `json:"success"`
+	Message       string `json:"message"`
 	UpstreamModel string `json:"upstream_model"`
 	UnifiedModel  string `json:"unified_model"`
-	Latency      string `json:"latency,omitempty"`
+	Latency       string `json:"latency,omitempty"`
 }
 
 // TestModel 测试单个模型
@@ -201,11 +202,12 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 	testKey := keys[0]
 
 	// 调用上游API测试模型
-	success, message, latency, err := h.testModelViaUpstream(channel, testKey.KeyValue, req.UpstreamModel)
+	success, message, latency, err := h.testModelViaUpstream(channel, testKey.KeyValue, req.UpstreamModel, req.EndpointType)
 	if err != nil {
 		h.logger.Error("failed to test model",
 			slog.Uint64("channel_id", uint64(channelID)),
 			slog.String("upstream_model", req.UpstreamModel),
+			slog.String("endpoint_type", req.EndpointType),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -230,30 +232,74 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, TestModelResponse{
-		Success:      success,
-		Message:      message,
+		Success:       success,
+		Message:       message,
 		UpstreamModel: req.UpstreamModel,
 		UnifiedModel:  req.UnifiedModel,
-		Latency:      latency,
+		Latency:       latency,
 	})
 }
 
 // testModelViaUpstream 通过上游API测试模型
-func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey, upstreamModel string) (bool, string, string, error) {
-	// 构建测试请求 - 使用简单的chat completions接口
-	url := fmt.Sprintf("%s/v1/chat/completions", channel.BaseURL)
+func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey, upstreamModel, endpointType string) (bool, string, string, error) {
+	// 根据端点类型确定测试端点
+	var endpoint string
+	var requestBody map[string]interface{}
 
-	requestBody := map[string]interface{}{
-		"model": upstreamModel,
-		"messages": []map[string]string{
-			{
-				"role":    "user",
-				"content": "Hi",
+	switch endpointType {
+	case "openai":
+		endpoint = "/v1/chat/completions"
+		requestBody = map[string]interface{}{
+			"model": upstreamModel,
+			"messages": []map[string]string{
+				{
+					"role":    "user",
+					"content": "Hi",
+				},
 			},
-		},
-		"max_tokens": 5,
-		"stream":     false,
+			"max_tokens": 5,
+			"stream":     false,
+		}
+	case "openai-response":
+		endpoint = "/v1/responses"
+		requestBody = map[string]interface{}{
+			"model": upstreamModel,
+			"input": []map[string]interface{}{
+				{
+					"role": "user",
+					"content": []map[string]string{
+						{"type": "input_text", "text": "Hi"},
+					},
+				},
+			},
+		}
+	case "anthropic":
+		endpoint = "/v1/messages"
+		requestBody = map[string]interface{}{
+			"model": upstreamModel,
+			"messages": []map[string]interface{}{
+				{
+					"role":    "user",
+					"content": "Hi",
+				},
+			},
+			"max_tokens": 5,
+		}
+	default:
+		endpoint = "/v1/chat/completions"
+		requestBody = map[string]interface{}{
+			"model": upstreamModel,
+			"messages": []map[string]interface{}{
+				{
+					"role":    "user",
+					"content": "Hi",
+				},
+			},
+			"stream": false,
+		}
 	}
+
+	url := fmt.Sprintf("%s%s", channel.BaseURL, endpoint)
 
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
@@ -268,6 +314,11 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	// 为 Anthropic 添加特定的头部
+	if endpointType == "anthropic" {
+		req.Header.Set("anthropic-version", "2023-06-01")
+	}
 
 	// 记录开始时间
 	startTime := time.Now()
@@ -304,25 +355,56 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 		return false, fmt.Sprintf("failed to decode response: %v", err), latency, err
 	}
 
-	// 检查响应中是否有choices
-	choices, ok := result["choices"].([]interface{})
-	if !ok || len(choices) == 0 {
-		// 记录完整响应以便调试
-		responseBody, _ := json.Marshal(result)
-		h.logger.Warn("invalid response from upstream",
-			slog.String("model", upstreamModel),
-			slog.String("response", string(responseBody)),
-		)
-
-		// 检查是否有错误信息
-		if errMsg, ok := result["error"]; ok {
-			errBytes, _ := json.Marshal(errMsg)
-			return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
+	// 根据端点类型验证响应格式
+	switch endpointType {
+	case "openai":
+		// OpenAI Chat Completions: 检查 choices 字段
+		choices, ok := result["choices"].([]interface{})
+		if !ok || len(choices) == 0 {
+			if errMsg, ok := result["error"]; ok {
+				errBytes, _ := json.Marshal(errMsg)
+				return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
+			}
+			responseBody, _ := json.Marshal(result)
+			return false, fmt.Sprintf("invalid response: no choices (response: %s)", string(responseBody)), latency, nil
 		}
 
-		return false, fmt.Sprintf("invalid response: no choices (response: %s)", string(responseBody)), latency, nil
+	case "openai-response":
+		// OpenAI Response: 检查 output 字段
+		if output, ok := result["output"].([]interface{}); !ok || len(output) <= 0 {
+			// 有 output 字段
+			if errMsg, ok := result["error"]; ok {
+				errBytes, _ := json.Marshal(errMsg)
+				return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
+			}
+			responseBody, _ := json.Marshal(result)
+			return false, fmt.Sprintf("invalid response: no choices or output (response: %s)", string(responseBody)), latency, nil
+		}
+
+	case "anthropic":
+		// Anthropic Messages: 检查 content 字段
+		content, ok := result["content"].([]interface{})
+		if !ok || len(content) == 0 {
+			if errMsg, ok := result["error"]; ok {
+				errBytes, _ := json.Marshal(errMsg)
+				return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
+			}
+			responseBody, _ := json.Marshal(result)
+			return false, fmt.Sprintf("invalid response: no content (response: %s)", string(responseBody)), latency, nil
+		}
+
+	default:
+		// 默认检查 choices
+		choices, ok := result["choices"].([]interface{})
+		if !ok || len(choices) == 0 {
+			if errMsg, ok := result["error"]; ok {
+				errBytes, _ := json.Marshal(errMsg)
+				return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
+			}
+			responseBody, _ := json.Marshal(result)
+			return false, fmt.Sprintf("invalid response: no choices (response: %s)", string(responseBody)), latency, nil
+		}
 	}
 
 	return true, "模型测试成功", latency, nil
 }
-

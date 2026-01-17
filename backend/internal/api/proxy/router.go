@@ -53,6 +53,7 @@ func RegisterRoutes(
 	// 创建 handlers
 	chatCompletionsHandler := NewChatCompletionsHandler(logger, proxySvc)
 	responsesHandler := NewResponsesHandler(logger, proxySvc)
+	messagesHandler := NewMessagesHandler(logger, proxySvc)
 	modelsHandler := NewModelsHandler(logger, modelRepo)
 
 	// 创建 v1 路由组
@@ -66,11 +67,12 @@ func RegisterRoutes(
 		// 注册路由
 		v1.POST("/chat/completions", chatCompletionsHandler.Handle)
 		v1.POST("/responses", responsesHandler.Handle)
+		v1.POST("/messages", messagesHandler.Handle)
 		v1.GET("/models", modelsHandler.Handle)
 	}
 
 	logger.Info("proxy routes registered",
 		slog.String("prefix", "/v1"),
-		slog.Int("routes_count", 3),
+		slog.Int("routes_count", 4),
 	)
 }

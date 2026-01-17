@@ -12,6 +12,13 @@ func RunMigrations(db *gorm.DB) error {
 	m := gormigrate.New(db, gormigrate.DefaultOptions, []*gormigrate.Migration{
 		// v1.0.0 初始化 Schema（合并所有迁移）
 		v1_0_0_Init(),
+		// v1.2.0 添加端点类型
+		{
+			ID: "v1.2.0_add_endpoint_types",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_2_0_AddEndpointTypes(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

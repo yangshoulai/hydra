@@ -268,6 +268,19 @@
               选择系统中的统一模型，用于将不同渠道的相同模型映射到统一名称
             </template>
           </n-form-item>
+
+          <n-form-item label="端点类型" path="endpoint_types">
+            <n-select
+                v-model:value="modelForm.endpoint_types"
+                :options="endpointTypeOptions"
+                placeholder="请选择端点类型"
+                multiple
+                :input-props="{autocomplete: 'off'}"
+            />
+            <template #feedback>
+              选择该模型支持的端点类型，可多选
+            </template>
+          </n-form-item>
         </n-form>
       </n-space>
 
@@ -358,7 +371,7 @@ const syncResult = ref<SyncResult | null>(null)
 const localConfigs = ref<any[]>([])
 const unifiedModels = ref<Model[]>([])
 const loadingModels = ref(false)
-const testStatus = ref<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({})
+const testStatus = ref<Record<string, Record<string, 'idle' | 'testing' | 'success' | 'error'>>>({})
 
 // 选中的行
 const checkedKeys = ref<string[]>([])
@@ -366,10 +379,14 @@ const checkedKeys = ref<string[]>([])
 // 编辑状态：key -> unified_model
 const editMap = ref<Record<string, string>>({})
 
+// 端点类型编辑状态：key -> endpoint_types
+const endpointTypesEditMap = ref<Record<string, string[]>>({})
+
 // 表单
 const modelForm = reactive({
   upstream_model: '',
-  unified_model: ''
+  unified_model: '',
+  endpoint_types: ['openai']
 })
 const modelRules = {
   upstream_model: {
@@ -381,8 +398,21 @@ const modelRules = {
     required: true,
     message: '请选择统一模型',
     trigger: ['blur', 'change']
+  },
+  endpoint_types: {
+    required: true,
+    type: 'array',
+    message: '请选择至少一个端点类型',
+    trigger: ['blur', 'change']
   }
 }
+
+// 端点类型选项
+const endpointTypeOptions = [
+  {label: 'OpenAI (/v1/chat/completions)', value: 'openai'},
+  {label: 'OpenAI Response (/v1/responses)', value: 'openai-response'},
+  {label: 'Anthropic Messages (/v1/messages)', value: 'anthropic'}
+]
 
 // 统一模型下拉选项
 const modelOptions = computed(() => {
@@ -419,6 +449,7 @@ interface ModelDisplayType {
   key: string
   upstream_model: string
   unified_model: string
+  endpoint_types: string[]
   status: 'configured' | 'to_add' | 'to_remove'
   disabled: boolean
 }
@@ -431,6 +462,7 @@ const displayModels = computed<ModelDisplayType[]>(() => {
       key: config.upstream_model,
       upstream_model: config.upstream_model,
       unified_model: config.unified_model,
+      endpoint_types: config.endpoint_types || ['openai'],
       status: 'configured' as const,
       disabled: false
     }))
@@ -449,22 +481,27 @@ const displayModels = computed<ModelDisplayType[]>(() => {
     const unifiedModel = editMap.value[d.upstream_model] || d.upstream_model
     let status: 'configured' | 'to_add' | 'to_remove'
     let disabled = false
+    let endpointTypes = ['openai']
 
     if (d.type === 'existing') {
       status = 'configured'
       disabled = false
+      endpointTypes = d.existing_config?.endpoint_types || ['openai']
     } else if (d.type === 'added') {
       status = 'to_add'
       disabled = false
+      endpointTypes = ['openai']
     } else {
       status = 'to_remove'
       disabled = true // 待删除的模型默认选中且禁用
+      endpointTypes = d.existing_config?.endpoint_types || ['openai']
     }
 
     models.push({
       key: d.upstream_model,
       upstream_model: d.upstream_model,
       unified_model: unifiedModel,
+      endpoint_types: endpointTypes,
       status,
       disabled
     })
@@ -529,6 +566,24 @@ const columns: DataTableColumns<ModelDisplayType> = [
     }
   },
   {
+    title: '端点类型',
+    key: 'endpoint_types',
+    width: 250,
+    render(row) {
+      const value = endpointTypesEditMap.value[row.key] || row.endpoint_types
+      return h(NSelect, {
+        value: value,
+        options: endpointTypeOptions,
+        placeholder: '请选择端点类型',
+        multiple: true,
+        size: 'small',
+        onUpdateValue: (val: string[]) => {
+          endpointTypesEditMap.value[row.key] = val
+        }
+      })
+    }
+  },
+  {
     title: '状态',
     key: 'status',
     width: 120,
@@ -546,18 +601,25 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '测试状态',
     key: 'test_status',
-    width: 100,
+    width: 200,
     align: 'center',
     render(row) {
-      const status = testStatus.value[row.key] || 'idle'
+      const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
       const statusMap = {
         idle: {type: 'default' as const, text: '未测试'},
         testing: {type: 'info' as const, text: '测试中'},
         success: {type: 'success' as const, text: '成功'},
         error: {type: 'error' as const, text: '失败'}
       }
-      const config = statusMap[status]
-      return h(NTag, {type: config.type, size: 'small'}, {default: () => config.text})
+
+      return h(NSpace, {size: 4, vertical: true}, {
+        default: () => endpointTypes.map((type: string) => {
+          const status = testStatus.value[row.key]?.[type] || 'idle'
+          const config = statusMap[status]
+          const typeLabel = type === 'openai' ? 'OpenAI' : type === 'openai-response' ? 'Response' : 'Anthropic'
+          return h(NTag, {type: config.type, size: 'small'}, {default: () => `${typeLabel}: ${config.text}`})
+        })
+      })
     }
   },
   {
@@ -566,10 +628,13 @@ const columns: DataTableColumns<ModelDisplayType> = [
     width: 100,
     align: 'center',
     render(row) {
+      const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
+      const isAnyTesting = endpointTypes.some((type: string) => testStatus.value[row.key]?.[type] === 'testing')
+
       return h(NButton, {
         size: 'small',
         type: 'info',
-        loading: testStatus.value[row.key] === 'testing',
+        loading: isAnyTesting,
         secondary: true,
         onClick: () => handleTest(row)
       }, {
@@ -583,6 +648,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
 // 初始化编辑状态和选中状态
 function initEditMap() {
   editMap.value = {}
+  endpointTypesEditMap.value = {}
   const defaultChecked: string[] = []
 
   if (hasSynced.value && !syncFailed.value && syncResult.value) {
@@ -590,12 +656,15 @@ function initEditMap() {
     syncResult.value.diff.diffs.forEach((d) => {
       if (d.type === 'existing' && d.existing_config) {
         editMap.value[d.upstream_model] = d.existing_config.unified_model
+        endpointTypesEditMap.value[d.upstream_model] = d.existing_config.endpoint_types || ['openai']
         defaultChecked.push(d.upstream_model)
       } else if (d.type === 'added') {
         editMap.value[d.upstream_model] = d.upstream_model
+        endpointTypesEditMap.value[d.upstream_model] = ['openai']
         // 新增的模型默认不选中
       } else if (d.type === 'removed') {
         editMap.value[d.upstream_model] = d.existing_config?.unified_model || d.upstream_model
+        endpointTypesEditMap.value[d.upstream_model] = d.existing_config?.endpoint_types || ['openai']
         // 删除的模型默认选中
         defaultChecked.push(d.upstream_model)
       }
@@ -604,6 +673,7 @@ function initEditMap() {
     // 仅本地配置
     localConfigs.value.forEach(config => {
       editMap.value[config.upstream_model] = config.unified_model
+      endpointTypesEditMap.value[config.upstream_model] = config.endpoint_types || ['openai']
       defaultChecked.push(config.upstream_model)
     })
   }
@@ -670,12 +740,14 @@ async function handleAddModel() {
     await channelApi.createModelConfig(
         props.channelId,
         modelForm.unified_model,
-        modelForm.upstream_model
+        modelForm.upstream_model,
+        modelForm.endpoint_types
     )
     window.$message?.success('添加成功')
     showAddModelDialog.value = false
     modelForm.upstream_model = ''
     modelForm.unified_model = ''
+    modelForm.endpoint_types = ['openai']
     await loadLocalConfigs()
     emit('refresh')
   } catch (error: any) {
@@ -698,6 +770,16 @@ async function handleSave() {
       for (const config of localConfigs.value) {
         const isChecked = checkedKeys.value.includes(config.upstream_model)
         const currentUnifiedModel = editMap.value[config.upstream_model]
+        const currentEndpointTypes = endpointTypesEditMap.value[config.upstream_model]
+
+        if (isChecked) {
+          // 验证端点类型
+          if (!currentEndpointTypes || currentEndpointTypes.length === 0) {
+            window.$message?.error(`模型 "${config.upstream_model}" 必须选择至少一个端点类型`)
+            saving.value = false
+            return
+          }
+        }
 
         if (!isChecked) {
           // 取消选中，删除配置
@@ -706,7 +788,15 @@ async function handleSave() {
           // 选中且统一模型有修改，更新配置
           updatePromises.push(
               channelApi.updateModelConfig(config.id, {
-                unified_model: currentUnifiedModel
+                unified_model: currentUnifiedModel,
+                endpoint_types: currentEndpointTypes
+              })
+          )
+        } else if (currentEndpointTypes && JSON.stringify(currentEndpointTypes) !== JSON.stringify(config.endpoint_types)) {
+          // 选中且端点类型有修改，更新配置
+          updatePromises.push(
+              channelApi.updateModelConfig(config.id, {
+                endpoint_types: currentEndpointTypes
               })
           )
         }
@@ -721,11 +811,19 @@ async function handleSave() {
       }
     } else {
       // 有同步结果，使用同步保存逻辑
-      // 验证：检查所有选中的模型是否都选择了统一模型
+      // 验证：检查所有选中的模型是否都选择了统一模型和端点类型
       for (const key of checkedKeys.value) {
         const unifiedModel = editMap.value[key]
+        const endpointTypes = endpointTypesEditMap.value[key]
+
         if (!unifiedModel) {
           window.$message?.error(`请为上游模型 ${key} 选择统一模型`)
+          saving.value = false
+          return
+        }
+
+        if (!endpointTypes || endpointTypes.length === 0) {
+          window.$message?.error(`请为上游模型 ${key} 选择至少一个端点类型`)
           saving.value = false
           return
         }
@@ -739,17 +837,20 @@ async function handleSave() {
       syncResult.value!.diff.diffs.forEach((d) => {
         const isChecked = checkedKeys.value.includes(d.upstream_model)
         const currentUnifiedModel = editMap.value[d.upstream_model]
+        const currentEndpointTypes = endpointTypesEditMap.value[d.upstream_model]
         const existingUnifiedModel = d.existing_config?.unified_model
+        const existingEndpointTypes = d.existing_config?.endpoint_types
 
         if (d.type === 'existing') {
           // 已配置的模型
           if (isChecked) {
             // 选中了，检查是否需要更新
-            if (currentUnifiedModel !== existingUnifiedModel) {
+            if (currentUnifiedModel !== existingUnifiedModel || JSON.stringify(currentEndpointTypes) !== JSON.stringify(existingEndpointTypes)) {
               updateModels.push({
                 id: d.existing_config!.id,
                 unified_model: currentUnifiedModel,
-                upstream_model: d.upstream_model
+                upstream_model: d.upstream_model,
+                endpoint_types: currentEndpointTypes
               })
             }
           } else {
@@ -761,7 +862,8 @@ async function handleSave() {
           if (isChecked) {
             addModels.push({
               unified_model: currentUnifiedModel,
-              upstream_model: d.upstream_model
+              upstream_model: d.upstream_model,
+              endpoint_types: currentEndpointTypes
             })
           }
         } else if (d.type === 'removed') {
@@ -797,34 +899,57 @@ async function handleSave() {
 
 // 测试模型
 async function handleTest(row: ModelDisplayType) {
-  testStatus.value[row.key] = 'testing'
+  // 获取当前选择的端点类型
+  const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
 
-  try {
-    // 获取当前选择的统一模型
-    const unifiedModel = editMap.value[row.key] || row.unified_model
+  // 验证是否选择了端点类型
+  if (!endpointTypes || endpointTypes.length === 0) {
+    window.$message?.error('请先选择至少一个端点类型')
+    return
+  }
 
-    // 调用后端测试接口
-    const result = await channelApi.testModel(
-        props.channelId,
-        row.upstream_model,
-        unifiedModel
-    )
+  // 获取当前选择的统一模型
+  const unifiedModel = editMap.value[row.key] || row.unified_model
 
-    console.log('[Test Model] Result:', result)
+  // 初始化测试状态
+  if (!testStatus.value[row.key]) {
+    testStatus.value[row.key] = {}
+  }
 
-    // 更新测试状态
-    // result 的格式: { success: boolean, message: string, upstream_model: string, unified_model: string, latency: string }
-    if (result.success) {
-      testStatus.value[row.key] = 'success'
-      window.$message?.success(`模型 "${row.upstream_model}" 测试成功`)
-    } else {
-      testStatus.value[row.key] = 'error'
-      window.$message?.error(result.message || `模型 "${row.upstream_model}" 测试失败`)
+  // 为所有端点类型设置测试中状态
+  endpointTypes.forEach((type: string) => {
+    testStatus.value[row.key][type] = 'testing'
+  })
+
+  // 测试所有端点类型
+  const testPromises = endpointTypes.map(async (endpointType: string) => {
+    try {
+      const result = await channelApi.testModel(
+          props.channelId,
+          row.upstream_model,
+          unifiedModel,
+          endpointType
+      )
+
+      if (result.success) {
+        testStatus.value[row.key][endpointType] = 'success'
+      } else {
+        testStatus.value[row.key][endpointType] = 'error'
+        window.$message?.error(`${endpointType}: ${result.message}`)
+      }
+    } catch (error: any) {
+      console.error(`Failed to test model with ${endpointType}:`, error)
+      testStatus.value[row.key][endpointType] = 'error'
+      window.$message?.error(`${endpointType}: ${error.response?.data?.error || '测试失败'}`)
     }
-  } catch (error: any) {
-    console.error('Failed to test model:', error)
-    testStatus.value[row.key] = 'error'
-    window.$message?.error(error.response?.data?.error || '测试失败')
+  })
+
+  await Promise.all(testPromises)
+
+  // 检查是否所有测试都成功
+  const allSuccess = endpointTypes.every((type: string) => testStatus.value[row.key][type] === 'success')
+  if (allSuccess) {
+    window.$message?.success(`模型 "${row.upstream_model}" 所有端点类型测试成功`)
   }
 }
 
@@ -841,9 +966,11 @@ watch(() => props.modelValue, async (newVal) => {
     syncFailed.value = false
     hasSynced.value = false
     editMap.value = {}
+    endpointTypesEditMap.value = {}
     checkedKeys.value = []
     localConfigs.value = []
     unifiedModels.value = []
+    testStatus.value = {}
 
     // 重置分页为第一页
     pagination.page = 1

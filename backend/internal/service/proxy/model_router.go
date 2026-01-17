@@ -30,8 +30,9 @@ func NewModelRouter(logger *slog.Logger) *ModelRouter {
 // RouteModel 将统一模型名路由到上游模型名
 // unifiedModel: 用户请求的统一模型名(如 gpt-4)
 // channel: 选定的渠道
+// endpointType: 端点类型(如 openai, openai-response, anthropic)
 // 返回: 上游真实模型名(如 gpt-4-0613)
-func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel) (string, error) {
+func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, endpointType string) (string, error) {
 	if channel == nil {
 		return "", errors.New("channel is nil")
 	}
@@ -47,7 +48,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel) 
 	// 查找匹配的模型配置
 	var matchedConfigs []models.ChannelModelConfig
 	for _, config := range channel.ModelConfigs {
-		if config.UnifiedModel == unifiedModel && config.IsActive() {
+		if config.UnifiedModel == unifiedModel && config.IsActive() && mr.hasEndpointType(config.EndpointTypes, endpointType) {
 			matchedConfigs = append(matchedConfigs, config)
 		}
 	}
@@ -135,16 +136,30 @@ func (mr *ModelRouter) GetSupportedModels(channel *models.Channel) []string {
 }
 
 // ValidateModel 验证统一模型名在指定渠道中是否存在
-func (mr *ModelRouter) ValidateModel(unifiedModel string, channel *models.Channel) bool {
+func (mr *ModelRouter) ValidateModel(unifiedModel string, channel *models.Channel, endpointType string) bool {
 	if channel == nil || len(channel.ModelConfigs) == 0 {
 		return false
 	}
 
 	for _, config := range channel.ModelConfigs {
-		if config.UnifiedModel == unifiedModel && config.IsActive() {
+		if config.UnifiedModel == unifiedModel && config.IsActive() && mr.hasEndpointType(config.EndpointTypes, endpointType) {
 			return true
 		}
 	}
 
+	return false
+}
+
+// hasEndpointType 检查端点类型是否在列表中
+func (mr *ModelRouter) hasEndpointType(endpointTypes []string, targetType string) bool {
+	// 如果目标类型为空，匹配所有类型（用于管理查询）
+	if targetType == "" {
+		return true
+	}
+	for _, et := range endpointTypes {
+		if et == targetType {
+			return true
+		}
+	}
 	return false
 }

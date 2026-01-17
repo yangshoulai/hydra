@@ -134,7 +134,7 @@ export const channelApi = {
     channelId: number,
     unifiedModel: string,
     upstreamModel: string,
-    remark?: string
+    endpointTypes?: string[]
   ): Promise<ChannelModelConfig> {
     const response = await apiClient.post<ChannelModelConfig>(
       '/admin/api/channel-models',
@@ -142,7 +142,7 @@ export const channelApi = {
         channel_id: channelId,
         unified_model: unifiedModel,
         upstream_model: upstreamModel,
-        remark: remark || ''
+        endpoint_types: endpointTypes || ['openai']
       }
     )
     return response.data
@@ -183,12 +183,13 @@ export const channelApi = {
   /**
    * 测试单个模型
    */
-  async testModel(channelId: number, upstreamModel: string, unifiedModel: string): Promise<any> {
+  async testModel(channelId: number, upstreamModel: string, unifiedModel: string, endpointType: string): Promise<any> {
     const response = await apiClient.post(
       `/admin/api/channels/${channelId}/test-model`,
       {
         upstream_model: upstreamModel,
-        unified_model: unifiedModel
+        unified_model: unifiedModel,
+        endpoint_type: endpointType
       }
     )
     return response.data

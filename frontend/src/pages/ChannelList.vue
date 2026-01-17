@@ -96,7 +96,7 @@ const selectedChannel = ref<Channel | null>(null)
 // 分页
 const pagination = reactive({
   page: 1,
-  pageSize: 10,
+  pageSize: 20,
   total: 0,
   showSizePicker: true,
   pageSizes: [10, 20, 50],

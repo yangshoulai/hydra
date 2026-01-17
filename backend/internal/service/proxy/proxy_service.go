@@ -94,6 +94,11 @@ func (ps *ProxyService) ProxyResponses(c *gin.Context) error {
 	return ps.proxyRequest(c, "/v1/responses")
 }
 
+// ProxyMessages 代理 Anthropic Messages 请求
+func (ps *ProxyService) ProxyMessages(c *gin.Context) error {
+	return ps.proxyRequest(c, "/v1/messages")
+}
+
 // proxyRequest 通用代理请求处理
 func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	ctx := c.Request.Context()
@@ -123,8 +128,12 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 
 	isStream := ps.requestBuilder.IsStreamRequest(bodyBytes)
 
+	// 根据端点确定端点类型
+	endpointType := ps.getEndpointType(endpoint)
+
 	ps.logger.Info("processing proxy request",
 		slog.String("endpoint", endpoint),
+		slog.String("endpoint_type", endpointType),
 		slog.String("model", unifiedModel),
 		slog.Bool("stream", isStream),
 	)
@@ -138,6 +147,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		routeResult, err := ps.loadBalancer.RouteWithRetry(
 			ctx,
 			unifiedModel,
+			endpointType,
 			ps.retryCoordinator.maxRetries-retryCtx.AttemptCount,
 			retryCtx.FailedChannelIDs,
 		)
@@ -439,4 +449,18 @@ func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
 		slog.Int("max_retry", maxRetry),
 		slog.Duration("retry_delay", retryDelay),
 	)
+}
+
+// getEndpointType 根据端点路径确定端点类型
+func (ps *ProxyService) getEndpointType(endpoint string) string {
+	switch endpoint {
+	case "/v1/chat/completions":
+		return "openai"
+	case "/v1/responses":
+		return "openai-response"
+	case "/v1/messages":
+		return "anthropic"
+	default:
+		return "openai" // 默认为 openai
+	}
 }

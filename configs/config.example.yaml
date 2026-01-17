@@ -9,7 +9,8 @@ server:
 database:
   type: postgres                                                                        # 数据库类型: sqlite | postgres
   #sqlite_path: ./data/hydra.db                                                         # SQLite 数据库文件路径
-  postgres_dsn: "postgresql://postgres:wvnkwbg6@43.134.241.241:8922/hydra"              # PostgreSQL 连接字符串(当 type=postgres 时使用)
+  #postgres_dsn: "postgresql://postgres:wvnkwbg6@43.134.241.241:8922/hydra"              # PostgreSQL 连接字符串(当 type=postgres 时使用)
+  postgres_dsn: "postgresql://postgres:123456@127.0.0.1/hydra"
   max_open_conns: 10                                                                    # 最大打开连接数
   max_idle_conns: 5                                                                     # 最大空闲连接数
   conn_max_lifetime: 300s                                                               # 连接最大生命周期

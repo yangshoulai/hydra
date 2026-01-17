@@ -51,8 +51,9 @@ func NewLoadBalancer(
 
 // Route 为请求路由到合适的 Channel 和 Key
 // unifiedModel: 用户请求的统一模型名
+// endpointType: 端点类型(如 openai, openai-response, anthropic)
 // 返回: 路由结果(包含 Channel, Key, 上游模型名)
-func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string) (*RouteResult, error) {
+func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpointType string) (*RouteResult, error) {
 	// 1. 选择 Channel
 	channel, err := lb.channelSelector.SelectChannel(ctx, unifiedModel)
 	if err != nil {
@@ -75,7 +76,7 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string) (*RouteR
 	}
 
 	// 3. 路由模型
-	upstreamModel, err := lb.modelRouter.RouteModel(unifiedModel, channel)
+	upstreamModel, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType)
 	if err != nil {
 		lb.logger.Warn("failed to route model",
 			slog.Uint64("channel_id", uint64(channel.ID)),
@@ -106,11 +107,13 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string) (*RouteR
 
 // RouteWithRetry 为请求路由,支持重试(当某个渠道失败后尝试其他渠道)
 // unifiedModel: 用户请求的统一模型名
+// endpointType: 端点类型(如 openai, openai-response, anthropic)
 // maxRetries: 最大重试次数
 // excludeChannels: 排除的渠道ID列表(已经尝试过失败的)
 func (lb *LoadBalancer) RouteWithRetry(
 	ctx context.Context,
 	unifiedModel string,
+	endpointType string,
 	maxRetries int,
 	excludeChannels []uint,
 ) (*RouteResult, error) {
@@ -120,7 +123,7 @@ func (lb *LoadBalancer) RouteWithRetry(
 	}
 
 	for i := 0; i <= maxRetries; i++ {
-		result, err := lb.Route(ctx, unifiedModel)
+		result, err := lb.Route(ctx, unifiedModel, endpointType)
 		if err != nil {
 			// 如果是无可用 Channel,直接返回
 			if errors.Is(err, ErrNoAvailableChannel) {

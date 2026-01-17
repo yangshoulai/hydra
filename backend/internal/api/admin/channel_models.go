@@ -32,18 +32,20 @@ func NewChannelModelHandler(
 
 // CreateModelConfigRequest 创建模型配置请求
 type CreateModelConfigRequest struct {
-	ChannelID     uint   `json:"channel_id" binding:"required"`
-	UnifiedModel  string `json:"unified_model" binding:"required,max=100"`
-	UpstreamModel string `json:"upstream_model" binding:"required,max=100"`
-	Remark        string `json:"remark" binding:"omitempty,max=200"`
+	ChannelID     uint     `json:"channel_id" binding:"required"`
+	UnifiedModel  string   `json:"unified_model" binding:"required,max=100"`
+	UpstreamModel string   `json:"upstream_model" binding:"required,max=100"`
+	EndpointTypes []string `json:"endpoint_types" binding:"omitempty"`
+	Remark        string   `json:"remark" binding:"omitempty,max=200"`
 }
 
 // UpdateModelConfigRequest 更新模型配置请求
 type UpdateModelConfigRequest struct {
-	UnifiedModel  string `json:"unified_model" binding:"omitempty,max=100"`
-	UpstreamModel string `json:"upstream_model" binding:"omitempty,max=100"`
-	Status        string `json:"status" binding:"omitempty,oneof=active disabled"`
-	Remark        string `json:"remark" binding:"omitempty,max=200"`
+	UnifiedModel  string   `json:"unified_model" binding:"omitempty,max=100"`
+	UpstreamModel string   `json:"upstream_model" binding:"omitempty,max=100"`
+	EndpointTypes []string `json:"endpoint_types" binding:"omitempty"`
+	Status        string   `json:"status" binding:"omitempty,oneof=active disabled"`
+	Remark        string   `json:"remark" binding:"omitempty,max=200"`
 }
 
 // CreateChannelModel 创建渠道模型配置
@@ -90,10 +92,16 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	}
 
 	// 创建模型配置对象
+	endpointTypes := req.EndpointTypes
+	if len(endpointTypes) == 0 {
+		endpointTypes = []string{"openai"}
+	}
+
 	modelConfig := &models.ChannelModelConfig{
 		ChannelID:     req.ChannelID,
 		UnifiedModel:  req.UnifiedModel,
 		UpstreamModel: req.UpstreamModel,
+		EndpointTypes: endpointTypes,
 		Status:        "active",
 		Remark:        req.Remark,
 	}
@@ -181,6 +189,9 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 	}
 	if req.UpstreamModel != "" {
 		modelConfig.UpstreamModel = req.UpstreamModel
+	}
+	if len(req.EndpointTypes) > 0 {
+		modelConfig.EndpointTypes = req.EndpointTypes
 	}
 	if req.Status != "" {
 		modelConfig.Status = req.Status
