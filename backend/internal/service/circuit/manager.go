@@ -86,7 +86,7 @@ func (m *Manager) GetKeyBreaker(keyID uint) *KeyBreaker {
 	breaker = NewKeyBreaker(keyID, m.failureThreshold, m.coolingDuration)
 	m.keyBreakers[keyID] = breaker
 
-	m.logger.Info("created key breaker",
+	m.logger.Info("创建密钥熔断器",
 		slog.Uint64("key_id", uint64(keyID)),
 	)
 
@@ -115,7 +115,7 @@ func (m *Manager) GetChannelBreaker(channelID uint) *ChannelBreaker {
 	breaker = NewChannelBreaker(channelID, m.failureThreshold, m.coolingDuration)
 	m.channelBreakers[channelID] = breaker
 
-	m.logger.Info("created channel breaker",
+	m.logger.Info("创建渠道熔断器",
 		slog.Uint64("channel_id", uint64(channelID)),
 	)
 
@@ -139,7 +139,7 @@ func (m *Manager) RecordKeyHardFailure(keyID uint, channelID uint) {
 	keyBreaker := m.GetKeyBreaker(keyID)
 	keyBreaker.RecordHardFailure()
 
-	m.logger.Warn("key hard failure",
+	m.logger.Warn("密钥硬故障",
 		slog.Uint64("key_id", uint64(keyID)),
 		slog.Uint64("channel_id", uint64(channelID)),
 	)
@@ -158,7 +158,7 @@ func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint) {
 
 	// 如果进入冷却状态,更新数据库
 	if keyBreaker.GetState() == KeyStateCooling {
-		m.logger.Warn("key entering cooling state",
+		m.logger.Warn("密钥进入冷却状态",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.Uint64("channel_id", uint64(channelID)),
 		)
@@ -183,7 +183,7 @@ func (m *Manager) ResetKey(keyID uint) {
 	breaker := m.GetKeyBreaker(keyID)
 	breaker.Reset()
 
-	m.logger.Info("key breaker reset",
+	m.logger.Info("重置密钥熔断器",
 		slog.Uint64("key_id", uint64(keyID)),
 	)
 
@@ -193,7 +193,7 @@ func (m *Manager) ResetKey(keyID uint) {
 
 // StartProbeScheduler 启动探测调度器
 func (m *Manager) StartProbeScheduler() {
-	m.logger.Info("circuit breaker probe scheduler starting")
+	m.logger.Info("熔断器探测调度器启动中")
 
 	for {
 		m.mu.RLock()
@@ -202,7 +202,7 @@ func (m *Manager) StartProbeScheduler() {
 
 		ticker := time.NewTicker(interval)
 
-		m.logger.Info("circuit breaker probe scheduler started",
+		m.logger.Info("熔断器探测调度器已启动",
 			slog.Duration("interval", interval),
 		)
 
@@ -213,11 +213,11 @@ func (m *Manager) StartProbeScheduler() {
 				m.probeHalfOpenKeys()
 			case <-m.restartChan:
 				ticker.Stop()
-				m.logger.Info("circuit breaker probe scheduler restarting due to config change")
+				m.logger.Info("熔断器探测调度器因配置变更而重启")
 				break loop
 			case <-m.stopChan:
 				ticker.Stop()
-				m.logger.Info("circuit breaker probe scheduler stopped")
+				m.logger.Info("熔断器探测调度器已停止")
 				return
 			}
 		}
@@ -239,7 +239,7 @@ type keyProbeCandidate struct {
 func (m *Manager) probeHalfOpenKeys() {
 	// 检查是否已有探测在进行中
 	if !atomic.CompareAndSwapInt32(&m.probing, 0, 1) {
-		m.logger.Warn("skipping probe cycle, previous probe still in progress")
+		m.logger.Warn("跳过探测周期，上一次探测仍在进行中")
 		return
 	}
 
@@ -279,7 +279,7 @@ func (m *Manager) probeHalfOpenKeys() {
 		probeCount = maxConcurrentProbes
 	}
 
-	m.logger.Info("probing half-open keys",
+	m.logger.Info("探测半开状态的密钥",
 		slog.Int("total", len(candidates)),
 		slog.Int("probing", probeCount),
 		slog.Int("max_concurrent", maxConcurrentProbes),
@@ -301,7 +301,7 @@ func (m *Manager) probeHalfOpenKeys() {
 	go func() {
 		wg.Wait()
 		atomic.StoreInt32(&m.probing, 0)
-		m.logger.Debug("probe cycle completed")
+		m.logger.Debug("探测周期完成")
 	}()
 }
 
@@ -313,7 +313,7 @@ func (m *Manager) probeKey(keyID uint) {
 	// 获取 Key 信息
 	key, err := m.keyRepo.FindByID(ctx, keyID)
 	if err != nil {
-		m.logger.Error("failed to find key for probe",
+		m.logger.Error("探测时查找密钥失败",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.String("error", err.Error()),
 		)
@@ -323,7 +323,7 @@ func (m *Manager) probeKey(keyID uint) {
 	// 获取 Channel 信息
 	channel, err := m.channelRepo.FindByID(ctx, key.ChannelID)
 	if err != nil {
-		m.logger.Error("failed to find channel for probe",
+		m.logger.Error("探测时查找渠道失败",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.Uint64("channel_id", uint64(key.ChannelID)),
 			slog.String("error", err.Error()),
@@ -341,7 +341,7 @@ func (m *Manager) probeKey(keyID uint) {
 	probeHandler.HandleProbeResult(keyID, key.ChannelID, success, isHardFailure)
 
 	if err != nil {
-		m.logger.Debug("probe completed with error",
+		m.logger.Debug("探测完成但有错误",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.Bool("success", success),
 			slog.String("error", err.Error()),
@@ -355,7 +355,7 @@ func (m *Manager) updateKeyStatus(keyID uint, status string) {
 	defer cancel()
 
 	if err := m.keyRepo.UpdateStatus(ctx, keyID, status); err != nil {
-		m.logger.Error("failed to update key status in database",
+		m.logger.Error("更新数据库中的密钥状态失败",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.String("status", status),
 			slog.String("error", err.Error()),
@@ -419,7 +419,7 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 
 	m.mu.Unlock()
 
-	m.logger.Info("circuit breaker config updated",
+	m.logger.Info("熔断器配置已更新",
 		slog.Int("old_failure_threshold", oldFailureThreshold),
 		slog.Int("new_failure_threshold", failureThreshold),
 		slog.Duration("old_cooling_duration", oldCoolingDuration),
@@ -432,11 +432,11 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 
 	// 如果探测间隔发生变化，重启探测调度器
 	if oldProbeInterval != probeInterval {
-		m.logger.Info("probe interval changed, restarting scheduler")
+		m.logger.Info("探测间隔已变更，重启调度器")
 		select {
 		case m.restartChan <- struct{}{}:
 		default:
-			m.logger.Warn("failed to send restart signal, channel might be full")
+			m.logger.Warn("发送重启信号失败，通道可能已满")
 		}
 	}
 }

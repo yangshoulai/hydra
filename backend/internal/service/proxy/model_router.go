@@ -54,7 +54,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 	}
 
 	if len(matchedConfigs) == 0 {
-		mr.logger.Warn("no matching model configuration found",
+		mr.logger.Debug("no matching model configuration found",
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("unified_model", unifiedModel),

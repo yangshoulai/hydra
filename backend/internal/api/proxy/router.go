@@ -45,7 +45,7 @@ func RegisterRoutes(
 	keywords := settingService.GetPlainTextErrorRules(ctx)
 	if len(keywords) > 0 {
 		proxySvc.UpdateSnifferKeywords(keywords)
-		logger.Info("plain text error rules loaded from system settings",
+		logger.Info("从系统设置加载明文错误规则",
 			slog.Int("count", len(keywords)),
 		)
 	}
@@ -71,7 +71,7 @@ func RegisterRoutes(
 		v1.GET("/models", modelsHandler.Handle)
 	}
 
-	logger.Info("proxy routes registered",
+	logger.Info("代理路由注册成功",
 		slog.String("prefix", "/v1"),
 		slog.Int("routes_count", 4),
 	)

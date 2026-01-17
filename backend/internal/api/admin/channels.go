@@ -83,7 +83,7 @@ type UpdateChannelRequest struct {
 func (h *ChannelHandler) ListChannels(c *gin.Context) {
 	var req ChannelListRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		h.logger.Warn("invalid list channels request",
+		h.logger.Warn("无效的渠道列表请求",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -106,7 +106,7 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 	// 查询渠道列表
 	channels, total, err := h.channelRepo.List(c.Request.Context(), offset, req.PageSize)
 	if err != nil {
-		h.logger.Error("failed to list channels",
+		h.logger.Error("查询渠道列表失败",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -137,7 +137,7 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 	var req CreateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid create channel request",
+		h.logger.Warn("无效的创建渠道请求",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -166,7 +166,7 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 
 	// 保存到数据库
 	if err := h.channelRepo.Create(c.Request.Context(), channel); err != nil {
-		h.logger.Error("failed to create channel",
+		h.logger.Error("创建渠道失败",
 			slog.String("name", req.Name),
 			slog.String("error", err.Error()),
 		)
@@ -176,7 +176,7 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("channel created",
+	h.logger.Info("渠道已创建",
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("name", channel.Name),
 	)
@@ -207,7 +207,7 @@ func (h *ChannelHandler) GetChannel(c *gin.Context) {
 
 	channel, err := h.channelRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to get channel",
+		h.logger.Error("获取渠道失败",
 			slog.Uint64("channel_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -252,7 +252,7 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 
 	var req UpdateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid update channel request",
+		h.logger.Warn("无效的更新渠道请求",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -264,7 +264,7 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 	// 查询现有渠道
 	channel, err := h.channelRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to find channel",
+		h.logger.Error("查找渠道失败",
 			slog.Uint64("channel_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -303,7 +303,7 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 
 	// 保存更新
 	if err := h.channelRepo.Update(c.Request.Context(), channel); err != nil {
-		h.logger.Error("failed to update channel",
+		h.logger.Error("更新渠道失败",
 			slog.Uint64("channel_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -313,7 +313,7 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("channel updated",
+	h.logger.Info("渠道已更新",
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("name", channel.Name),
 	)
@@ -352,7 +352,7 @@ func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 			})
 			return
 		}
-		h.logger.Error("failed to find channel",
+		h.logger.Error("查找渠道失败",
 			slog.Uint64("channel_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -371,7 +371,7 @@ func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 
 	// 执行删除
 	if err := h.channelRepo.Delete(c.Request.Context(), uint(id)); err != nil {
-		h.logger.Error("failed to delete channel",
+		h.logger.Error("删除渠道失败",
 			slog.Uint64("channel_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -381,7 +381,7 @@ func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("channel deleted",
+	h.logger.Info("渠道已删除",
 		slog.Uint64("channel_id", id),
 		slog.String("name", channel.Name),
 	)
@@ -418,7 +418,7 @@ func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
 			})
 			return
 		}
-		h.logger.Error("failed to find model",
+		h.logger.Error("查找模型失败",
 			slog.Uint64("model_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -431,7 +431,7 @@ func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
 	// 查询渠道模型配置
 	configs, err := h.modelConfigRepo.FindByModelNameWithChannel(c.Request.Context(), model.Name)
 	if err != nil {
-		h.logger.Error("failed to find channel model configs",
+		h.logger.Error("查找渠道模型配置失败",
 			slog.String("model_name", model.Name),
 			slog.String("error", err.Error()),
 		)

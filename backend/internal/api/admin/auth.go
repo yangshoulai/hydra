@@ -37,7 +37,7 @@ func NewAuthHandler(authService *admin.AuthService, logger *slog.Logger) *AuthHa
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req admin.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid login request",
+		h.logger.Warn("无效的登录请求",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -61,7 +61,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			return
 		}
 
-		h.logger.Error("login failed",
+		h.logger.Error("登录失败",
 			slog.String("username", req.Username),
 			slog.String("error", err.Error()),
 		)
@@ -94,7 +94,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	if err := h.authService.Logout(c.Request.Context(), token); err != nil {
-		h.logger.Error("logout failed",
+		h.logger.Error("登出失败",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -136,7 +136,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 			return
 		}
 
-		h.logger.Error("failed to get current user",
+		h.logger.Error("获取当前用户失败",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -172,7 +172,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	var req admin.ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid change password request",
+		h.logger.Warn("无效的修改密码请求",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -189,7 +189,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 			return
 		}
 
-		h.logger.Error("failed to change password",
+		h.logger.Error("修改密码失败",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{

@@ -15,22 +15,26 @@ var (
 	ErrInvalidInput      = errors.New("invalid input")
 	ErrModelNameExists   = errors.New("model name already exists")
 	ErrModelNotFound     = errors.New("model not found")
+	ErrModelInUse        = errors.New("model is in use by channel configurations")
 )
 
 // ModelService 统一模型服务
 type ModelService struct {
-	modelRepo *repository.ModelRepository
-	logger    *slog.Logger
+	modelRepo       *repository.ModelRepository
+	modelConfigRepo *repository.ChannelModelConfigRepository
+	logger          *slog.Logger
 }
 
 // NewModelService 创建统一模型服务
 func NewModelService(
 	modelRepo *repository.ModelRepository,
+	modelConfigRepo *repository.ChannelModelConfigRepository,
 	logger *slog.Logger,
 ) *ModelService {
 	return &ModelService{
-		modelRepo: modelRepo,
-		logger:    logger,
+		modelRepo:       modelRepo,
+		modelConfigRepo: modelConfigRepo,
+		logger:          logger,
 	}
 }
 
@@ -138,8 +142,14 @@ func (s *ModelService) Delete(ctx context.Context, id uint) error {
 		return ErrModelNotFound
 	}
 
-	// TODO: 检查是否有渠道模型配置正在使用此模型
-	// 如果有，应该禁止删除
+	// 检查是否有渠道模型配置正在使用此模型
+	configs, err := s.modelConfigRepo.FindByModelNameWithChannel(ctx, model.Name)
+	if err != nil {
+		return err
+	}
+	if len(configs) > 0 {
+		return ErrModelInUse
+	}
 
 	if err := s.modelRepo.Delete(ctx, id); err != nil {
 		return err

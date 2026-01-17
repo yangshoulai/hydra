@@ -131,7 +131,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	// 根据端点确定端点类型
 	endpointType := ps.getEndpointType(endpoint)
 
-	ps.logger.Info("processing proxy request",
+	ps.logger.Info("处理代理请求",
 		slog.String("endpoint", endpoint),
 		slog.String("endpoint_type", endpointType),
 		slog.String("model", unifiedModel),
@@ -153,7 +153,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		)
 
 		if err != nil {
-			ps.logger.Error("failed to route request",
+			ps.logger.Error("请求路由失败",
 				slog.String("model", unifiedModel),
 				slog.String("error", err.Error()),
 			)
@@ -166,7 +166,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		// 构建上游请求
 		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, endpoint)
 		if err != nil {
-			ps.logger.Error("failed to build proxy request", slog.String("error", err.Error()))
+			ps.logger.Error("构建代理请求失败", slog.String("error", err.Error()))
 			continue
 		}
 
@@ -199,11 +199,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		if upstreamResp.StatusCode == http.StatusOK {
 			sniffResult, err := ps.responseSniffer.SniffResponse(upstreamResp)
 			if err != nil {
-				ps.logger.Error("failed to sniff response",
+				ps.logger.Error("嗅探响应失败",
 					slog.String("error", err.Error()),
 				)
 			} else if sniffResult.IsFake200 {
-				ps.logger.Warn("fake 200 response detected",
+				ps.logger.Warn("检测到假 200 响应",
 					slog.String("rule", sniffResult.MatchedRule),
 				)
 
@@ -296,7 +296,7 @@ func (ps *ProxyService) Close() {
 // UpdateSnifferKeywords 更新嗅探器的明文错误关键词
 func (ps *ProxyService) UpdateSnifferKeywords(keywords []string) {
 	ps.responseSniffer.UpdatePlainTextErrorKeywords(keywords)
-	ps.logger.Info("sniffer keywords updated", "count", len(keywords))
+	ps.logger.Info("嗅探器关键词已更新", "count", len(keywords))
 }
 
 // logRequestSuccess 记录成功的请求审计日志
@@ -445,7 +445,7 @@ func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
 	// 更新 RetryCoordinator 的配置
 	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
 
-	ps.logger.Info("proxy service config updated",
+	ps.logger.Info("代理服务配置已更新",
 		slog.Int("max_retry", maxRetry),
 		slog.Duration("retry_delay", retryDelay),
 	)

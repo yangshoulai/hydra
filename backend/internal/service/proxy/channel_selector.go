@@ -41,20 +41,22 @@ func NewChannelSelector(
 }
 
 // SelectChannel 按优先级和权重选择一个可用的 Channel
-func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string) (*models.Channel, error) {
-	// 获取所有支持该模型的 Channel
-	channels, err := cs.channelRepo.FindByModel(ctx, modelName)
+func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, endpointType string) (*models.Channel, error) {
+	// 获取所有支持该模型和端点类型的 Channel
+	channels, err := cs.channelRepo.FindByModelAndEndpointType(ctx, modelName, endpointType)
 	if err != nil {
-		cs.logger.Error("failed to find channels by model",
+		cs.logger.Error("查找支持模型的渠道失败",
 			slog.String("model", modelName),
+			slog.String("endpoint_type", endpointType),
 			slog.String("error", err.Error()),
 		)
 		return nil, err
 	}
 
 	if len(channels) == 0 {
-		cs.logger.Warn("no channels support model",
+		cs.logger.Warn("没有渠道支持该模型",
 			slog.String("model", modelName),
+			slog.String("endpoint_type", endpointType),
 		)
 		return nil, ErrNoAvailableChannel
 	}

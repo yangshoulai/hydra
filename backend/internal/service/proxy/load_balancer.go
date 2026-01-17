@@ -54,11 +54,12 @@ func NewLoadBalancer(
 // endpointType: 端点类型(如 openai, openai-response, anthropic)
 // 返回: 路由结果(包含 Channel, Key, 上游模型名)
 func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpointType string) (*RouteResult, error) {
-	// 1. 选择 Channel
-	channel, err := lb.channelSelector.SelectChannel(ctx, unifiedModel)
+	// 1. 选择 Channel (同时考虑模型和端点类型)
+	channel, err := lb.channelSelector.SelectChannel(ctx, unifiedModel, endpointType)
 	if err != nil {
-		lb.logger.Warn("failed to select channel",
+		lb.logger.Warn("选择渠道失败",
 			slog.String("unified_model", unifiedModel),
+			slog.String("endpoint_type", endpointType),
 			slog.String("error", err.Error()),
 		)
 		return nil, err
@@ -67,7 +68,7 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	// 2. 选择 Key
 	key, err := lb.keySelector.SelectKey(channel)
 	if err != nil {
-		lb.logger.Warn("failed to select key",
+		lb.logger.Warn("选择密钥失败",
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("error", err.Error()),
@@ -78,7 +79,7 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	// 3. 路由模型
 	upstreamModel, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType)
 	if err != nil {
-		lb.logger.Warn("failed to route model",
+		lb.logger.Warn("模型路由失败",
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("unified_model", unifiedModel),
@@ -94,7 +95,7 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 		UnifiedModel:  unifiedModel,
 	}
 
-	lb.logger.Info("request routed successfully",
+	lb.logger.Info("请求路由成功",
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
 		slog.Uint64("key_id", uint64(key.ID)),

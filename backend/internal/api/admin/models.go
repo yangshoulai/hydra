@@ -168,6 +168,12 @@ func (h *ModelHandler) DeleteModel(c *gin.Context) {
 			})
 			return
 		}
+		if err == admin.ErrModelInUse {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": "model is in use by channel configurations",
+			})
+			return
+		}
 		h.logger.Error("failed to delete model",
 			slog.String("error", err.Error()),
 		)

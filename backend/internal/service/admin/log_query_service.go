@@ -63,6 +63,14 @@ func (s *LogQueryService) Query(ctx context.Context, req *LogQueryRequest) (*Log
 		req.PageSize = 20
 	}
 
+	// 设置默认时间范围（最近24小时）
+	if req.StartTime == nil && req.EndTime == nil {
+		now := time.Now()
+		dayAgo := now.Add(-24 * time.Hour)
+		req.StartTime = &dayAgo
+		req.EndTime = &now
+	}
+
 	s.logger.Debug("querying logs",
 		slog.Int("page", req.Page),
 		slog.Int("page_size", req.PageSize),
@@ -80,6 +88,12 @@ func (s *LogQueryService) Query(ctx context.Context, req *LogQueryRequest) (*Log
 	}
 
 	// 映射筛选条件
+	if req.TraceID != "" {
+		filter.TraceID = req.TraceID
+	}
+	if req.AccessToken != "" {
+		filter.AccessToken = req.AccessToken
+	}
 	if req.StatusCode != nil {
 		filter.StatusCode = req.StatusCode
 	}
@@ -90,14 +104,7 @@ func (s *LogQueryService) Query(ctx context.Context, req *LogQueryRequest) (*Log
 		filter.RequestedModel = req.RequestedModel
 	}
 	if req.IsSuccess != nil {
-		// 将is_success转换为状态码筛选
-		if *req.IsSuccess {
-			statusCode := 200
-			filter.StatusCode = &statusCode
-		} else {
-			// 失败的情况，查询非200状态码（这里需要特殊处理，暂时跳过）
-			// 可以扩展repository支持更复杂的查询
-		}
+		filter.IsSuccess = req.IsSuccess
 	}
 
 	// 查询数据

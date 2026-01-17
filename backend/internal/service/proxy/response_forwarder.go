@@ -30,14 +30,14 @@ func (rf *ResponseForwarder) ForwardResponse(c *gin.Context, upstreamResp *http.
 	// 读取响应 Body
 	body, err := io.ReadAll(upstreamResp.Body)
 	if err != nil {
-		rf.logger.Error("failed to read upstream response body",
+		rf.logger.Error("读取上游响应体失败",
 			slog.String("error", err.Error()),
 			slog.Int("status_code", upstreamResp.StatusCode),
 		)
 		return nil, err
 	}
 
-	rf.logger.Debug("upstream response received",
+	rf.logger.Debug("收到上游响应",
 		slog.Int("status_code", upstreamResp.StatusCode),
 		slog.Int("body_size", len(body)),
 	)
@@ -56,7 +56,7 @@ func (rf *ResponseForwarder) ForwardResponse(c *gin.Context, upstreamResp *http.
 		}
 
 		if _, err := c.Writer.Write(body); err != nil {
-			rf.logger.Error("failed to write response to client",
+			rf.logger.Error("写入响应到客户端失败",
 				slog.String("error", err.Error()),
 			)
 			return body, err
@@ -107,7 +107,7 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 	if len(body) > 0 && (contentType == "" || bytes.Contains([]byte(contentType), []byte("application/json"))) {
 		modifiedBody, err := rf.replaceModelInJSON(body, upstreamModel, unifiedModel)
 		if err != nil {
-			rf.logger.Warn("failed to replace model name in JSON response",
+			rf.logger.Warn("替换 JSON 响应中的模型名失败",
 				slog.String("error", err.Error()),
 			)
 			// 失败时使用原始 Body
@@ -149,7 +149,7 @@ func (rf *ResponseForwarder) replaceModelInJSON(body []byte, upstreamModel strin
 		return body, err
 	}
 
-	rf.logger.Debug("model name replaced in response",
+	rf.logger.Debug("响应中的模型名已替换",
 		slog.String("upstream_model", upstreamModel),
 		slog.String("unified_model", unifiedModel),
 	)
@@ -159,7 +159,7 @@ func (rf *ResponseForwarder) replaceModelInJSON(body []byte, upstreamModel strin
 
 // ForwardErrorResponse 转发错误响应
 func (rf *ResponseForwarder) ForwardErrorResponse(c *gin.Context, statusCode int, message string) {
-	rf.logger.Debug("forwarding error response",
+	rf.logger.Debug("转发错误响应",
 		slog.Int("status_code", statusCode),
 		slog.String("message", message),
 	)

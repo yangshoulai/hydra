@@ -66,7 +66,7 @@ func (s *SettingService) GetInt(ctx context.Context, key string, defaultValue in
 
 	intValue, err := strconv.Atoi(value)
 	if err != nil {
-		s.logger.Warn("failed to parse int setting",
+		s.logger.Warn("解析整数设置失败",
 			slog.String("key", key),
 			slog.String("value", value),
 			slog.String("error", err.Error()),
@@ -86,7 +86,7 @@ func (s *SettingService) GetBool(ctx context.Context, key string, defaultValue b
 
 	boolValue, err := strconv.ParseBool(value)
 	if err != nil {
-		s.logger.Warn("failed to parse bool setting",
+		s.logger.Warn("解析布尔设置失败",
 			slog.String("key", key),
 			slog.String("value", value),
 			slog.String("error", err.Error()),
@@ -118,7 +118,7 @@ func (s *SettingService) get(ctx context.Context, key string) (string, error) {
 	// 从数据库获取
 	setting, err := s.systemSettingRepo.GetByKey(ctx, key)
 	if err != nil {
-		s.logger.Error("failed to get setting from database",
+		s.logger.Error("从数据库获取设置失败",
 			slog.String("key", key),
 			slog.String("error", err.Error()),
 		)
@@ -142,7 +142,7 @@ func (s *SettingService) get(ctx context.Context, key string) (string, error) {
 func (s *SettingService) Set(ctx context.Context, key string, value string) error {
 	err := s.systemSettingRepo.Set(ctx, key, value)
 	if err != nil {
-		s.logger.Error("failed to set setting",
+		s.logger.Error("设置配置失败",
 			slog.String("key", key),
 			slog.String("value", value),
 			slog.String("error", err.Error()),
@@ -156,7 +156,7 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 		expiresAt: time.Now().Add(s.cacheTTL),
 	})
 
-	s.logger.Info("setting updated",
+	s.logger.Info("设置已更新",
 		slog.String("key", key),
 		slog.String("value", value),
 	)
@@ -172,7 +172,7 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 func (s *SettingService) BatchSet(ctx context.Context, settings map[string]string) error {
 	err := s.systemSettingRepo.BatchSet(ctx, settings)
 	if err != nil {
-		s.logger.Error("failed to batch set settings",
+		s.logger.Error("批量设置配置失败",
 			slog.String("error", err.Error()),
 		)
 		return err
@@ -192,7 +192,7 @@ func (s *SettingService) BatchSet(ctx context.Context, settings map[string]strin
 		categories[category] = true
 	}
 
-	s.logger.Info("settings batch updated",
+	s.logger.Info("批量更新设置完成",
 		slog.Int("count", len(settings)),
 	)
 
@@ -245,7 +245,7 @@ func (s *SettingService) InvalidateCache(key string) {
 // InvalidateAllCache 使所有缓存失效
 func (s *SettingService) InvalidateAllCache() {
 	s.cache = sync.Map{}
-	s.logger.Debug("all settings cache invalidated")
+	s.logger.Debug("所有设置缓存已失效")
 }
 
 // GetCircuitBreakerConfig 获取熔断器配置
@@ -282,7 +282,7 @@ func (s *SettingService) GetPlainTextErrorRules(ctx context.Context) []string {
 	// 解析 JSON
 	var keywords []string
 	if err := json.Unmarshal([]byte(value), &keywords); err != nil {
-		s.logger.Warn("failed to parse plain text error rules",
+		s.logger.Warn("解析明文错误规则失败",
 			slog.String("value", value),
 			slog.String("error", err.Error()),
 		)
@@ -297,7 +297,7 @@ func (s *SettingService) SetPlainTextErrorRules(ctx context.Context, keywords []
 	// 转换为 JSON
 	jsonBytes, err := json.Marshal(keywords)
 	if err != nil {
-		s.logger.Error("failed to marshal plain text error rules",
+		s.logger.Error("序列化明文错误规则失败",
 			slog.String("error", err.Error()),
 		)
 		return fmt.Errorf("failed to marshal keywords: %w", err)

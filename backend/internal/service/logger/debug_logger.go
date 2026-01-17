@@ -70,7 +70,7 @@ func (d *DebugLogger) LogRequest(traceID, method, url string, headers map[string
 		return
 	}
 
-	d.logger.Debug("request details",
+	d.logger.Debug("请求详情",
 		slog.String("trace_id", traceID),
 		slog.String("method", method),
 		slog.String("url", url),
@@ -85,7 +85,7 @@ func (d *DebugLogger) LogResponse(traceID string, statusCode int, headers map[st
 		return
 	}
 
-	d.logger.Debug("response details",
+	d.logger.Debug("响应详情",
 		slog.String("trace_id", traceID),
 		slog.Int("status_code", statusCode),
 		slog.Any("headers", headers),
@@ -99,7 +99,7 @@ func (d *DebugLogger) LogRequestBody(traceID, body string) {
 		return
 	}
 
-	d.logger.Debug("full request body",
+	d.logger.Debug("完整请求体",
 		slog.String("trace_id", traceID),
 		slog.String("body", body),
 		slog.Int("body_length", len(body)),
@@ -112,7 +112,7 @@ func (d *DebugLogger) LogResponseBody(traceID, body string) {
 		return
 	}
 
-	d.logger.Debug("full response body",
+	d.logger.Debug("完整响应体",
 		slog.String("trace_id", traceID),
 		slog.String("body", body),
 		slog.Int("body_length", len(body)),
@@ -125,7 +125,7 @@ func (d *DebugLogger) LogError(traceID, errorMsg string, errorDetails interface{
 		return
 	}
 
-	d.logger.Error("error details",
+	d.logger.Error("错误详情",
 		slog.String("trace_id", traceID),
 		slog.String("error", errorMsg),
 		slog.Any("details", errorDetails),
@@ -138,7 +138,7 @@ func (d *DebugLogger) LogProxyAttempt(traceID string, attemptNum int, channelNam
 		return
 	}
 
-	d.logger.Debug("proxy attempt",
+	d.logger.Debug("代理尝试",
 		slog.String("trace_id", traceID),
 		slog.Int("attempt_number", attemptNum),
 		slog.String("channel_name", channelName),
@@ -152,7 +152,7 @@ func (d *DebugLogger) LogRetry(traceID string, reason string, retryCount int) {
 		return
 	}
 
-	d.logger.Warn("retry triggered",
+	d.logger.Warn("触发重试",
 		slog.String("trace_id", traceID),
 		slog.String("reason", reason),
 		slog.Int("retry_count", retryCount),
@@ -165,7 +165,7 @@ func (d *DebugLogger) LogCircuitBreaker(traceID string, keyID uint, oldState, ne
 		return
 	}
 
-	d.logger.Warn("circuit breaker state changed",
+	d.logger.Warn("熔断器状态变更",
 		slog.String("trace_id", traceID),
 		slog.Uint64("key_id", uint64(keyID)),
 		slog.String("old_state", oldState),
@@ -181,7 +181,7 @@ func (d *DebugLogger) LogStructured(traceID string, message string, data interfa
 
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		d.logger.Error("failed to marshal structured data",
+		d.logger.Error("序列化结构化数据失败",
 			slog.String("trace_id", traceID),
 			slog.String("error", err.Error()),
 		)

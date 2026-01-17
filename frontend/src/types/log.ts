@@ -24,6 +24,8 @@ export interface RequestLog {
   stream_chunks: number
   client_ip: string
   user_agent: string
+  request_body?: string
+  response_body?: string
 }
 
 export interface LogQueryRequest {

@@ -455,7 +455,7 @@ const columns: DataTableColumns<Model> = [
 
 const pagination = reactive({
   page: 1,
-  pageSize: 10,
+  pageSize: 20,
   showSizePicker: true,
   pageSizes: [10, 20, 50],
   onChange: (page: number) => {

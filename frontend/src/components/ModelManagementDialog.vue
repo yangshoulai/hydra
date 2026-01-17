@@ -749,6 +749,7 @@ async function handleAddModel() {
     modelForm.unified_model = ''
     modelForm.endpoint_types = ['openai']
     await loadLocalConfigs()
+    initEditMap()
     emit('refresh')
   } catch (error: any) {
     console.error('Failed to add model config:', error)

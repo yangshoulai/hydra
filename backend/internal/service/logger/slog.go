@@ -13,11 +13,12 @@ type LoggerConfig struct {
 	Level          string
 	EnableFile     bool
 	FilePath       string
-	MaxSize        int  // MB
+	MaxSize        int // MB
 	MaxBackups     int
-	MaxAge         int  // days
+	MaxAge         int // days
 	Compress       bool
 	EnableDatabase bool
+	AddSource      bool
 }
 
 // InitLogger 初始化 Slog 结构化日志
@@ -39,8 +40,8 @@ func InitLogger(cfg *LoggerConfig) (*slog.Logger, error) {
 
 	// 创建日志选项
 	opts := &slog.HandlerOptions{
-		Level: level,
-		AddSource: true, // 添加源文件信息
+		Level:     level,
+		AddSource: cfg.AddSource,
 	}
 
 	// 构建日志输出目标
@@ -64,8 +65,8 @@ func InitLogger(cfg *LoggerConfig) (*slog.Logger, error) {
 	// 创建多写入器
 	multiWriter := io.MultiWriter(writers...)
 
-	// 创建 JSON Handler
-	handler := slog.NewJSONHandler(multiWriter, opts)
+	// 创建 Text Handler
+	handler := slog.NewTextHandler(multiWriter, opts)
 
 	// 创建 Logger
 	logger := slog.New(handler)

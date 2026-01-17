@@ -38,6 +38,7 @@ type LogConfig struct {
 	Level         string     `mapstructure:"level"`
 	RetentionDays int        `mapstructure:"retention_days"`
 	DebugEnabled  bool       `mapstructure:"debug_enabled"`
+	AddSource     bool       `mapstructure:"add_source"`
 	File          FileConfig `mapstructure:"file"`
 }
 

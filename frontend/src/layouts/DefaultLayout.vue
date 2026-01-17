@@ -82,8 +82,8 @@ import {
   HomeOutline,
   KeyOutline,
   ListOutline,
-  LogOutOutline as LogOutIcon,
   LockClosedOutline,
+  LogOutOutline as LogOutIcon,
   PersonOutline,
   SettingsOutline,
 } from '@vicons/ionicons5'
@@ -121,6 +121,11 @@ const menuOptions = computed<MenuOption[]>(() => [
     icon: () => h(NIcon, null, {default: () => h(BusinessOutline)}),
   },
   {
+    label: '访问令牌',
+    key: 'TokenManagement',
+    icon: () => h(NIcon, null, {default: () => h(KeyOutline)}),
+  },
+  {
     label: '日志查询',
     key: 'LogQuery',
     icon: () => h(NIcon, null, {default: () => h(DocumentTextOutline)}),
@@ -130,11 +135,7 @@ const menuOptions = computed<MenuOption[]>(() => [
     key: 'Settings',
     icon: () => h(NIcon, null, {default: () => h(SettingsOutline)}),
   },
-  {
-    label: '访问令牌',
-    key: 'TokenManagement',
-    icon: () => h(NIcon, null, {default: () => h(KeyOutline)}),
-  },
+
 ])
 
 // 用户菜单选项
@@ -209,9 +210,10 @@ const handleUserMenuSelect = (key: string) => {
 :deep(.n-menu-item.n-menu-item--selected .n-menu-item-content__icon) {
   color: #ffffff !important;
 }
+
 :deep(.n-menu .n-menu-item-content:not(.n-menu-item-content--disabled).n-menu-item-content--selected:hover .n-menu-item-content-header),
 :deep(.n-menu .n-menu-item-content.n-menu-item-content--selected .n-menu-item-content__icon),
-:deep(.n-menu.n-menu--collapsed .n-menu-item-content .n-menu-item-content__icon){
+:deep(.n-menu.n-menu--collapsed .n-menu-item-content .n-menu-item-content__icon) {
   color: #ffffff !important;
 }
 </style>

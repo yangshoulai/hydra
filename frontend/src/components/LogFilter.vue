@@ -290,6 +290,13 @@ defineExpose({
 onMounted(() => {
   loadChannels()
   loadModels()
+
+  // 设置默认时间范围为最近24小时
+  const now = Date.now()
+  const dayAgo = now - 24 * 60 * 60 * 1000
+  dateRange.value = [dayAgo, now]
+  formData.start_time = new Date(dayAgo).toISOString()
+  formData.end_time = new Date(now).toISOString()
 })
 </script>
 

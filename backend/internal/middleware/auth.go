@@ -14,30 +14,11 @@ func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.
 	return func(c *gin.Context) {
 		var tokenValue string
 
-		// 根据请求路径选择认证方式
-		if c.Request.URL.Path == "/v1/messages" {
-			// Anthropic Messages API 使用 X-Api-Key
-			tokenValue = c.GetHeader("X-Api-Key")
-			if tokenValue == "" {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error": "Missing X-Api-Key header",
-				})
-				c.Abort()
-				return
-			}
-		} else {
-			// OpenAI API 使用 Authorization Bearer
-			authHeader := c.GetHeader("Authorization")
-			if authHeader == "" {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error": "Missing authorization header",
-				})
-				c.Abort()
-				return
-			}
-
+		xApiKeyValue := c.GetHeader("X-Api-Key")
+		authorizationValue := c.GetHeader("Authorization")
+		if authorizationValue != "" {
 			// 解析 Bearer token
-			parts := strings.SplitN(authHeader, " ", 2)
+			parts := strings.SplitN(authorizationValue, " ", 2)
 			if len(parts) != 2 || parts[0] != "Bearer" {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"error": "Invalid authorization header format",
@@ -45,15 +26,22 @@ func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.
 				c.Abort()
 				return
 			}
-
 			tokenValue = parts[1]
+		} else {
+			tokenValue = xApiKeyValue
 		}
-
+		if tokenValue == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Missing authorization header",
+			})
+			c.Abort()
+			return
+		}
 		// 验证 token
 		token, err := tokenRepo.FindByToken(c.Request.Context(), tokenValue)
 		if err != nil {
 			traceID := GetTraceID(c)
-			logger.Warn("token validation failed",
+			logger.Warn("令牌验证失败",
 				slog.String("trace_id", traceID),
 				slog.String("error", err.Error()),
 			)

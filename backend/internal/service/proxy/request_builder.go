@@ -93,8 +93,15 @@ func (rb *RequestBuilder) BuildProxyRequest(
 	// 复制必要的 Headers
 	rb.copyHeaders(c.Request, req)
 
-	// 设置 Authorization
-	req.Header.Set("Authorization", "Bearer "+routeResult.Key.KeyValue)
+	// 根据端点类型设置认证头
+	if endpoint == "/v1/messages" {
+		// Anthropic API 使用 x-api-key
+		req.Header.Set("x-api-key", routeResult.Key.KeyValue)
+		req.Header.Set("Authorization", "Bearer "+routeResult.Key.KeyValue)
+	} else {
+		// OpenAI API 使用 Authorization Bearer
+		req.Header.Set("Authorization", "Bearer "+routeResult.Key.KeyValue)
+	}
 
 	// 设置 Content-Type
 	if contentType != "" {

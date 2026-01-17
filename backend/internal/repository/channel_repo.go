@@ -111,3 +111,32 @@ func (r *ChannelRepository) FindByModel(ctx context.Context, unifiedModel string
 
 	return channels, err
 }
+
+// FindByModelAndEndpointType 根据模型名和端点类型查找渠道
+func (r *ChannelRepository) FindByModelAndEndpointType(ctx context.Context, unifiedModel string, endpointType string) ([]models.Channel, error) {
+	// 先查询所有支持该模型的渠道
+	channels, err := r.FindByModel(ctx, unifiedModel)
+	if err != nil {
+		return nil, err
+	}
+
+	// 在内存中过滤出支持目标端点类型的渠道
+	var filteredChannels []models.Channel
+	for _, channel := range channels {
+		// 检查渠道的模型配置是否支持目标端点类型
+		for _, config := range channel.ModelConfigs {
+			if config.UnifiedModel == unifiedModel {
+				// 检查 endpoint_types 数组是否包含目标端点类型
+				for _, et := range config.EndpointTypes {
+					if et == endpointType {
+						filteredChannels = append(filteredChannels, channel)
+						break
+					}
+				}
+				break
+			}
+		}
+	}
+
+	return filteredChannels, nil
+}

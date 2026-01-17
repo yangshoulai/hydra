@@ -19,6 +19,7 @@ log:
   level: info                                                                           # 日志级别: debug | info | warn | error
   retention_days: 30                                                                    # 审计日志保留天数
   debug_enabled: false                                                                  # 是否启用调试日志(记录完整 Request/Response Body)
+  add_source: true                                                                      # 是否记录源文件
   file:
     enabled: true                                                                       # 是否启用文件日志
     path: ./data/logs/hydra.log                                                         # 日志文件路径

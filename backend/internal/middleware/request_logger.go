@@ -17,7 +17,7 @@ func RequestLogger(logger *slog.Logger) gin.HandlerFunc {
 		traceID := GetTraceID(c)
 
 		// 记录请求基本信息
-		logger.Info("request started",
+		logger.Info("请求开始",
 			slog.String("trace_id", traceID),
 			slog.String("method", c.Request.Method),
 			slog.String("path", c.Request.URL.Path),
@@ -32,7 +32,7 @@ func RequestLogger(logger *slog.Logger) gin.HandlerFunc {
 		duration := time.Since(startTime)
 
 		// 记录响应信息
-		logger.Info("request completed",
+		logger.Info("请求完成",
 			slog.String("trace_id", traceID),
 			slog.String("method", c.Request.Method),
 			slog.String("path", c.Request.URL.Path),

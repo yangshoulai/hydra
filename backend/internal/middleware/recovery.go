@@ -16,7 +16,7 @@ func Recovery(logger *slog.Logger) gin.HandlerFunc {
 				traceID := GetTraceID(c)
 
 				// 记录 panic 错误
-				logger.Error("panic recovered",
+				logger.Error("捕获到 panic 错误",
 					slog.String("trace_id", traceID),
 					slog.String("method", c.Request.Method),
 					slog.String("path", c.Request.URL.Path),

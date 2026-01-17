@@ -44,10 +44,13 @@ func (r *RequestLogRepository) FindByTraceID(ctx context.Context, traceID string
 type RequestLogFilter struct {
 	StartTime       *time.Time
 	EndTime         *time.Time
+	TraceID         string
+	AccessToken     string
 	StatusCode      *int
 	ChannelID       *uint
 	AccessTokenID   *uint
 	RequestedModel  string
+	IsSuccess       *bool
 	IsFakeSuccess   *bool
 	Offset          int
 	Limit           int
@@ -66,6 +69,12 @@ func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilte
 	if filter.EndTime != nil {
 		query = query.Where("created_at <= ?", filter.EndTime)
 	}
+	if filter.TraceID != "" {
+		query = query.Where("trace_id = ?", filter.TraceID)
+	}
+	if filter.AccessToken != "" {
+		query = query.Where("access_token = ?", filter.AccessToken)
+	}
 	if filter.StatusCode != nil {
 		query = query.Where("status_code = ?", *filter.StatusCode)
 	}
@@ -77,6 +86,9 @@ func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilte
 	}
 	if filter.RequestedModel != "" {
 		query = query.Where("requested_model = ?", filter.RequestedModel)
+	}
+	if filter.IsSuccess != nil {
+		query = query.Where("is_success = ?", *filter.IsSuccess)
 	}
 	if filter.IsFakeSuccess != nil {
 		query = query.Where("is_fake_success = ?", *filter.IsFakeSuccess)

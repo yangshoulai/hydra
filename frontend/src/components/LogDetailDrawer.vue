@@ -12,7 +12,7 @@
               <n-descriptions-item label="Trace ID" :span="2">
                 <n-space align="center">
                   <n-text code style="font-size: 13px">{{ log.trace_id }}</n-text>
-                  <TraceIdCopy :trace-id="log.trace_id" />
+                  <TraceIdCopy :trace-id="log.trace_id"/>
                 </n-space>
               </n-descriptions-item>
 
@@ -47,6 +47,10 @@
                   </n-icon>
                   <n-text code style="font-size: 13px">{{ log.access_token }}</n-text>
                 </n-space>
+              </n-descriptions-item>
+
+              <n-descriptions-item v-if="log.request_body" label="请求体" :span="2">
+                <n-code :code="log.request_body" language="json" :word-wrap="true"/>
               </n-descriptions-item>
             </n-descriptions>
           </n-card>
@@ -112,24 +116,24 @@
 
               <n-descriptions-item label="响应时间">
                 <n-tag
-                  :type="getResponseType(log.response_time)"
-                  size="medium"
-                  :bordered="false"
+                    :type="getResponseType(log.response_time)"
+                    size="medium"
+                    :bordered="false"
                 >
                   {{ log.response_time }} ms
                 </n-tag>
               </n-descriptions-item>
-            </n-descriptions>
 
-            <!-- 错误信息 -->
-            <n-alert
-              v-if="log.error_message"
-              type="error"
-              :show-icon="true"
-              style="margin-top: 12px"
-            >
-              {{ log.error_message }}
-            </n-alert>
+              <n-descriptions-item v-if="log.error_message" label="错误信息" :span="3">
+                <n-alert type="error" :show-icon="true">
+                  {{ log.error_message }}
+                </n-alert>
+              </n-descriptions-item>
+
+              <n-descriptions-item v-if="log.response_body" label="响应体" :span="3">
+                <n-code :code="log.response_body" language="json" :word-wrap="true"/>
+              </n-descriptions-item>
+            </n-descriptions>
           </n-card>
 
           <!-- 客户端信息卡片 -->
@@ -154,28 +158,16 @@
         </n-space>
       </template>
 
-      <n-empty v-else description="加载中..." />
+      <n-empty v-else description="加载中..."/>
     </n-drawer-content>
   </n-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import {
-  NDrawer,
-  NDrawerContent,
-  NCard,
-  NDescriptions,
-  NDescriptionsItem,
-  NSpace,
-  NText,
-  NTag,
-  NAlert,
-  NEmpty,
-  NIcon
-} from 'naive-ui'
+import {computed} from 'vue'
+import {NAlert, NCard, NCode, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NIcon, NSpace, NTag, NText} from 'naive-ui'
 import {GlobeOutline, KeyOutline, TimeOutline} from '@vicons/ionicons5'
-import type { RequestLog } from '../types/log'
+import type {RequestLog} from '../types/log'
 import TraceIdCopy from './TraceIdCopy.vue'
 
 interface Props {

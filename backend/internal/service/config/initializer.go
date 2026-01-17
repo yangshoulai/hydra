@@ -124,7 +124,7 @@ func GetDefaultPlainTextErrorRulesSetting() models.SystemSetting {
 // Initialize 初始化系统设置
 // 如果设置不存在则创建,存在则跳过
 func (i *Initializer) Initialize(ctx context.Context) error {
-	i.logger.Info("initializing system settings")
+	i.logger.Info("初始化系统设置")
 
 	// 合并默认设置和明文错误规则设置
 	allSettings := append(DefaultSettings, GetDefaultPlainTextErrorRulesSetting())
@@ -133,7 +133,7 @@ func (i *Initializer) Initialize(ctx context.Context) error {
 		// 检查设置是否已存在
 		existing, err := i.systemSettingRepo.GetByKey(ctx, setting.Key)
 		if err != nil {
-			i.logger.Error("failed to check existing setting",
+			i.logger.Error("检查现有设置失败",
 				slog.String("key", setting.Key),
 				slog.String("error", err.Error()),
 			)
@@ -153,26 +153,26 @@ func (i *Initializer) Initialize(ctx context.Context) error {
 			}
 
 			if err := i.systemSettingRepo.Set(ctx, newSetting.Key, newSetting.Value); err != nil {
-				i.logger.Error("failed to create system setting",
+				i.logger.Error("创建系统设置失败",
 					slog.String("key", setting.Key),
 					slog.String("error", err.Error()),
 				)
 				return err
 			}
 
-			i.logger.Debug("system setting created",
+			i.logger.Debug("系统设置已创建",
 				slog.String("key", setting.Key),
 				slog.String("value", setting.Value),
 			)
 		} else {
-			i.logger.Debug("system setting already exists",
+			i.logger.Debug("系统设置已存在",
 				slog.String("key", setting.Key),
 				slog.String("value", existing.Value),
 			)
 		}
 	}
 
-	i.logger.Info("system settings initialized successfully",
+	i.logger.Info("系统设置初始化成功",
 		slog.Int("total_settings", len(allSettings)),
 	)
 
@@ -186,24 +186,24 @@ func (i *Initializer) EnsureDefaults(ctx context.Context) error {
 
 // ResetToDefaults 重置所有设置为默认值(慎用)
 func (i *Initializer) ResetToDefaults(ctx context.Context) error {
-	i.logger.Warn("resetting all settings to defaults")
+	i.logger.Warn("重置所有设置为默认值")
 
 	for _, setting := range DefaultSettings {
 		if err := i.systemSettingRepo.Set(ctx, setting.Key, setting.Value); err != nil {
-			i.logger.Error("failed to reset setting",
+			i.logger.Error("重置设置失败",
 				slog.String("key", setting.Key),
 				slog.String("error", err.Error()),
 			)
 			return err
 		}
 
-		i.logger.Debug("setting reset to default",
+		i.logger.Debug("设置已重置为默认值",
 			slog.String("key", setting.Key),
 			slog.String("value", setting.Value),
 		)
 	}
 
-	i.logger.Info("all settings reset to defaults",
+	i.logger.Info("所有设置已重置为默认值",
 		slog.Int("total_settings", len(DefaultSettings)),
 	)
 

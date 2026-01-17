@@ -24,7 +24,7 @@ func AdminAuth(logger *slog.Logger) gin.HandlerFunc {
 		userID := session.Get(SessionKeyUserID)
 		if userID == nil {
 			traceID := GetTraceID(c)
-			logger.Warn("unauthorized admin access attempt",
+			logger.Warn("未授权的管理后台访问尝试",
 				slog.String("trace_id", traceID),
 				slog.String("path", c.Request.URL.Path),
 			)

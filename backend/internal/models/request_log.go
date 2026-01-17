@@ -11,7 +11,7 @@ type RequestLog struct {
 	ID            uint           `gorm:"primarykey" json:"id"`
 	CreatedAt     time.Time      `json:"created_at"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
-	TraceID       string         `gorm:"type:varchar(36);not null;uniqueIndex" json:"trace_id"`
+	TraceID       string         `gorm:"type:varchar(36);not null;index" json:"trace_id"`
 	AccessToken   string         `gorm:"type:varchar(64);index" json:"access_token"`
 	RequestPath   string         `gorm:"type:varchar(500);not null;index" json:"request_path"`
 	RequestMethod string         `gorm:"type:varchar(10);not null" json:"request_method"`
