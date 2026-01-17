@@ -125,13 +125,14 @@ const columns: DataTableColumns<RequestLog> = [
     }
   },
   {
-    title: '响应时间（毫秒）',
+    title: '响应时间（秒）',
     key: 'response_time',
     width: 160,
     align: 'right',
     render(row) {
-      const color = row.response_time < 1000 ? 'success' : row.response_time < 3000 ? 'warning' : 'error'
-      return h(NTag, {type: color, size: 'small'}, {default: () => `${row.response_time}`})
+      const seconds = (row.response_time / 1000).toFixed(2)
+      const color = row.response_time < 5000 ? 'success' : row.response_time < 10000 ? 'warning' : 'error'
+      return h(NTag, {type: color, size: 'small'}, {default: () => `${seconds}s`})
     }
   },
   {

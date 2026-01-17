@@ -75,6 +75,17 @@ func (r *ChannelModelConfigRepository) Delete(ctx context.Context, id uint) erro
 	return r.db.WithContext(ctx).Delete(&models.ChannelModelConfig{}, id).Error
 }
 
+// FindByModelNameWithChannel 根据统一模型名查询渠道模型配置（包含渠道信息）
+func (r *ChannelModelConfigRepository) FindByModelNameWithChannel(ctx context.Context, modelName string) ([]*models.ChannelModelConfig, error) {
+	var configs []*models.ChannelModelConfig
+	err := r.db.WithContext(ctx).
+		Preload("Channel").
+		Where("unified_model = ?", modelName).
+		Order("channel_id").
+		Find(&configs).Error
+	return configs, err
+}
+
 // DeleteByChannelID 删除渠道下的所有模型配置
 func (r *ChannelModelConfigRepository) DeleteByChannelID(ctx context.Context, channelID uint) error {
 	return r.db.WithContext(ctx).

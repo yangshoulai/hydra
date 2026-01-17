@@ -14,15 +14,24 @@ import (
 
 // ChannelHandler 渠道管理处理器
 type ChannelHandler struct {
-	channelRepo *repository.ChannelRepository
-	logger      *slog.Logger
+	channelRepo     *repository.ChannelRepository
+	modelConfigRepo *repository.ChannelModelConfigRepository
+	db              *gorm.DB
+	logger          *slog.Logger
 }
 
 // NewChannelHandler 创建渠道处理器
-func NewChannelHandler(channelRepo *repository.ChannelRepository, logger *slog.Logger) *ChannelHandler {
+func NewChannelHandler(
+	channelRepo *repository.ChannelRepository,
+	modelConfigRepo *repository.ChannelModelConfigRepository,
+	db *gorm.DB,
+	logger *slog.Logger,
+) *ChannelHandler {
 	return &ChannelHandler{
-		channelRepo: channelRepo,
-		logger:      logger,
+		channelRepo:     channelRepo,
+		modelConfigRepo: modelConfigRepo,
+		db:              db,
+		logger:          logger,
 	}
 }
 
@@ -382,6 +391,81 @@ func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 	})
 }
 
+// GetChannelsByModel 获取模型关联的渠道列表
+func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
+	modelID := c.Param("id")
+	if modelID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "model id is required",
+		})
+		return
+	}
+
+	id, err := strconv.ParseUint(modelID, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid model id",
+		})
+		return
+	}
+
+	// 查询模型信息获取模型名称
+	var model models.Model
+	if err := h.db.WithContext(c.Request.Context()).First(&model, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "model not found",
+			})
+			return
+		}
+		h.logger.Error("failed to find model",
+			slog.Uint64("model_id", id),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to find model",
+		})
+		return
+	}
+
+	// 查询渠道模型配置
+	configs, err := h.modelConfigRepo.FindByModelNameWithChannel(c.Request.Context(), model.Name)
+	if err != nil {
+		h.logger.Error("failed to find channel model configs",
+			slog.String("model_name", model.Name),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to find channel model configs",
+		})
+		return
+	}
+
+	// 构建响应
+	type ChannelModelInfo struct {
+		ChannelID     uint     `json:"channel_id"`
+		ChannelName   string   `json:"channel_name"`
+		ChannelStatus string   `json:"channel_status"`
+		UpstreamModel string   `json:"upstream_model"`
+		EndpointTypes []string `json:"endpoint_types"`
+	}
+
+	result := make([]ChannelModelInfo, 0, len(configs))
+	for _, config := range configs {
+		if config.Channel != nil {
+			result = append(result, ChannelModelInfo{
+				ChannelID:     config.ChannelID,
+				ChannelName:   config.Channel.Name,
+				ChannelStatus: config.Channel.Status,
+				UpstreamModel: config.UpstreamModel,
+				EndpointTypes: config.EndpointTypes,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 // RegisterRoutes 注册渠道管理路由
 func (h *ChannelHandler) RegisterRoutes(r *gin.RouterGroup) {
 	channels := r.Group("/channels")
@@ -392,4 +476,7 @@ func (h *ChannelHandler) RegisterRoutes(r *gin.RouterGroup) {
 		channels.PUT("/:id", h.UpdateChannel)
 		channels.DELETE("/:id", h.DeleteChannel)
 	}
+
+	// 模型相关路由
+	r.GET("/models/:id/channels", h.GetChannelsByModel)
 }

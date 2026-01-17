@@ -134,6 +134,13 @@
       </template>
     </n-modal>
 
+    <!-- 模型渠道抽屉 -->
+    <ModelChannelsDrawer
+        :model-id="selectedModelId"
+        :model-name="selectedModelName"
+        v-model:show="showChannelsDrawer"
+    />
+
     <!-- 编辑模型对话框 -->
     <n-modal
         v-model:show="showEditDialog"
@@ -264,6 +271,7 @@ import {
   CodeOutline,
   CreateOutline,
   InformationCircleOutline,
+  LayersOutline,
   SaveOutline,
   TextOutline,
   TrashOutline
@@ -272,6 +280,7 @@ import {type CreateModelRequest, modelApi, type UpdateModelRequest} from '../ser
 import type {Model} from '../types/model'
 import providerApi from '@/services/providerService'
 import type {Provider} from '@/types/model'
+import ModelChannelsDrawer from '@/components/ModelChannelsDrawer.vue'
 
 // 状态
 const loading = ref(false)
@@ -282,7 +291,10 @@ const models = ref<Model[]>([])
 const providers = ref<Provider[]>([])
 const showCreateDialog = ref(false)
 const showEditDialog = ref(false)
+const showChannelsDrawer = ref(false)
 const currentEditModel = ref<Model | null>(null)
+const selectedModelId = ref(0)
+const selectedModelName = ref('')
 
 // 厂商选项
 const providerOptions = ref<Array<{ label: string, value: string }>>([])
@@ -399,6 +411,18 @@ const columns: DataTableColumns<Model> = [
           {size: 'small', justify: 'center'},
           {
             default: () => [
+              h(
+                  NButton,
+                  {
+                    size: 'small',
+                    type: 'primary',
+                    onClick: () => handleViewChannels(row)
+                  },
+                  {
+                    default: () => '渠道',
+                    icon: () => h(NIcon, null, {default: () => h(LayersOutline)})
+                  }
+              ),
               h(
                   NButton,
                   {
@@ -559,6 +583,13 @@ async function handleDelete(model: Model) {
       }
     }
   })
+}
+
+// 查看模型关联的渠道
+function handleViewChannels(model: Model) {
+  selectedModelId.value = model.id
+  selectedModelName.value = model.name
+  showChannelsDrawer.value = true
 }
 
 // 初始化

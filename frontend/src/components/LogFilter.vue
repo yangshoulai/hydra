@@ -13,8 +13,7 @@
       </template>
 
       <n-form ref="formRef" :model="formData" :show-label="false" @keyup.enter="handleQuery">
-        <n-space vertical :size="16">
-          <!-- 第一行：主要筛选条件 -->
+        <n-space vertical :size="12">
           <n-space :size="12" wrap>
             <!-- Trace ID -->
             <n-form-item label="Trace ID" :show-label="true" label-placement="left" :label-width="80">
@@ -73,11 +72,7 @@
                   style="width: 180px"
               />
             </n-form-item>
-          </n-space>
 
-          <!-- 第二行：状态和时间 -->
-          <n-space :size="12" wrap>
-            <!-- 状态码 -->
             <n-form-item label="状态码" :show-label="true" label-placement="left" :label-width="80">
               <n-select
                   v-model:value="formData.status_code"

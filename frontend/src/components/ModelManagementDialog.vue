@@ -541,7 +541,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '上游模型',
     key: 'upstream_model',
-    width: 200,
+    width: 280,
     render(row) {
       return h(NText, {code: true}, {default: () => row.upstream_model})
     }
@@ -549,7 +549,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '统一模型',
     key: 'unified_model',
-    width: 200,
+    width: 280,
     render(row) {
       const value = editMap.value[row.key] || row.unified_model
       return h(NSelect, {
@@ -568,7 +568,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '端点类型',
     key: 'endpoint_types',
-    width: 250,
+    width: 200,
     render(row) {
       const value = endpointTypesEditMap.value[row.key] || row.endpoint_types
       return h(NSelect, {
@@ -586,7 +586,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '状态',
     key: 'status',
-    width: 120,
+    width: 80,
     align: 'center',
     render(row) {
       const statusConfig = {
@@ -601,7 +601,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '测试状态',
     key: 'test_status',
-    width: 200,
+    width: 160,
     align: 'center',
     render(row) {
       const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types

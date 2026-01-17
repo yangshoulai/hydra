@@ -193,5 +193,13 @@ export const channelApi = {
       }
     )
     return response.data
+  },
+
+  /**
+   * 获取模型关联的渠道列表
+   */
+  async getChannelsByModel(modelId: number): Promise<any[]> {
+    const response = await apiClient.get(`/admin/api/models/${modelId}/channels`)
+    return response.data
   }
 }

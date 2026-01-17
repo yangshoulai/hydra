@@ -318,6 +318,7 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 	// 为 Anthropic 添加特定的头部
 	if endpointType == "anthropic" {
 		req.Header.Set("anthropic-version", "2023-06-01")
+		req.Header.Set("x-api-key", apiKey)
 	}
 
 	// 记录开始时间

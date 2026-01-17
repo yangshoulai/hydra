@@ -12,27 +12,42 @@ import (
 // Auth 访问令牌认证中间件(用于代理接口)
 func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 获取 Authorization header
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Missing authorization header",
-			})
-			c.Abort()
-			return
-		}
+		var tokenValue string
 
-		// 解析 Bearer token
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid authorization header format",
-			})
-			c.Abort()
-			return
-		}
+		// 根据请求路径选择认证方式
+		if c.Request.URL.Path == "/v1/messages" {
+			// Anthropic Messages API 使用 X-Api-Key
+			tokenValue = c.GetHeader("X-Api-Key")
+			if tokenValue == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "Missing X-Api-Key header",
+				})
+				c.Abort()
+				return
+			}
+		} else {
+			// OpenAI API 使用 Authorization Bearer
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "Missing authorization header",
+				})
+				c.Abort()
+				return
+			}
 
-		tokenValue := parts[1]
+			// 解析 Bearer token
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "Invalid authorization header format",
+				})
+				c.Abort()
+				return
+			}
+
+			tokenValue = parts[1]
+		}
 
 		// 验证 token
 		token, err := tokenRepo.FindByToken(c.Request.Context(), tokenValue)

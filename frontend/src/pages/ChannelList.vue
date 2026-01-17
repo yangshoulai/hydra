@@ -186,6 +186,7 @@ const columns: DataTableColumns<Channel> = [
                 NButton,
                 {
                   size: 'small',
+                  type:'info',
                   onClick: () => handleKeyManagement(row)
                 },
                 {
@@ -197,6 +198,7 @@ const columns: DataTableColumns<Channel> = [
                 NButton,
                 {
                   size: 'small',
+                  type:'primary',
                   onClick: () => handleModelManagement(row)
                 },
                 {
