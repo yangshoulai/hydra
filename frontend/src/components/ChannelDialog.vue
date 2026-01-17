@@ -3,7 +3,7 @@
       v-model:show="showModal"
       preset="card"
       :title="isEdit ? '编辑渠道' : '新建渠道'"
-      :style="{ width: '800px' }"
+      :style="{ width: '960px' }"
       :mask-closable="false"
       :closable="true"
       @close="handleCancel"
@@ -31,7 +31,7 @@
           require-mark-placement="right-hanging"
           size="large"
       >
-        <n-grid :cols="2" :x-gap="24" responsive="screen">
+        <n-grid :cols="2" :x-gap="24" :y-gap="12" responsive="screen">
           <n-grid-item span="2">
             <n-form-item label="渠道名称" path="name">
               <n-input

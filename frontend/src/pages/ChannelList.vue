@@ -25,13 +25,25 @@
         :columns="columns"
         :data="channels"
         :loading="loading"
-        :pagination="pagination"
+        :pagination="false"
         :single-line="false"
         bordered
         :scroll-x="1600"
         striped
         :row-key="(row: Channel) => row.id"
     />
+
+    <div class="flex justify-end">
+      <n-pagination
+          :page="pagination.page"
+          :on-update-page="pagination.onChange"
+          :on-page-size-change="pagination.onUpdatePageSize"
+          :page-size="pagination.pageSize"
+          :item-count="pagination.total"
+          :page-sizes="pagination.pageSizes"
+          :show-size-picker="pagination.showSizePicker"
+      />
+    </div>
 
     <!-- 渠道对话框 -->
     <ChannelDialog
@@ -64,7 +76,7 @@
 
 <script setup lang="ts">
 import {h, onMounted, reactive, ref} from 'vue'
-import {type DataTableColumns, NButton, NCard, NDataTable, NIcon, NSpace, NTag, NText} from 'naive-ui'
+import {type DataTableColumns, NButton, NCard, NDataTable, NIcon, NPagination, NSpace, NTag, NText} from 'naive-ui'
 import {AddOutline, GridOutline, KeyOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import type {Channel} from '../types/channel'
@@ -84,10 +96,10 @@ const selectedChannel = ref<Channel | null>(null)
 // 分页
 const pagination = reactive({
   page: 1,
-  pageSize: 20,
+  pageSize: 10,
   total: 0,
   showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
+  pageSizes: [10, 20, 50],
   onChange: (page: number) => {
     pagination.page = page
     fetchChannels()
@@ -129,7 +141,7 @@ const columns: DataTableColumns<Channel> = [
       return h(
           NTag,
           {
-            type: row.status === 'active' ? 'success' : 'default',
+            type: row.status === 'active' ? 'success' : 'warning',
             size: "small"
           },
           {

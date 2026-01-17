@@ -1,6 +1,4 @@
-import axios from 'axios'
-
-const BASE_URL = '/admin/api'
+import { apiClient } from './api'
 
 // Dashboard types
 export interface QPSDataPoint {
@@ -88,25 +86,25 @@ export interface ChannelHealthMetrics {
 class DashboardService {
   // 获取完整的仪表盘指标
   async getMetrics(): Promise<DashboardMetrics> {
-    const response = await axios.get(`${BASE_URL}/dashboard/metrics`)
+    const response = await apiClient.get('/admin/api/dashboard/metrics')
     return response.data.data
   }
 
   // 获取 QPS 指标
   async getQPSMetrics(): Promise<QPSMetrics> {
-    const response = await axios.get(`${BASE_URL}/dashboard/metrics/qps`)
+    const response = await apiClient.get('/admin/api/dashboard/metrics/qps')
     return response.data.data
   }
 
   // 获取成功率指标
   async getSuccessRateMetrics(): Promise<SuccessRateMetrics> {
-    const response = await axios.get(`${BASE_URL}/dashboard/metrics/success-rate`)
+    const response = await apiClient.get('/admin/api/dashboard/metrics/success-rate')
     return response.data.data
   }
 
   // 获取渠道健康指标
   async getChannelHealthMetrics(): Promise<ChannelHealthMetrics> {
-    const response = await axios.get(`${BASE_URL}/dashboard/metrics/channel-health`)
+    const response = await apiClient.get('/admin/api/dashboard/metrics/channel-health')
     return response.data.data
   }
 }

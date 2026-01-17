@@ -2,7 +2,7 @@
  * 渠道管理 API 客户端
  */
 
-import axios from 'axios'
+import { apiClient } from './api'
 import type {
   Channel,
   Key,
@@ -18,27 +18,6 @@ import type {
   ApplySyncRequest,
   ApplySyncResponse
 } from '../types/channel'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
-
-// 获取认证token
-const getAuthToken = () => {
-  return localStorage.getItem('access_token') || ''
-}
-
-// 创建axios实例
-const apiClient = axios.create({
-  baseURL: API_BASE_URL
-})
-
-// 请求拦截器 - 添加认证token
-apiClient.interceptors.request.use((config) => {
-  const token = getAuthToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
 
 export const channelApi = {
   /**

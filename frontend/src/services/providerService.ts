@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { apiClient } from './api'
 import type {
   Provider,
   CreateProviderRequest,
@@ -6,47 +6,45 @@ import type {
   RemoteProvider,
 } from '@/types/model'
 
-const BASE_URL = '/admin/api/providers'
-
 export const providerApi = {
   // 获取厂商列表
   async list(): Promise<Provider[]> {
-    const response = await axios.get<Provider[]>(BASE_URL)
+    const response = await apiClient.get<Provider[]>('/admin/api/providers')
     return response.data
   },
 
   // 获取单个厂商
   async get(id: string): Promise<Provider> {
-    const response = await axios.get<Provider>(`${BASE_URL}/${id}`)
+    const response = await apiClient.get<Provider>(`/admin/api/providers/${id}`)
     return response.data
   },
 
   // 创建厂商
   async create(data: CreateProviderRequest): Promise<Provider> {
-    const response = await axios.post<Provider>(BASE_URL, data)
+    const response = await apiClient.post<Provider>('/admin/api/providers', data)
     return response.data
   },
 
   // 更新厂商
   async update(id: string, data: UpdateProviderRequest): Promise<Provider> {
-    const response = await axios.put<Provider>(`${BASE_URL}/${id}`, data)
+    const response = await apiClient.put<Provider>(`/admin/api/providers/${id}`, data)
     return response.data
   },
 
   // 删除厂商
   async delete(id: string): Promise<void> {
-    await axios.delete(`${BASE_URL}/${id}`)
+    await apiClient.delete(`/admin/api/providers/${id}`)
   },
 
   // 同步远程厂商数据（调用后端接口）
   async syncRemoteProviders(): Promise<RemoteProvider[]> {
-    const response = await axios.get<RemoteProvider[]>(`${BASE_URL}/sync`)
+    const response = await apiClient.get<RemoteProvider[]>('/admin/api/providers/sync')
     return response.data
   },
 
   // 批量创建厂商
   async batchCreate(providers: CreateProviderRequest[]): Promise<{ created: number; failed: number; data: Provider[] }> {
-    const response = await axios.post<{ created: number; failed: number; data: Provider[] }>(`${BASE_URL}/batch`, providers)
+    const response = await apiClient.post<{ created: number; failed: number; data: Provider[] }>('/admin/api/providers/batch', providers)
     return response.data
   },
 }

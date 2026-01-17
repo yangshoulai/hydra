@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
+	configService "github.com/yangshoulai/hydra/internal/service/config"
 	"github.com/yangshoulai/hydra/internal/service/logger"
 	"github.com/yangshoulai/hydra/internal/service/sniffer"
 )
@@ -30,6 +31,7 @@ type ProxyService struct {
 	circuitManager    *circuit.Manager
 	modelRouter       *ModelRouter
 	auditLogger       *logger.AuditLogger // 审计日志记录器
+	settingService    *configService.SettingService
 }
 
 // ProxyServiceConfig 代理服务配置
@@ -46,6 +48,7 @@ func NewProxyService(
 	circuitManager *circuit.Manager,
 	auditLogger *logger.AuditLogger,
 	config *ProxyServiceConfig,
+	settingService *configService.SettingService,
 ) *ProxyService {
 	loadBalancer := NewLoadBalancer(logger, channelRepo, circuitManager)
 	httpClientConfig := DefaultHTTPClientConfig()
@@ -77,11 +80,22 @@ func NewProxyService(
 		circuitManager:    circuitManager,
 		modelRouter:       NewModelRouter(logger),
 		auditLogger:       auditLogger,
+		settingService:    settingService,
 	}
 }
 
 // ProxyChatCompletions 代理 Chat Completions 请求
 func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
+	return ps.proxyRequest(c, "/v1/chat/completions")
+}
+
+// ProxyResponses 代理 Responses 请求
+func (ps *ProxyService) ProxyResponses(c *gin.Context) error {
+	return ps.proxyRequest(c, "/v1/responses")
+}
+
+// proxyRequest 通用代理请求处理
+func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	ctx := c.Request.Context()
 	startTime := time.Now()
 	traceID := GetTraceIDFromContext(c)
@@ -109,7 +123,8 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 
 	isStream := ps.requestBuilder.IsStreamRequest(bodyBytes)
 
-	ps.logger.Info("processing chat completion request",
+	ps.logger.Info("processing proxy request",
+		slog.String("endpoint", endpoint),
 		slog.String("model", unifiedModel),
 		slog.Bool("stream", isStream),
 	)
@@ -139,7 +154,7 @@ func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
 		}
 
 		// 构建上游请求
-		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, "/v1/chat/completions")
+		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, endpoint)
 		if err != nil {
 			ps.logger.Error("failed to build proxy request", slog.String("error", err.Error()))
 			continue
@@ -404,4 +419,24 @@ func getAccessTokenFromContext(c *gin.Context) string {
 		return token.(string)
 	}
 	return ""
+}
+
+// OnConfigChanged 实现 ConfigListener 接口，响应配置变更
+func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
+	// 只处理 proxy 分类的配置变更
+	if category != "proxy" {
+		return
+	}
+
+	// 从配置服务获取最新的代理配置
+	_, _, _, maxRetry := ps.settingService.GetProxyConfig(ctx)
+	retryDelay := 500 * time.Millisecond // 默认值
+
+	// 更新 RetryCoordinator 的配置
+	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
+
+	ps.logger.Info("proxy service config updated",
+		slog.Int("max_retry", maxRetry),
+		slog.Duration("retry_delay", retryDelay),
+	)
 }

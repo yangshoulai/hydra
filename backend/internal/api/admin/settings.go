@@ -174,59 +174,5 @@ func (h *SettingsHandler) RegisterRoutes(router *gin.RouterGroup) {
 		settings.PUT("", h.UpdateSettings)
 		settings.GET("/:key", h.GetSetting)
 		settings.PUT("/:key", h.UpdateSetting)
-
-		// 明文错误规则专用 API
-		settings.GET("/sniffer/plain-text-rules", h.GetPlainTextErrorRules)
-		settings.PUT("/sniffer/plain-text-rules", h.UpdatePlainTextErrorRules)
 	}
-}
-
-// GetPlainTextErrorRules 获取明文错误规则
-// GET /admin/api/settings/sniffer/plain-text-rules
-func (h *SettingsHandler) GetPlainTextErrorRules(c *gin.Context) {
-	keywords := h.settingService.GetPlainTextErrorRules(c.Request.Context())
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": keywords,
-	})
-}
-
-// UpdatePlainTextErrorRulesRequest 更新明文错误规则请求
-type UpdatePlainTextErrorRulesRequest struct {
-	Keywords []string `json:"keywords" binding:"required"`
-}
-
-// UpdatePlainTextErrorRules 更新明文错误规则
-// PUT /admin/api/settings/sniffer/plain-text-rules
-func (h *SettingsHandler) UpdatePlainTextErrorRules(c *gin.Context) {
-	var req UpdatePlainTextErrorRulesRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
-			"message": err.Error(),
-		})
-		return
-	}
-
-	if err := h.settingService.SetPlainTextErrorRules(c.Request.Context(), req.Keywords); err != nil {
-		h.logger.Error("failed to update plain text error rules",
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update plain text error rules",
-			"message": err.Error(),
-		})
-		return
-	}
-
-	h.logger.Info("plain text error rules updated",
-		slog.Int("count", len(req.Keywords)),
-	)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Plain text error rules updated successfully",
-		"data": gin.H{
-			"count": len(req.Keywords),
-		},
-	})
 }

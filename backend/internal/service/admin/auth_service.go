@@ -29,6 +29,7 @@ type AuthService struct {
 	logger          *slog.Logger
 	adminUserRepo   *repository.AdminUserRepository
 	accessTokenRepo *repository.AccessTokenRepository
+	jwtService      *JWTService
 }
 
 // NewAuthService 创建认证服务
@@ -43,6 +44,7 @@ func NewAuthService(
 		logger:          logger,
 		adminUserRepo:   adminUserRepo,
 		accessTokenRepo: accessTokenRepo,
+		jwtService:      NewJWTService(),
 	}
 }
 
@@ -102,10 +104,10 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 		return nil, ErrInvalidCredentials
 	}
 
-	// 生成访问令牌
-	token, err := s.generateAccessToken(ctx)
+	// 生成 JWT 令牌
+	token, err := s.jwtService.GenerateToken(user.ID, user.Username)
 	if err != nil {
-		s.logger.Error("failed to generate access token",
+		s.logger.Error("failed to generate JWT token",
 			slog.Uint64("user_id", uint64(user.ID)),
 			slog.String("error", err.Error()),
 		)
@@ -287,4 +289,55 @@ func (s *AuthService) GetCurrentUser(ctx context.Context, token string) (*AdminU
 	}
 
 	return nil, errors.New("no active admin user found")
+}
+
+// ChangePasswordRequest 修改密码请求
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=6"`
+}
+
+// ChangePassword 修改密码
+func (s *AuthService) ChangePassword(ctx context.Context, userID uint, req *ChangePasswordRequest) error {
+	// 查询用户
+	user, err := s.adminUserRepo.FindByID(ctx, userID)
+	if err != nil {
+		s.logger.Error("failed to find user",
+			slog.Uint64("user_id", uint64(userID)),
+			slog.String("error", err.Error()),
+		)
+		return fmt.Errorf("failed to find user: %w", err)
+	}
+
+	// 验证旧密码
+	if !user.CheckPassword(req.OldPassword) {
+		s.logger.Warn("invalid old password",
+			slog.Uint64("user_id", uint64(userID)),
+		)
+		return errors.New("invalid old password")
+	}
+
+	// 设置新密码
+	if err := user.SetPassword(req.NewPassword); err != nil {
+		s.logger.Error("failed to hash new password",
+			slog.Uint64("user_id", uint64(userID)),
+			slog.String("error", err.Error()),
+		)
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// 更新用户
+	if err := s.adminUserRepo.Update(ctx, user); err != nil {
+		s.logger.Error("failed to update user password",
+			slog.Uint64("user_id", uint64(userID)),
+			slog.String("error", err.Error()),
+		)
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	s.logger.Info("password changed successfully",
+		slog.Uint64("user_id", uint64(userID)),
+	)
+
+	return nil
 }

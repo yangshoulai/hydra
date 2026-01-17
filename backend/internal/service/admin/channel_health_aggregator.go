@@ -63,6 +63,11 @@ func (cha *ChannelHealthAggregator) AggregateAllChannels(ctx context.Context) ([
 	healthInfos := make([]ChannelHealthInfo, 0, len(channels))
 
 	for _, channel := range channels {
+		// 跳过禁用状态的渠道
+		if channel.Status == "disabled" {
+			continue
+		}
+
 		healthInfo, err := cha.aggregateChannelHealth(ctx, channel)
 		if err != nil {
 			cha.logger.Warn("failed to aggregate channel health",

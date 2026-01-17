@@ -42,8 +42,8 @@ type RequestLog struct {
 	UserAgent       string    `gorm:"type:varchar(500)" json:"user_agent"`
 
 	// 调试信息（仅在调试模式启用时记录）
-	RequestBody     string    `gorm:"type:longtext" json:"request_body,omitempty"`
-	ResponseBody    string    `gorm:"type:longtext" json:"response_body,omitempty"`
+	RequestBody     string    `gorm:"type:text" json:"request_body,omitempty"`
+	ResponseBody    string    `gorm:"type:text" json:"response_body,omitempty"`
 }
 
 // TableName 指定表名

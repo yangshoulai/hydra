@@ -148,6 +148,61 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+// ChangePassword 修改密码
+// @Summary 修改密码
+// @Description 修改当前登录管理员的密码
+// @Tags 认证
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body admin.ChangePasswordRequest true "修改密码请求"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /admin/api/auth/change-password [post]
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	// 从 JWT 中间件设置的上下文中获取用户 ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "unauthorized",
+		})
+		return
+	}
+
+	var req admin.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Warn("invalid change password request",
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request format",
+		})
+		return
+	}
+
+	if err := h.authService.ChangePassword(c.Request.Context(), userID.(uint), &req); err != nil {
+		if err.Error() == "invalid old password" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "当前密码不正确",
+			})
+			return
+		}
+
+		h.logger.Error("failed to change password",
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to change password",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "password changed successfully",
+	})
+}
+
 // RegisterRoutes 注册认证路由
 func (h *AuthHandler) RegisterRoutes(r *gin.RouterGroup) {
 	auth := r.Group("/auth")
@@ -155,6 +210,7 @@ func (h *AuthHandler) RegisterRoutes(r *gin.RouterGroup) {
 		auth.POST("/login", h.Login)
 		auth.POST("/logout", h.Logout)
 		auth.GET("/me", h.Me)
+		auth.POST("/change-password", h.ChangePassword)
 	}
 }
 

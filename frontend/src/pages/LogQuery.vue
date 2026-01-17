@@ -8,13 +8,24 @@
         :columns="columns"
         :data="logs"
         :loading="loading"
-        :pagination="pagination"
+        :pagination="false"
         :row-key="(row: RequestLog) => row.id"
         :row-props="rowProps"
         :scroll-x="1680"
         :single-line="false"
         striped
     />
+    <div class="flex justify-end">
+      <n-pagination
+          :page="pagination.page"
+          :on-update-page="pagination.onChange"
+          :on-page-size-change="pagination.onUpdatePageSize"
+          :page-size="pagination.pageSize"
+          :item-count="pagination.itemCount"
+          :page-sizes="pagination.pageSizes"
+          :show-size-picker="pagination.showSizePicker"
+      />
+    </div>
   </div>
 
   <!-- 日志详情抽屉 -->
@@ -26,7 +37,7 @@
 
 <script setup lang="ts">
 import {h, onMounted, reactive, ref} from 'vue'
-import {type DataTableColumns, NButton, NDataTable, NTag, NText, NTime} from 'naive-ui'
+import {type DataTableColumns, NButton, NDataTable, NPagination, NTag, NText, NTime} from 'naive-ui'
 import {EyeOutline} from '@vicons/ionicons5'
 import {logApi} from '../services/logService'
 import type {LogQueryRequest, RequestLog} from '../types/log'
@@ -46,7 +57,7 @@ const currentFilters = ref<LogQueryRequest>({})
 const pagination = reactive({
   page: 1,
   pageSize: 20,
-  total: 0,
+  itemCount: 1,
   showSizePicker: true,
   pageSizes: [10, 20, 50, 100],
   onChange: (page: number) => {
@@ -218,10 +229,9 @@ async function fetchLogs() {
       page_size: pagination.pageSize,
       ...currentFilters.value
     }
-
     const result = await logApi.query(params)
     logs.value = result.logs
-    pagination.total = result.total
+    pagination.itemCount = result.total
   } catch (error: any) {
     console.error('Failed to fetch logs:', error)
     window.$message?.error(error.response?.data?.error || '获取日志失败')

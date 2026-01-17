@@ -13,8 +13,8 @@ import (
 
 // Initializer 系统设置初始化器
 type Initializer struct {
-	logger             *slog.Logger
-	systemSettingRepo  *repository.SystemSettingRepository
+	logger            *slog.Logger
+	systemSettingRepo *repository.SystemSettingRepository
 }
 
 // NewInitializer 创建系统设置初始化器
@@ -43,11 +43,18 @@ var DefaultSettings = []models.SystemSetting{
 		Remark:    "熔断器冷却时长(秒)",
 	},
 	{
-		Key:       models.SettingCircuitBreakerMaxRetry,
-		Value:     "3",
+		Key:       models.SettingCircuitBreakerProbeInterval,
+		Value:     "30",
 		ValueType: "int",
 		Category:  "circuit_breaker",
-		Remark:    "最大重试次数",
+		Remark:    "探测间隔(秒)",
+	},
+	{
+		Key:       models.SettingCircuitBreakerProbeMaxConcurrent,
+		Value:     "10",
+		ValueType: "int",
+		Category:  "circuit_breaker",
+		Remark:    "最大并发探测数",
 	},
 	// 日志设置
 	{
@@ -85,6 +92,13 @@ var DefaultSettings = []models.SystemSetting{
 		ValueType: "int",
 		Category:  "proxy",
 		Remark:    "最大并发请求数",
+	},
+	{
+		Key:       models.SettingProxyMaxRetry,
+		Value:     "3",
+		ValueType: "int",
+		Category:  "proxy",
+		Remark:    "最大重试次数",
 	},
 }
 

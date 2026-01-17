@@ -209,14 +209,16 @@ func (s *SettingService) getCategoryByKey(key string) string {
 	switch {
 	case key == models.SettingCircuitBreakerFailureThreshold ||
 		key == models.SettingCircuitBreakerCoolingDuration ||
-		key == models.SettingCircuitBreakerMaxRetry:
+		key == models.SettingCircuitBreakerProbeInterval ||
+		key == models.SettingCircuitBreakerProbeMaxConcurrent:
 		return "circuit_breaker"
 	case key == models.SettingLogRetentionDays ||
 		key == models.SettingLogDebugEnabled:
 		return "logging"
 	case key == models.SettingProxyRequestTimeout ||
 		key == models.SettingProxyMaxResponseSize ||
-		key == models.SettingProxyMaxConcurrent:
+		key == models.SettingProxyMaxConcurrent ||
+		key == models.SettingProxyMaxRetry:
 		return "proxy"
 	case key == models.SettingSnifferPlainTextErrorRules:
 		return "sniffer"
@@ -247,10 +249,9 @@ func (s *SettingService) InvalidateAllCache() {
 }
 
 // GetCircuitBreakerConfig 获取熔断器配置
-func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureThreshold int, coolingDuration time.Duration, maxRetry int) {
+func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureThreshold int, coolingDuration time.Duration) {
 	failureThreshold = s.GetInt(ctx, models.SettingCircuitBreakerFailureThreshold, 3)
 	coolingDuration = s.GetDuration(ctx, models.SettingCircuitBreakerCoolingDuration, 5*time.Minute)
-	maxRetry = s.GetInt(ctx, models.SettingCircuitBreakerMaxRetry, 3)
 	return
 }
 
@@ -262,10 +263,11 @@ func (s *SettingService) GetLogConfig(ctx context.Context) (retentionDays int, d
 }
 
 // GetProxyConfig 获取代理配置
-func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, maxResponseSize int, maxConcurrent int) {
+func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, maxResponseSize int, maxConcurrent int, maxRetry int) {
 	requestTimeout = s.GetDuration(ctx, models.SettingProxyRequestTimeout, 120*time.Second)
 	maxResponseSize = s.GetInt(ctx, models.SettingProxyMaxResponseSize, 10*1024*1024)
 	maxConcurrent = s.GetInt(ctx, models.SettingProxyMaxConcurrent, 1000)
+	maxRetry = s.GetInt(ctx, models.SettingProxyMaxRetry, 3)
 	return
 }
 

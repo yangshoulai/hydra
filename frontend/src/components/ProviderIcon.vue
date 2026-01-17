@@ -1,10 +1,10 @@
 <template>
   <div class="provider-icon">
     <img
-      v-if="iconURL"
-      :src="iconURL"
-      :alt="alt"
-      :style="{
+        v-if="iconURL"
+        :src="iconURL"
+        :alt="alt"
+        :style="{
         width: size + 'px',
         height: size + 'px',
         objectFit: 'contain'

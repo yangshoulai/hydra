@@ -10,14 +10,9 @@ import (
 
 // Config 系统配置结构
 type Config struct {
-	Server         ServerConfig         `mapstructure:"server"`
-	Database       DatabaseConfig       `mapstructure:"database"`
-	Log            LogConfig            `mapstructure:"log"`
-	CircuitBreaker CircuitBreakerConfig `mapstructure:"circuit_breaker"`
-	Sniffer        SnifferConfig        `mapstructure:"sniffer"`
-	Proxy          ProxyConfig          `mapstructure:"proxy"`
-	Admin          AdminConfig          `mapstructure:"admin"`
-	CORS           CORSConfig           `mapstructure:"cors"`
+	Server   ServerConfig   `mapstructure:"server"`
+	Database DatabaseConfig `mapstructure:"database"`
+	Log      LogConfig      `mapstructure:"log"`
 }
 
 // ServerConfig HTTP 服务器配置
@@ -40,10 +35,10 @@ type DatabaseConfig struct {
 
 // LogConfig 日志配置
 type LogConfig struct {
-	Level          string    `mapstructure:"level"`
-	RetentionDays  int       `mapstructure:"retention_days"`
-	DebugEnabled   bool      `mapstructure:"debug_enabled"`
-	File           FileConfig `mapstructure:"file"`
+	Level         string     `mapstructure:"level"`
+	RetentionDays int        `mapstructure:"retention_days"`
+	DebugEnabled  bool       `mapstructure:"debug_enabled"`
+	File          FileConfig `mapstructure:"file"`
 }
 
 // FileConfig 文件日志配置
@@ -58,9 +53,9 @@ type FileConfig struct {
 
 // CircuitBreakerConfig 熔断器配置
 type CircuitBreakerConfig struct {
-	FailureThreshold    int `mapstructure:"failure_threshold"`
-	CoolingDurationSec  int `mapstructure:"cooling_duration_sec"`
-	MaxRetry            int `mapstructure:"max_retry"`
+	FailureThreshold   int `mapstructure:"failure_threshold"`
+	CoolingDurationSec int `mapstructure:"cooling_duration_sec"`
+	MaxRetry           int `mapstructure:"max_retry"`
 }
 
 // SnifferConfig 响应嗅探器配置
@@ -77,11 +72,11 @@ type ProxyConfig struct {
 
 // AdminConfig 管理后台配置
 type AdminConfig struct {
-	SessionSecret   string `mapstructure:"session_secret"`
-	SessionMaxAge   int    `mapstructure:"session_max_age"`
-	CookieSecure    bool   `mapstructure:"cookie_secure"`
-	CookieHTTPOnly  bool   `mapstructure:"cookie_http_only"`
-	CookieSameSite  string `mapstructure:"cookie_same_site"`
+	SessionSecret  string `mapstructure:"session_secret"`
+	SessionMaxAge  int    `mapstructure:"session_max_age"`
+	CookieSecure   bool   `mapstructure:"cookie_secure"`
+	CookieHTTPOnly bool   `mapstructure:"cookie_http_only"`
+	CookieSameSite string `mapstructure:"cookie_same_site"`
 }
 
 // CORSConfig CORS 配置
@@ -223,17 +218,6 @@ func validate(cfg *Config) error {
 	validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 	if !validLogLevels[cfg.Log.Level] {
 		return fmt.Errorf("invalid log level: %s (must be 'debug', 'info', 'warn', or 'error')", cfg.Log.Level)
-	}
-
-	// 验证熔断器配置
-	if cfg.CircuitBreaker.FailureThreshold < 1 {
-		return fmt.Errorf("circuit_breaker.failure_threshold must be >= 1")
-	}
-	if cfg.CircuitBreaker.CoolingDurationSec < 1 {
-		return fmt.Errorf("circuit_breaker.cooling_duration_sec must be >= 1")
-	}
-	if cfg.CircuitBreaker.MaxRetry < 1 {
-		return fmt.Errorf("circuit_breaker.max_retry must be >= 1")
 	}
 
 	return nil

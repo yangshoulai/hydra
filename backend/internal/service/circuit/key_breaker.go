@@ -9,10 +9,10 @@ import (
 type KeyState string
 
 const (
-	KeyStateActive   KeyState = "active"     // 正常状态
-	KeyStateDead     KeyState = "dead"       // 永久禁用(硬故障)
-	KeyStateCooling  KeyState = "cooling"    // 冷却中(软故障)
-	KeyStateHalfOpen KeyState = "half_open"  // 半开状态(探测恢复)
+	KeyStateActive   KeyState = "active"    // 正常状态
+	KeyStateDead     KeyState = "dead"      // 永久禁用(硬故障)
+	KeyStateCooling  KeyState = "cooling"   // 冷却中(软故障)
+	KeyStateHalfOpen KeyState = "half_open" // 半开状态(探测恢复)
 )
 
 // KeyBreaker Key 级别熔断器

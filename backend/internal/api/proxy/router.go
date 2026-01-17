@@ -7,8 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/repository"
-	configService "github.com/yangshoulai/hydra/internal/service/config"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
+	configService "github.com/yangshoulai/hydra/internal/service/config"
 	"github.com/yangshoulai/hydra/internal/service/logger"
 	"github.com/yangshoulai/hydra/internal/service/proxy"
 	"gorm.io/gorm"
@@ -29,11 +29,16 @@ func RegisterRoutes(
 	modelRepo := repository.NewModelRepository(db, logger)
 	accessTokenRepo := repository.NewAccessTokenRepository(db)
 
-	// 创建代理服务
-	proxySvc := proxy.NewProxyService(logger, channelRepo, circuitManager, auditLogger, proxyServiceConfig)
+	// 创建代理服务（传入 settingService 以支持配置热更新）
+	proxySvc := proxy.NewProxyService(logger, channelRepo, circuitManager, auditLogger, proxyServiceConfig, settingService)
 
-	// 注册到 SnifferManager 以支持热更新
-	configService.GetSnifferManager().RegisterUpdater(proxySvc)
+	// 注册 ProxyService 为配置监听器
+	settingService.RegisterListener(proxySvc)
+
+	// 配置 SnifferManager 以支持热更新
+	snifferManager := configService.GetSnifferManager()
+	snifferManager.SetSettingService(settingService)
+	snifferManager.RegisterUpdater(proxySvc)
 
 	// 从系统设置加载明文错误规则
 	ctx := context.Background()
@@ -47,6 +52,7 @@ func RegisterRoutes(
 
 	// 创建 handlers
 	chatCompletionsHandler := NewChatCompletionsHandler(logger, proxySvc)
+	responsesHandler := NewResponsesHandler(logger, proxySvc)
 	modelsHandler := NewModelsHandler(logger, modelRepo)
 
 	// 创建 v1 路由组
@@ -59,11 +65,12 @@ func RegisterRoutes(
 
 		// 注册路由
 		v1.POST("/chat/completions", chatCompletionsHandler.Handle)
+		v1.POST("/responses", responsesHandler.Handle)
 		v1.GET("/models", modelsHandler.Handle)
 	}
 
 	logger.Info("proxy routes registered",
 		slog.String("prefix", "/v1"),
-		slog.Int("routes_count", 2),
+		slog.Int("routes_count", 3),
 	)
 }

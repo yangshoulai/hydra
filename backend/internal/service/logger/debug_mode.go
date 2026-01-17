@@ -3,15 +3,11 @@ package logger
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"strconv"
+	"sync"
 
+	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/service/config"
-)
-
-const (
-	// DebugModeKey 调试模式系统设置键
-	DebugModeKey = "debug_mode"
 )
 
 // DebugModeManager 调试模式管理器
@@ -42,8 +38,8 @@ func (m *DebugModeManager) Initialize(ctx context.Context) error {
 	defer m.mu.Unlock()
 
 	// 从系统设置读取调试模式配置
-	debugModeStr := m.settingService.GetString(ctx, DebugModeKey, "false")
-	
+	debugModeStr := m.settingService.GetString(ctx, models.SettingLogDebugEnabled, "false")
+
 	enabled, err := strconv.ParseBool(debugModeStr)
 	if err != nil {
 		m.logger.Warn("failed to parse debug mode from settings, using default",
@@ -78,7 +74,7 @@ func (m *DebugModeManager) SetEnabled(ctx context.Context, enabled bool) error {
 
 	// 更新系统设置
 	value := strconv.FormatBool(enabled)
-	if err := m.settingService.Set(ctx, DebugModeKey, value); err != nil {
+	if err := m.settingService.Set(ctx, models.SettingLogDebugEnabled, value); err != nil {
 		m.logger.Error("failed to update debug mode in settings",
 			slog.Bool("enabled", enabled),
 			slog.String("error", err.Error()),
@@ -125,4 +121,42 @@ func (m *DebugModeManager) OnChange(callback func(enabled bool)) {
 	m.logger.Debug("debug mode change callback registered",
 		slog.Int("total_callbacks", len(m.onChangeCallbacks)),
 	)
+}
+
+// OnConfigChanged 实现 ConfigListener 接口，响应配置变更
+func (m *DebugModeManager) OnConfigChanged(ctx context.Context, category string) {
+	// 只处理 logging 类别的配置变更
+	if category != "logging" {
+		return
+	}
+
+	// 从设置服务获取最新的调试模式状态
+	debugModeStr := m.settingService.GetString(ctx, models.SettingLogDebugEnabled, "false")
+	enabled, err := strconv.ParseBool(debugModeStr)
+	if err != nil {
+		m.logger.Warn("failed to parse debug mode from config change",
+			slog.String("value", debugModeStr),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+
+	// 更新内存状态
+	m.mu.Lock()
+	oldEnabled := m.enabled
+	m.enabled = enabled
+	m.mu.Unlock()
+
+	// 如果状态有变化，记录日志并通知所有监听器
+	if oldEnabled != enabled {
+		m.logger.Info("debug mode updated via config change",
+			slog.Bool("old_enabled", oldEnabled),
+			slog.Bool("new_enabled", enabled),
+		)
+
+		// 通知所有监听器
+		for _, callback := range m.onChangeCallbacks {
+			go callback(enabled)
+		}
+	}
 }

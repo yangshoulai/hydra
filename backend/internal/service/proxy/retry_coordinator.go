@@ -3,15 +3,17 @@ package proxy
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 )
 
 // RetryCoordinator 重试协调器,控制最大重试次数
 type RetryCoordinator struct {
-	logger          *slog.Logger
-	maxRetries      int           // 最大重试次数
-	retryDelay      time.Duration // 重试延迟
+	logger            *slog.Logger
+	maxRetries        int           // 最大重试次数
+	retryDelay        time.Duration // 重试延迟
 	failureClassifier *FailureClassifier
+	mu                sync.RWMutex  // 保护配置更新的锁
 }
 
 // NewRetryCoordinator 创建重试协调器
@@ -48,11 +50,15 @@ func (rc *RetryCoordinator) ShouldRetry(retryCtx *RetryContext) bool {
 		return false
 	}
 
+	rc.mu.RLock()
+	maxRetries := rc.maxRetries
+	rc.mu.RUnlock()
+
 	// 检查是否超过最大重试次数
-	if retryCtx.AttemptCount >= rc.maxRetries {
+	if retryCtx.AttemptCount >= maxRetries {
 		rc.logger.Warn("max retries exceeded",
 			slog.Int("attempt_count", retryCtx.AttemptCount),
-			slog.Int("max_retries", rc.maxRetries),
+			slog.Int("max_retries", maxRetries),
 		)
 		return false
 	}
@@ -167,5 +173,27 @@ func (rc *RetryCoordinator) HasMoreRetries(retryCtx *RetryContext) bool {
 	if retryCtx == nil {
 		return false
 	}
-	return retryCtx.AttemptCount < rc.maxRetries
+	rc.mu.RLock()
+	maxRetries := rc.maxRetries
+	rc.mu.RUnlock()
+	return retryCtx.AttemptCount < maxRetries
+}
+
+// UpdateConfig 更新重试配置
+func (rc *RetryCoordinator) UpdateConfig(maxRetries int, retryDelay time.Duration) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	oldMaxRetries := rc.maxRetries
+	oldRetryDelay := rc.retryDelay
+
+	rc.maxRetries = maxRetries
+	rc.retryDelay = retryDelay
+
+	rc.logger.Info("retry coordinator config updated",
+		slog.Int("old_max_retries", oldMaxRetries),
+		slog.Int("new_max_retries", maxRetries),
+		slog.Duration("old_retry_delay", oldRetryDelay),
+		slog.Duration("new_retry_delay", retryDelay),
+	)
 }

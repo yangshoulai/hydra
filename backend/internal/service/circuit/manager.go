@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/config"
 	"gorm.io/gorm"
@@ -390,10 +391,10 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 	}
 
 	// 从配置服务获取最新的熔断器配置
-	failureThreshold := m.settingService.GetInt(ctx, "circuit_breaker_failure_threshold", m.failureThreshold)
-	coolingDuration := m.settingService.GetDuration(ctx, "circuit_breaker_cooling_duration", m.coolingDuration)
-	probeInterval := m.settingService.GetDuration(ctx, "circuit_breaker_probe_interval", m.probeInterval)
-	probeMaxConcurrent := m.settingService.GetInt(ctx, "circuit_breaker_probe_max_concurrent", m.probeMaxConcurrent)
+	failureThreshold := m.settingService.GetInt(ctx, models.SettingCircuitBreakerFailureThreshold, m.failureThreshold)
+	coolingDuration := m.settingService.GetDuration(ctx, models.SettingCircuitBreakerCoolingDuration, m.coolingDuration)
+	probeInterval := m.settingService.GetDuration(ctx, models.SettingCircuitBreakerProbeInterval, m.probeInterval)
+	probeMaxConcurrent := m.settingService.GetInt(ctx, models.SettingCircuitBreakerProbeMaxConcurrent, m.probeMaxConcurrent)
 
 	m.mu.Lock()
 

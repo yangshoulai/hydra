@@ -66,6 +66,9 @@
       </n-layout-content>
     </n-layout>
   </n-layout>
+
+  <!-- 修改密码对话框 -->
+  <ChangePasswordDialog v-model:show="showChangePasswordDialog"/>
 </template>
 
 <script setup lang="ts">
@@ -80,14 +83,17 @@ import {
   KeyOutline,
   ListOutline,
   LogOutOutline as LogOutIcon,
+  LockClosedOutline,
   PersonOutline,
   SettingsOutline,
 } from '@vicons/ionicons5'
+import ChangePasswordDialog from '../components/ChangePasswordDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
 
 const collapsed = ref(false)
+const showChangePasswordDialog = ref(false)
 
 // 当前路由
 const currentRoute = computed(() => route.name as string)
@@ -134,6 +140,11 @@ const menuOptions = computed<MenuOption[]>(() => [
 // 用户菜单选项
 const userMenuOptions = [
   {
+    label: '修改密码',
+    key: 'change-password',
+    icon: () => h(NIcon, null, {default: () => h(LockClosedOutline)}),
+  },
+  {
     label: '退出登录',
     key: 'logout',
     icon: () => h(NIcon, null, {default: () => h(LogOutIcon)}),
@@ -150,6 +161,8 @@ const handleUserMenuSelect = (key: string) => {
   if (key === 'logout') {
     localStorage.removeItem('access_token')
     router.push({name: 'Login'})
+  } else if (key === 'change-password') {
+    showChangePasswordDialog.value = true
   }
 }
 </script>

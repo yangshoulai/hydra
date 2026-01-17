@@ -34,7 +34,7 @@
     <n-data-table
         :columns="columns"
         :data="providers"
-        :pagination="false"
+        :pagination="pagination"
         :bordered="true"
         striped
         :single-line="false"
@@ -72,85 +72,87 @@
             label-placement="top"
             size="large"
         >
-          <n-form-item label="厂商ID" path="id">
-            <n-input
-                v-model:value="createForm.id"
-                placeholder="请输入厂商ID，如：openai"
-                @input="createForm.id = createForm.id.toLowerCase()"
-            >
-              <template #prefix>
-                <n-icon>
-                  <KeyOutline/>
-                </n-icon>
+          <n-space vertical :size="12">
+            <n-form-item label="厂商ID" path="id">
+              <n-input
+                  v-model:value="createForm.id"
+                  placeholder="请输入厂商ID，如：openai"
+                  @input="createForm.id = createForm.id.toLowerCase()"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <KeyOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                厂商的唯一标识符，自动转换为小写
               </template>
-            </n-input>
-            <template #feedback>
-              厂商的唯一标识符，自动转换为小写
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="厂商名称" path="name">
-            <n-input
-                v-model:value="createForm.name"
-                placeholder="请输入厂商名称，如：OpenAI"
-            >
-              <template #prefix>
-                <n-icon>
-                  <BuildOutline/>
-                </n-icon>
+            <n-form-item label="厂商名称" path="name">
+              <n-input
+                  v-model:value="createForm.name"
+                  placeholder="请输入厂商名称，如：OpenAI"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <BuildOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                厂商的显示名称
               </template>
-            </n-input>
-            <template #feedback>
-              厂商的显示名称
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="图标 URL" path="icon">
-            <n-input
-                v-model:value="createForm.icon"
-                placeholder="请输入图标 URL（可选）"
-            >
-              <template #prefix>
-                <n-icon>
-                  <ImageOutline/>
-                </n-icon>
+            <n-form-item label="图标 URL" path="icon">
+              <n-input
+                  v-model:value="createForm.icon"
+                  placeholder="请输入图标 URL（可选）"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <ImageOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                厂商的图标 URL 地址
               </template>
-            </n-input>
-            <template #feedback>
-              厂商的图标 URL 地址
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="Lobe 图标" path="lobeIcon">
-            <n-input
-                v-model:value="createForm.lobeIcon"
-                placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"
-            >
-              <template #prefix>
-                <n-icon>
-                  <BuildOutline/>
-                </n-icon>
+            <n-form-item label="Lobe 图标" path="lobeIcon">
+              <n-input
+                  v-model:value="createForm.lobeIcon"
+                  placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <BuildOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                使用 LobeChat 图标组件的名称
               </template>
-            </n-input>
-            <template #feedback>
-              使用 LobeChat 图标组件的名称
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="备注" path="remark">
-            <n-input
-                v-model:value="createForm.remark"
-                type="textarea"
-                placeholder="请输入备注（可选）"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-            >
-              <template #prefix>
-                <n-icon>
-                  <TextOutline/>
-                </n-icon>
-              </template>
-            </n-input>
-          </n-form-item>
+            <n-form-item label="备注" path="remark">
+              <n-input
+                  v-model:value="createForm.remark"
+                  type="textarea"
+                  placeholder="请输入备注（可选）"
+                  :autosize="{ minRows: 3, maxRows: 6 }"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <TextOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+            </n-form-item>
+          </n-space>
         </n-form>
       </n-space>
 
@@ -201,84 +203,86 @@
             label-placement="top"
             size="large"
         >
-          <n-form-item label="厂商ID">
-            <n-input
-                :value="currentEditProvider?.id"
-                disabled
-            >
-              <template #prefix>
-                <n-icon>
-                  <KeyOutline/>
-                </n-icon>
+          <n-space vertical :size="12">
+            <n-form-item label="厂商ID">
+              <n-input
+                  :value="currentEditProvider?.id"
+                  disabled
+              >
+                <template #prefix>
+                  <n-icon>
+                    <KeyOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                厂商ID不可修改
               </template>
-            </n-input>
-            <template #feedback>
-              厂商ID不可修改
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="厂商名称" path="name">
-            <n-input
-                v-model:value="editForm.name"
-                placeholder="请输入厂商名称"
-            >
-              <template #prefix>
-                <n-icon>
-                  <BuildOutline/>
-                </n-icon>
+            <n-form-item label="厂商名称" path="name">
+              <n-input
+                  v-model:value="editForm.name"
+                  placeholder="请输入厂商名称"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <BuildOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                厂商的显示名称
               </template>
-            </n-input>
-            <template #feedback>
-              厂商的显示名称
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="图标 URL" path="icon">
-            <n-input
-                v-model:value="editForm.icon"
-                placeholder="请输入图标 URL（可选）"
-            >
-              <template #prefix>
-                <n-icon>
-                  <ImageOutline/>
-                </n-icon>
+            <n-form-item label="图标 URL" path="icon">
+              <n-input
+                  v-model:value="editForm.icon"
+                  placeholder="请输入图标 URL（可选）"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <ImageOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                厂商的图标 URL 地址
               </template>
-            </n-input>
-            <template #feedback>
-              厂商的图标 URL 地址
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="Lobe 图标" path="lobeIcon">
-            <n-input
-                v-model:value="editForm.lobeIcon"
-                placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"
-            >
-              <template #prefix>
-                <n-icon>
-                  <BuildOutline/>
-                </n-icon>
+            <n-form-item label="Lobe 图标" path="lobeIcon">
+              <n-input
+                  v-model:value="editForm.lobeIcon"
+                  placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <BuildOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                使用 LobeChat 图标组件的名称
               </template>
-            </n-input>
-            <template #feedback>
-              使用 LobeChat 图标组件的名称
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="备注" path="remark">
-            <n-input
-                v-model:value="editForm.remark"
-                type="textarea"
-                placeholder="请输入备注（可选）"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-            >
-              <template #prefix>
-                <n-icon>
-                  <TextOutline/>
-                </n-icon>
-              </template>
-            </n-input>
-          </n-form-item>
+            <n-form-item label="备注" path="remark">
+              <n-input
+                  v-model:value="editForm.remark"
+                  type="textarea"
+                  placeholder="请输入备注（可选）"
+                  :autosize="{ minRows: 3, maxRows: 6 }"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <TextOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+            </n-form-item>
+          </n-space>
         </n-form>
       </n-space>
 
@@ -607,6 +611,20 @@ const columns: DataTableColumns<Provider> = [
     }
   }
 ]
+
+const pagination = reactive({
+  page: 1,
+  pageSize: 10,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50],
+  onChange: (page: number) => {
+    pagination.page = page
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    pagination.pageSize = pageSize
+    pagination.page = 1
+  }
+})
 
 // 同步对话框表格列
 const syncColumns: DataTableColumns<RemoteProvider> = [

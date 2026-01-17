@@ -47,6 +47,7 @@ logs/
 .env
 .env.*
 !.env.example
+!.env.production
 
 # Database (should not be in image)
 *.db

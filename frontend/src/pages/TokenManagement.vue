@@ -23,6 +23,7 @@
     <n-data-table
         :columns="columns"
         :data="tokens"
+        :pagination="pagination"
         :scroll-x="1680"
         :single-line="false"
         striped
@@ -61,66 +62,68 @@
             label-placement="top"
             size="large"
         >
-          <n-form-item label="令牌名称" path="name">
-            <n-input
-                v-model:value="formData.name"
-                placeholder="请输入令牌名称（用于识别此令牌的用途）"
-                maxlength="20"
-                show-count
-            >
-              <template #prefix>
-                <n-icon>
-                  <TextOutline/>
-                </n-icon>
+          <n-space vertical :size="12">
+            <n-form-item label="令牌名称" path="name">
+              <n-input
+                  v-model:value="formData.name"
+                  placeholder="请输入令牌名称（用于识别此令牌的用途）"
+                  maxlength="20"
+                  show-count
+              >
+                <template #prefix>
+                  <n-icon>
+                    <TextOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                为令牌取一个易于识别的名称，便于管理
               </template>
-            </n-input>
-            <template #feedback>
-              为令牌取一个易于识别的名称，便于管理
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="过期时间" path="expires_at">
-            <n-radio-group v-model:value="expireType" @update:value="handleExpireTypeChange">
-              <n-space vertical :size="12">
-                <n-radio value="never" class="radio-item">
-                  <n-space align="center">
-                    <n-icon size="18">
-                      <InfiniteOutline/>
-                    </n-icon>
-                    永不过期
-                  </n-space>
-                </n-radio>
-                <n-radio value="custom" class="radio-item">
-                  <n-space align="center">
-                    <n-icon size="18">
-                      <CalendarOutline/>
-                    </n-icon>
-                    自定义过期时间
-                  </n-space>
-                </n-radio>
-              </n-space>
-            </n-radio-group>
-          </n-form-item>
+            <n-form-item label="过期时间" path="expires_at">
+              <n-radio-group v-model:value="expireType" @update:value="handleExpireTypeChange">
+                <n-space vertical :size="12">
+                  <n-radio value="never" class="radio-item">
+                    <n-space align="center">
+                      <n-icon size="18">
+                        <InfiniteOutline/>
+                      </n-icon>
+                      永不过期
+                    </n-space>
+                  </n-radio>
+                  <n-radio value="custom" class="radio-item">
+                    <n-space align="center">
+                      <n-icon size="18">
+                        <CalendarOutline/>
+                      </n-icon>
+                      自定义过期时间
+                    </n-space>
+                  </n-radio>
+                </n-space>
+              </n-radio-group>
+            </n-form-item>
 
-          <n-form-item v-if="expireType === 'custom'" label="选择过期时间" path="expires_at">
-            <n-date-picker
-                v-model:value="expiresAtValue"
-                type="datetime"
-                placeholder="请选择过期时间"
-                :is-date-disabled="isDateDisabled"
-                :time-picker-props="{ format: 'HH:mm:ss' }"
-                style="width: 100%"
-            >
-              <template #date-icon>
-                <n-icon>
-                  <CalendarOutline/>
-                </n-icon>
+            <n-form-item v-if="expireType === 'custom'" label="选择过期时间" path="expires_at">
+              <n-date-picker
+                  v-model:value="expiresAtValue"
+                  type="datetime"
+                  placeholder="请选择过期时间"
+                  :is-date-disabled="isDateDisabled"
+                  :time-picker-props="{ format: 'HH:mm:ss' }"
+                  style="width: 100%"
+              >
+                <template #date-icon>
+                  <n-icon>
+                    <CalendarOutline/>
+                  </n-icon>
+                </template>
+              </n-date-picker>
+              <template #feedback>
+                选择令牌的过期时间，过期后令牌将无法使用
               </template>
-            </n-date-picker>
-            <template #feedback>
-              选择令牌的过期时间，过期后令牌将无法使用
-            </template>
-          </n-form-item>
+            </n-form-item>
+          </n-space>
         </n-form>
       </n-space>
 
@@ -230,7 +233,7 @@
 </template>
 
 <script setup lang="ts">
-import {h, onMounted, ref} from 'vue'
+import {h, onMounted, reactive, ref} from 'vue'
 import {
   type DataTableColumns,
   NAlert,
@@ -436,6 +439,19 @@ const columns: DataTableColumns<Token> = [
   },
 ]
 
+const pagination = reactive({
+  page: 1,
+  pageSize: 10,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50],
+  onChange: (page: number) => {
+    pagination.page = page
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    pagination.pageSize = pageSize
+    pagination.page = 1
+  }
+})
 
 // 加载令牌列表
 const loadTokens = async () => {
@@ -527,7 +543,7 @@ const handleCopyAndClose = async () => {
 // 从列表复制脱敏令牌
 const handleCopyTokenFromList = async (token: Token) => {
   try {
-    await navigator.clipboard.writeText(token.token_preview)
+    await navigator.clipboard.writeText(token.token)
     message.success('令牌已复制')
   } catch (error) {
     console.error('Failed to copy token:', error)

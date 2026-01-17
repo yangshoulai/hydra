@@ -24,7 +24,7 @@
     <n-data-table
         :columns="columns"
         :data="models"
-        :pagination="false"
+        :pagination="pagination"
         :bordered="true"
         striped
         :single-line="false"
@@ -62,56 +62,58 @@
             label-placement="top"
             size="large"
         >
-          <n-form-item label="模型名称" path="name">
-            <n-input
-                v-model:value="createForm.name"
-                placeholder="请输入模型名称，如：gpt-4"
-                @input="createForm.name = createForm.name.toLowerCase()"
-            >
-              <template #prefix>
-                <n-icon>
-                  <CodeOutline/>
-                </n-icon>
+          <n-space vertical :size="12">
+            <n-form-item label="模型名称" path="name">
+              <n-input
+                  v-model:value="createForm.name"
+                  placeholder="请输入模型名称，如：gpt-4"
+                  @input="createForm.name = createForm.name.toLowerCase()"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <CodeOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                统一的模型标识名称，自动转换为小写
               </template>
-            </n-input>
-            <template #feedback>
-              统一的模型标识名称，自动转换为小写
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="厂商" path="provider_id">
-            <n-select
-                v-model:value="createForm.provider_id"
-                :options="providerOptions"
-                placeholder="请选择厂商"
-                :loading="loadingProviders"
-                filterable
-            >
-              <template #prefix>
-                <n-icon>
-                  <BuildOutline/>
-                </n-icon>
+            <n-form-item label="厂商" path="provider_id">
+              <n-select
+                  v-model:value="createForm.provider_id"
+                  :options="providerOptions"
+                  placeholder="请选择厂商"
+                  :loading="loadingProviders"
+                  filterable
+              >
+                <template #prefix>
+                  <n-icon>
+                    <BuildOutline/>
+                  </n-icon>
+                </template>
+              </n-select>
+              <template #feedback>
+                选择模型所属的厂商或提供商
               </template>
-            </n-select>
-            <template #feedback>
-              选择模型所属的厂商或提供商
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="备注" path="remark">
-            <n-input
-                v-model:value="createForm.remark"
-                type="textarea"
-                placeholder="请输入备注（可选）"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-            >
-              <template #prefix>
-                <n-icon>
-                  <TextOutline/>
-                </n-icon>
-              </template>
-            </n-input>
-          </n-form-item>
+            <n-form-item label="备注" path="remark">
+              <n-input
+                  v-model:value="createForm.remark"
+                  type="textarea"
+                  placeholder="请输入备注（可选）"
+                  :autosize="{ minRows: 3, maxRows: 6 }"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <TextOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+            </n-form-item>
+          </n-space>
         </n-form>
       </n-space>
 
@@ -162,56 +164,58 @@
             label-placement="top"
             size="large"
         >
-          <n-form-item label="模型名称" path="name">
-            <n-input
-                v-model:value="editForm.name"
-                placeholder="请输入模型名称"
-                @input="editForm.name = editForm.name?.toLowerCase()"
-            >
-              <template #prefix>
-                <n-icon>
-                  <CodeOutline/>
-                </n-icon>
+          <n-space vertical :size="12">
+            <n-form-item label="模型名称" path="name">
+              <n-input
+                  v-model:value="editForm.name"
+                  placeholder="请输入模型名称"
+                  @input="editForm.name = editForm.name?.toLowerCase()"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <CodeOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+              <template #feedback>
+                统一的模型标识名称，自动转换为小写
               </template>
-            </n-input>
-            <template #feedback>
-              统一的模型标识名称，自动转换为小写
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="厂商" path="provider_id">
-            <n-select
-                v-model:value="editForm.provider_id"
-                :options="providerOptions"
-                placeholder="请选择厂商"
-                :loading="loadingProviders"
-                filterable
-            >
-              <template #prefix>
-                <n-icon>
-                  <BuildOutline/>
-                </n-icon>
+            <n-form-item label="厂商" path="provider_id">
+              <n-select
+                  v-model:value="editForm.provider_id"
+                  :options="providerOptions"
+                  placeholder="请选择厂商"
+                  :loading="loadingProviders"
+                  filterable
+              >
+                <template #prefix>
+                  <n-icon>
+                    <BuildOutline/>
+                  </n-icon>
+                </template>
+              </n-select>
+              <template #feedback>
+                选择模型所属的厂商或提供商
               </template>
-            </n-select>
-            <template #feedback>
-              选择模型所属的厂商或提供商
-            </template>
-          </n-form-item>
+            </n-form-item>
 
-          <n-form-item label="备注" path="remark">
-            <n-input
-                v-model:value="editForm.remark"
-                type="textarea"
-                placeholder="请输入备注（可选）"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-            >
-              <template #prefix>
-                <n-icon>
-                  <TextOutline/>
-                </n-icon>
-              </template>
-            </n-input>
-          </n-form-item>
+            <n-form-item label="备注" path="remark">
+              <n-input
+                  v-model:value="editForm.remark"
+                  type="textarea"
+                  placeholder="请输入备注（可选）"
+                  :autosize="{ minRows: 3, maxRows: 6 }"
+              >
+                <template #prefix>
+                  <n-icon>
+                    <TextOutline/>
+                  </n-icon>
+                </template>
+              </n-input>
+            </n-form-item>
+          </n-space>
         </n-form>
       </n-space>
 
@@ -424,6 +428,20 @@ const columns: DataTableColumns<Model> = [
     }
   }
 ]
+
+const pagination = reactive({
+  page: 1,
+  pageSize: 10,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50],
+  onChange: (page: number) => {
+    pagination.page = page
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    pagination.pageSize = pageSize
+    pagination.page = 1
+  }
+})
 
 // 加载模型列表
 async function loadModels() {

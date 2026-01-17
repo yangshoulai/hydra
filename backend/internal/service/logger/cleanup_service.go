@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
+	"github.com/yangshoulai/hydra/internal/service/config"
 	"gorm.io/gorm"
 )
 
@@ -15,7 +17,7 @@ type CleanupService struct {
 	logger          *slog.Logger
 	requestLogRepo  *repository.RequestLogRepository
 	db              *gorm.DB
-	retentionDays   int // 日志保留天数
+	settingService  *config.SettingService
 }
 
 // NewCleanupService 创建日志清理服务
@@ -23,17 +25,13 @@ func NewCleanupService(
 	logger *slog.Logger,
 	requestLogRepo *repository.RequestLogRepository,
 	db *gorm.DB,
-	retentionDays int,
+	settingService *config.SettingService,
 ) *CleanupService {
-	if retentionDays <= 0 {
-		retentionDays = 30 // 默认保留30天
-	}
-
 	return &CleanupService{
 		logger:         logger,
 		requestLogRepo: requestLogRepo,
 		db:             db,
-		retentionDays:  retentionDays,
+		settingService: settingService,
 	}
 }
 
@@ -50,12 +48,15 @@ type CleanupResult struct {
 func (s *CleanupService) CleanupOldLogs(ctx context.Context) (*CleanupResult, error) {
 	startTime := time.Now()
 
+	// 从系统设置读取最新的日志保留天数
+	retentionDays := s.settingService.GetInt(ctx, models.SettingLogRetentionDays, 30)
+
 	s.logger.Info("starting log cleanup",
-		slog.Int("retention_days", s.retentionDays),
+		slog.Int("retention_days", retentionDays),
 	)
 
 	// 计算删除的截止时间
-	cutoffTime := time.Now().AddDate(0, 0, -s.retentionDays)
+	cutoffTime := time.Now().AddDate(0, 0, -retentionDays)
 
 	s.logger.Info("deleting logs before cutoff time",
 		slog.Time("cutoff_time", cutoffTime),
@@ -119,19 +120,4 @@ func (s *CleanupService) vacuumDatabase(ctx context.Context) (bool, string) {
 
 	s.logger.Info("database vacuum completed successfully")
 	return true, ""
-}
-
-// SetRetentionDays 设置日志保留天数
-func (s *CleanupService) SetRetentionDays(days int) {
-	if days > 0 {
-		s.retentionDays = days
-		s.logger.Info("updated log retention days",
-			slog.Int("retention_days", days),
-		)
-	}
-}
-
-// GetRetentionDays 获取日志保留天数
-func (s *CleanupService) GetRetentionDays() int {
-	return s.retentionDays
 }

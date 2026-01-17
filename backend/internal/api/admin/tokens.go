@@ -34,6 +34,7 @@ func NewTokensHandler(
 type TokenListResponse struct {
 	ID           uint    `json:"id"`
 	Name         string  `json:"name"`
+	Token        string  `json:"token"`          // 明文令牌（用于复制）
 	TokenPreview string  `json:"token_preview"` // 脱敏令牌（前8位+***+后4位）
 	Status       string  `json:"status"`
 	CreatedAt    string  `json:"created_at"`
@@ -87,6 +88,7 @@ func (h *TokensHandler) GetTokens(c *gin.Context) {
 		response = append(response, TokenListResponse{
 			ID:           token.ID,
 			Name:         token.Name,
+			Token:        token.Token,
 			TokenPreview: token.TokenPreview,
 			Status:       token.Status,
 			CreatedAt:    token.CreatedAt.Format("2006-01-02 15:04:05"),
@@ -161,8 +163,9 @@ func (h *TokensHandler) CreateToken(c *gin.Context) {
 		expiresAt = &parsedTime
 	}
 
-	// 创建令牌记录（存储哈希值）
+	// 创建令牌记录（存储哈希值和明文）
 	token := &models.AccessToken{
+		Token:        accessToken,
 		TokenHash:    models.HashToken(accessToken),
 		TokenPreview: tokenPreview,
 		Status:       "active",

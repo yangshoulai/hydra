@@ -65,22 +65,6 @@
 
             <n-grid-item :span="24" :md="12">
               <div class="form-item-wrapper">
-                <n-form-item label="最大重试次数" path="proxy_max_retry">
-                  <n-input-number
-                      v-model:value="formData.proxy_max_retry"
-                      :min="0"
-                      :max="10"
-                      style="width: 100%"
-                  >
-                    <template #suffix>次</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">单个请求失败后的最大重试次数</n-text>
-              </div>
-            </n-grid-item>
-
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
                 <n-form-item label="探测间隔" path="circuit_breaker_probe_interval">
                   <n-input-number
                       v-model:value="formData.circuit_breaker_probe_interval"
@@ -182,6 +166,22 @@
                 <n-text class="field-hint">单个响应的最大 Body 大小</n-text>
               </div>
             </n-grid-item>
+
+            <n-grid-item :span="24" :md="12">
+              <div class="form-item-wrapper">
+                <n-form-item label="最大重试次数" path="proxy_max_retry">
+                  <n-input-number
+                      v-model:value="formData.proxy_max_retry"
+                      :min="0"
+                      :max="10"
+                      style="width: 100%"
+                  >
+                    <template #suffix>次</template>
+                  </n-input-number>
+                </n-form-item>
+                <n-text class="field-hint">单个请求失败后的最大重试次数</n-text>
+              </div>
+            </n-grid-item>
           </n-grid>
         </n-form>
       </n-card>
@@ -192,7 +192,8 @@
           <div class="card-header">
             <div class="card-title">
               <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" stroke-linecap="round"
+                      stroke-linejoin="round"/>
               </svg>
               <span>响应嗅探设置</span>
             </div>
@@ -347,6 +348,7 @@ import {
   NFormItem,
   NGrid,
   NGridItem,
+  NInput,
   NInputNumber,
   NLi,
   NModal,
@@ -368,11 +370,12 @@ interface SettingsData {
   circuit_breaker_cooling_duration: number
   circuit_breaker_probe_interval: number
   circuit_breaker_probe_max_concurrent: number
-  proxy_max_retry: number
   proxy_request_timeout: number
   proxy_max_concurrent: number
   proxy_max_response_size: number
+  proxy_max_retry: number
   log_retention_days: number
+  log_debug_enabled: boolean
 }
 
 const isLoading = ref(false)
@@ -388,11 +391,12 @@ const formData = ref<SettingsData>({
   circuit_breaker_cooling_duration: 60,
   circuit_breaker_probe_interval: 30,
   circuit_breaker_probe_max_concurrent: 10,
-  proxy_max_retry: 3,
   proxy_request_timeout: 60,
   proxy_max_concurrent: 1000,
   proxy_max_response_size: 10,
+  proxy_max_retry: 3,
   log_retention_days: 30,
+  log_debug_enabled: false
 })
 
 // 加载系统设置
@@ -425,9 +429,6 @@ const loadSettings = async () => {
           settings.circuit_breaker_probe_max_concurrent
       )
     }
-    if (settings.proxy_max_retry) {
-      formData.value.proxy_max_retry = parseInt(settings.proxy_max_retry)
-    }
     if (settings.proxy_request_timeout) {
       formData.value.proxy_request_timeout = parseInt(
           settings.proxy_request_timeout
@@ -443,64 +444,31 @@ const loadSettings = async () => {
           settings.proxy_max_response_size
       ) / (1024 * 1024) // 转换为 MB
     }
+    if (settings.proxy_max_retry) {
+      formData.value.proxy_max_retry = parseInt(settings.proxy_max_retry)
+    }
     if (settings.log_retention_days) {
       formData.value.log_retention_days = parseInt(
           settings.log_retention_days
       )
     }
-    if (settings.debug_mode !== undefined) {
-      const debugMode = settings.debug_mode === 'true'
+    if (settings.log_debug_enabled !== undefined) {
+      const debugMode = settings.log_debug_enabled === 'true'
       debugModeEnabled.value = debugMode
       originalDebugModeValue.value = debugMode // 保存原始值
     }
 
-    // 加载嗅探器关键词（使用专用 API）
-    try {
-      const keywords = await settingsService.getPlainTextErrorRules()
-      if (keywords && keywords.length > 0) {
-        snifferKeywords.value = keywords.join('\n')
-      } else {
-        // 提供默认关键词
-        snifferKeywords.value = `无可用后端
-额度不足
-maintenance
-service unavailable
-bad gateway
-gateway timeout
-quota exceeded
-rate limit
-unauthorized
-forbidden
-not found
-invalid api key
-invalid key
-authentication failed
-insufficient funds
-insufficient quota
-billing issue`
+    // 加载嗅探器关键词（从通用设置中获取）
+    if (settings.sniffer_plain_text_error_rules) {
+      try {
+        const keywords = JSON.parse(settings.sniffer_plain_text_error_rules)
+        if (keywords && keywords.length > 0) {
+          snifferKeywords.value = keywords.join('\n')
+        }
+      } catch (error) {
+        console.error('Failed to parse sniffer keywords:', error)
       }
-    } catch (error) {
-      console.error('Failed to load sniffer rules:', error)
-      // 使用默认关键词
-      snifferKeywords.value = `无可用后端
-额度不足
-maintenance
-service unavailable
-bad gateway
-gateway timeout
-quota exceeded
-rate limit
-unauthorized
-forbidden
-not found
-invalid api key
-invalid key
-authentication failed
-insufficient funds
-insufficient quota
-billing issue`
     }
-
     // 重置标志位
     setTimeout(() => {
       isConfirming.value = false
@@ -556,7 +524,13 @@ const cancelDebugMode = () => {
 const handleSave = async () => {
   isSaving.value = true
   try {
-    // 保存通用设置（不包含嗅探器关键词）
+    // 准备嗅探器关键词
+    const keywords = snifferKeywords.value
+        .split('\n')
+        .map(k => k.trim())
+        .filter(k => k.length > 0)
+
+    // 保存所有设置（包括嗅探器关键词）
     await settingsService.updateSettings({
       settings: {
         circuit_breaker_failure_threshold:
@@ -567,25 +541,18 @@ const handleSave = async () => {
             formData.value.circuit_breaker_probe_interval.toString(),
         circuit_breaker_probe_max_concurrent:
             formData.value.circuit_breaker_probe_max_concurrent.toString(),
-        proxy_max_retry: formData.value.proxy_max_retry.toString(),
         proxy_request_timeout:
             formData.value.proxy_request_timeout.toString(),
         proxy_max_concurrent: formData.value.proxy_max_concurrent.toString(),
         proxy_max_response_size: (
             formData.value.proxy_max_response_size * 1024 * 1024
         ).toString(), // 转换为字节
+        proxy_max_retry: formData.value.proxy_max_retry.toString(),
         log_retention_days: formData.value.log_retention_days.toString(),
-        debug_mode: debugModeEnabled.value.toString(),
+        log_debug_enabled: debugModeEnabled.value.toString(),
+        sniffer_plain_text_error_rules: JSON.stringify(keywords), // 嗅探器关键词以JSON格式保存
       },
     })
-
-    // 保存嗅探器关键词（使用专用 API）
-    const keywords = snifferKeywords.value
-      .split('\n')
-      .map(k => k.trim())
-      .filter(k => k.length > 0)
-
-    await settingsService.updatePlainTextErrorRules(keywords)
 
     // 保存成功后更新原始值，避免重复弹窗
     originalDebugModeValue.value = debugModeEnabled.value
@@ -711,10 +678,15 @@ onMounted(() => {
 
 .settings-form {
   margin-top: 16px;
+  max-width: 720px;
 }
 
 .form-item-wrapper {
   margin-bottom: 24px;
+}
+
+:deep(.form-item-wrapper .n-form-item-feedback-wrapper) {
+  min-height: unset;
 }
 
 .field-hint {
@@ -723,7 +695,8 @@ onMounted(() => {
   font-size: 12px;
   color: #a1a1aa;
   line-height: 1.5;
-  text-align: right;
+  text-align: left;
+  padding-left: 140px;
 }
 
 .switch-wrapper {
