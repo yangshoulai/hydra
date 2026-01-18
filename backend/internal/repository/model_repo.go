@@ -74,20 +74,60 @@ func (r *ModelRepository) FindByName(ctx context.Context, name string) (*models.
 
 // List 查询统一模型列表
 func (r *ModelRepository) List(ctx context.Context) ([]models.Model, error) {
-	var models []models.Model
+	type ModelWithCount struct {
+		models.Model
+		ChannelCount int
+	}
+
+	var results []ModelWithCount
 	err := r.db.WithContext(ctx).
-		Preload("Provider").
 		Table("models").
+		Select("models.*, COUNT(DISTINCT channel_model_configs.channel_id) as channel_count").
 		Joins("LEFT JOIN providers ON models.provider_id = providers.id").
+		Joins("LEFT JOIN channel_model_configs ON channel_model_configs.unified_model = models.name").
+		Group("models.id, providers.name, models.name").
 		Order("providers.name ASC, models.name ASC").
-		Find(&models).Error
+		Scan(&results).Error
 	if err != nil {
 		r.logger.Error("failed to list models",
 			slog.String("error", err.Error()),
 		)
 		return nil, err
 	}
-	return models, nil
+
+	// 转换为 []models.Model 并预加载 Provider
+	modelList := make([]models.Model, len(results))
+	for i, result := range results {
+		modelList[i] = result.Model
+		modelList[i].ChannelCount = result.ChannelCount
+	}
+
+	// 预加载 Provider
+	if len(modelList) > 0 {
+		var providerIDs []string
+		for _, m := range modelList {
+			if m.ProviderID != nil {
+				providerIDs = append(providerIDs, *m.ProviderID)
+			}
+		}
+
+		if len(providerIDs) > 0 {
+			var providers []models.Provider
+			if err := r.db.WithContext(ctx).Where("id IN ?", providerIDs).Find(&providers).Error; err == nil {
+				providerMap := make(map[string]*models.Provider)
+				for i := range providers {
+					providerMap[providers[i].ID] = &providers[i]
+				}
+				for i := range modelList {
+					if modelList[i].ProviderID != nil {
+						modelList[i].Provider = providerMap[*modelList[i].ProviderID]
+					}
+				}
+			}
+		}
+	}
+
+	return modelList, nil
 }
 
 // ListWithActiveChannelConfigs 查询有激活渠道配置的统一模型列表

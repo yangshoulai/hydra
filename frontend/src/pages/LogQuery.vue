@@ -19,7 +19,7 @@
       <n-pagination
           :page="pagination.page"
           :on-update-page="pagination.onChange"
-          :on-page-size-change="pagination.onUpdatePageSize"
+          @update:page-size="pagination.onUpdatePageSize"
           :page-size="pagination.pageSize"
           :item-count="pagination.itemCount"
           :page-sizes="pagination.pageSizes"

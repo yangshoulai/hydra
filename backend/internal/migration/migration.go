@@ -19,6 +19,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_2_0_AddEndpointTypes(tx)
 			},
 		},
+		// v1.3.0 移除软删除功能
+		{
+			ID: "v1.3.0_remove_soft_delete",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_3_0_RemoveSoftDelete(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

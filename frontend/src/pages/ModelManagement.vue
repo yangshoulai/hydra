@@ -29,7 +29,7 @@
         striped
         :single-line="false"
         :loading="loading"
-        :scroll-x="1160"
+        :scroll-x="1260"
     />
 
     <!-- 创建模型对话框 -->
@@ -381,6 +381,13 @@ const columns: DataTableColumns<Model> = [
       }
       return h(NText, {depth: 3}, {default: () => '未设置'})
     }
+  },
+  {
+    title: '渠道数',
+    key: 'channel_count',
+    width: 100,
+    align: 'center',
+    sorter: (a, b) => a.channel_count - b.channel_count
   },
   {
     title: '备注',

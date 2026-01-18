@@ -2,17 +2,14 @@ package models
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // Channel 渠道模型
 type Channel struct {
-	ID          uint           `gorm:"primarykey" json:"id"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
-	Name        string         `gorm:"type:varchar(100);not null;uniqueIndex" json:"name"`
+	ID          uint      `gorm:"primarykey" json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Name        string    `gorm:"type:varchar(100);not null;uniqueIndex" json:"name"`
 	BaseURL     string         `gorm:"type:varchar(500);not null" json:"base_url"`
 	Priority    int            `gorm:"not null;default:100;index" json:"priority"`
 	Weight      int            `gorm:"not null;default:100" json:"weight"`

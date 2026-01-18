@@ -130,8 +130,8 @@ func (m *Manager) RecordKeySuccess(keyID uint, channelID uint) {
 	channelBreaker := m.GetChannelBreaker(channelID)
 	channelBreaker.RecordSuccess()
 
-	// 异步更新数据库
-	go m.updateKeyStatus(keyID, "active")
+	// 异步更新数据库，如果之前在 cooling 状态，需要清除 cooling_at
+	go m.exitKeyCooling(keyID)
 }
 
 // RecordKeyHardFailure 记录 Key 硬故障
@@ -162,7 +162,7 @@ func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint) {
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.Uint64("channel_id", uint64(channelID)),
 		)
-		go m.updateKeyStatus(keyID, "cooling")
+		go m.enterKeyCooling(keyID)
 	}
 }
 
@@ -187,8 +187,8 @@ func (m *Manager) ResetKey(keyID uint) {
 		slog.Uint64("key_id", uint64(keyID)),
 	)
 
-	// 更新数据库
-	go m.updateKeyStatus(keyID, "active")
+	// 更新数据库，清除 cooling_at
+	go m.exitKeyCooling(keyID)
 }
 
 // StartProbeScheduler 启动探测调度器
@@ -358,6 +358,33 @@ func (m *Manager) updateKeyStatus(keyID uint, status string) {
 		m.logger.Error("更新数据库中的密钥状态失败",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.String("status", status),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+// enterKeyCooling 设置 Key 进入冷却状态（同时更新 cooling_at 字段）
+func (m *Manager) enterKeyCooling(keyID uint) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := m.keyRepo.EnterCooling(ctx, keyID, m.coolingDuration); err != nil {
+		m.logger.Error("设置密钥冷却状态失败",
+			slog.Uint64("key_id", uint64(keyID)),
+			slog.Duration("cooling_duration", m.coolingDuration),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+// exitKeyCooling 退出冷却状态（清除 cooling_at 字段）
+func (m *Manager) exitKeyCooling(keyID uint) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := m.keyRepo.ExitCooling(ctx, keyID); err != nil {
+		m.logger.Error("退出密钥冷却状态失败",
+			slog.Uint64("key_id", uint64(keyID)),
 			slog.String("error", err.Error()),
 		)
 	}

@@ -67,7 +67,7 @@ func (r *ChannelRepository) Update(ctx context.Context, channel *models.Channel)
 	return r.db.WithContext(ctx).Save(channel).Error
 }
 
-// Delete 删除渠道(软删除)
+// Delete 删除渠道
 func (r *ChannelRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&models.Channel{}, id).Error
 }

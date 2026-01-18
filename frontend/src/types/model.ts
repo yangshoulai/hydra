@@ -18,6 +18,7 @@ export interface Model {
   provider_id: string | null
   provider?: Provider
   remark: string
+  channel_count: number
   created_at: string
   updated_at: string
 }

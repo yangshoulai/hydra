@@ -241,6 +241,10 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 					ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
 					continue
 				}
+			} else {
+				// 不可重试的错误（如 400, 401, 403 等），也需要记录审计日志
+				ps.logRequestError(ctx, traceID, c, "upstream_http_error_non_retryable",
+					errors.New("upstream error"), startTime, routeResult, unifiedModel, requestBodyStr)
 			}
 
 			// 转发错误响应

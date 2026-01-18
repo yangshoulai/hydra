@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"gorm.io/gorm"
@@ -69,7 +70,30 @@ func (r *KeyRepository) UpdateStatus(ctx context.Context, id uint, status string
 		Update("status", status).Error
 }
 
-// Delete 删除 Key(软删除)
+// EnterCooling 设置 Key 进入冷却状态
+func (r *KeyRepository) EnterCooling(ctx context.Context, id uint, duration time.Duration) error {
+	coolingAt := time.Now().Add(duration)
+	return r.db.WithContext(ctx).
+		Model(&models.Key{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":     "cooling",
+			"cooling_at": coolingAt,
+		}).Error
+}
+
+// ExitCooling 退出冷却状态
+func (r *KeyRepository) ExitCooling(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).
+		Model(&models.Key{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":     "active",
+			"cooling_at": nil,
+		}).Error
+}
+
+// Delete 删除 Key
 func (r *KeyRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&models.Key{}, id).Error
 }

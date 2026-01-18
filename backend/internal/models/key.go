@@ -2,17 +2,14 @@ package models
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // Key API Key 模型
 type Key struct {
-	ID        uint           `gorm:"primarykey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-	ChannelID uint           `gorm:"not null;index" json:"channel_id"`
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	ChannelID uint      `gorm:"not null;index" json:"channel_id"`
 	KeyValue  string         `gorm:"type:varchar(500);not null" json:"key_value"`
 	Status    string         `gorm:"type:varchar(20);not null;default:'active'" json:"status"` // active, cooling, disabled
 	CoolingAt *time.Time     `gorm:"index" json:"cooling_at"`

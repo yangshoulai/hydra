@@ -323,7 +323,7 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 
 // DeleteChannel 删除渠道
 // @Summary 删除渠道
-// @Description 删除指定的渠道(软删除)
+// @Description 删除指定的渠道
 // @Tags 渠道管理
 // @Accept json
 // @Produce json
