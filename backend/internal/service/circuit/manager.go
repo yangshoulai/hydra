@@ -86,7 +86,7 @@ func (m *Manager) GetKeyBreaker(keyID uint) *KeyBreaker {
 	breaker = NewKeyBreaker(keyID, m.failureThreshold, m.coolingDuration)
 	m.keyBreakers[keyID] = breaker
 
-	m.logger.Info("创建密钥熔断器",
+	m.logger.Debug("创建密钥熔断器",
 		slog.Uint64("key_id", uint64(keyID)),
 	)
 
@@ -115,7 +115,7 @@ func (m *Manager) GetChannelBreaker(channelID uint) *ChannelBreaker {
 	breaker = NewChannelBreaker(channelID, m.failureThreshold, m.coolingDuration)
 	m.channelBreakers[channelID] = breaker
 
-	m.logger.Info("创建渠道熔断器",
+	m.logger.Debug("创建渠道熔断器",
 		slog.Uint64("channel_id", uint64(channelID)),
 	)
 

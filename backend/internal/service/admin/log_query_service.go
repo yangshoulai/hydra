@@ -149,6 +149,40 @@ func (s *LogQueryService) GetByTraceID(ctx context.Context, traceID string) (*mo
 	return log, nil
 }
 
+// GetLogsByTraceID 根据TraceID获取所有相关日志（包括重试记录）
+func (s *LogQueryService) GetLogsByTraceID(ctx context.Context, traceID string) ([]models.RequestLog, error) {
+	s.logger.Debug("getting all logs by trace_id", slog.String("trace_id", traceID))
+
+	// 构建筛选条件：按 trace_id 查询，按创建时间倒序
+	filter := &repository.RequestLogFilter{
+		TraceID: traceID,
+		// 使用 -1 表示不限制数量
+		Limit: -1,
+	}
+
+	logs, _, err := s.requestLogRepo.List(ctx, filter)
+	if err != nil {
+		s.logger.Error("failed to get logs by trace_id",
+			slog.String("trace_id", traceID),
+			slog.String("error", err.Error()),
+		)
+		return nil, err
+	}
+
+	// 转换为值类型
+	resultLogs := make([]models.RequestLog, len(logs))
+	for i, log := range logs {
+		resultLogs[i] = *log
+	}
+
+	s.logger.Debug("logs by trace_id retrieved successfully",
+		slog.String("trace_id", traceID),
+		slog.Int("count", len(resultLogs)),
+	)
+
+	return resultLogs, nil
+}
+
 // LogStatistics 日志统计信息
 type LogStatistics struct {
 	TotalRequests   int64   `json:"total_requests"`

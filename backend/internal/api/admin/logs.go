@@ -136,6 +136,42 @@ func (h *LogHandler) GetLogByTraceID(c *gin.Context) {
 	c.JSON(http.StatusOK, log)
 }
 
+// GetLogsByTraceID 根据TraceID获取所有相关日志（包括重试记录）
+// @Summary 获取调用过程日志列表
+// @Description 根据TraceID获取所有相关的日志记录，包括重试记录，按时间倒序排列
+// @Tags 日志管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param traceId path string true "Trace ID"
+// @Success 200 {array} models.RequestLog
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /admin/api/logs/{traceId}/timeline [get]
+func (h *LogHandler) GetLogsByTraceID(c *gin.Context) {
+	traceID := c.Param("traceId")
+	if traceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "trace_id is required",
+		})
+		return
+	}
+
+	logs, err := h.logQueryService.GetLogsByTraceID(c.Request.Context(), traceID)
+	if err != nil {
+		h.logger.Error("failed to get logs by trace_id",
+			slog.String("trace_id", traceID),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get logs",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, logs)
+}
+
 // GetStatistics 获取日志统计信息
 // @Summary 获取统计信息
 // @Description 获取指定时间范围内的日志统计信息
@@ -195,5 +231,6 @@ func (h *LogHandler) RegisterRoutes(r *gin.RouterGroup) {
 		logs.GET("", h.QueryLogs)
 		logs.GET("/statistics", h.GetStatistics)
 		logs.GET("/:traceId", h.GetLogByTraceID)
+		logs.GET("/:traceId/timeline", h.GetLogsByTraceID)
 	}
 }

@@ -89,7 +89,7 @@ func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint
 		retryCtx.FailedChannelIDs = append(retryCtx.FailedChannelIDs, channelID)
 	}
 
-	rc.logger.Info("retry attempt recorded",
+	rc.logger.Info("重试尝试已记录",
 		slog.Int("attempt_count", retryCtx.AttemptCount),
 		slog.Uint64("channel_id", uint64(channelID)),
 		slog.String("failure_type", string(failureType)),

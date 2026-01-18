@@ -54,7 +54,7 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 	bytesSent := 0
 	eventCount := 0
 
-	sf.logger.Info("starting SSE stream forwarding",
+	sf.logger.Info("开始SSE流转发",
 		slog.String("content_type", upstreamResp.Header.Get("Content-Type")),
 		slog.String("content_encoding", upstreamResp.Header.Get("Content-Encoding")),
 	)
@@ -71,7 +71,7 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 		if err != nil {
 			if err == io.EOF {
 				// 流结束
-				sf.logger.Info("SSE stream completed normally",
+				sf.logger.Info("SSE流正常完成",
 					slog.Int("bytes_sent", bytesSent),
 					slog.Int("event_count", eventCount),
 				)
@@ -132,7 +132,7 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 		select {
 		case <-c.Request.Context().Done():
 			contextErr := c.Request.Context().Err()
-			sf.logger.Warn("client connection closed during SSE forwarding",
+			sf.logger.Warn("SSE转发期间客户端连接关闭",
 				slog.Int("bytes_sent", bytesSent),
 				slog.Int("event_count", eventCount),
 				slog.String("context_error", contextErr.Error()),
@@ -149,7 +149,7 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 
 // ForwardStreamWithCapture 转发 SSE 流式响应并捕获内容用于日志记录
 // 返回捕获的响应内容字符串
-func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *http.Response) (string, error) {
+func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *http.Response, traceID string) (string, error) {
 	// 设置响应头 - 必须在写入任何数据之前设置
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -180,10 +180,11 @@ func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *h
 	bytesSent := 0
 	eventCount := 0
 
-	// 最大捕获长度（10KB）
-	const maxCaptureLength = 10240
+	// 最大捕获长度（10MB）
+	const maxCaptureLength = 10 * 1024 * 1024
 
-	sf.logger.Info("starting SSE stream forwarding with capture",
+	sf.logger.Info("开始SSE流转发并捕获内容",
+		slog.String("trace_id", traceID),
 		slog.String("content_type", upstreamResp.Header.Get("Content-Type")),
 		slog.String("content_encoding", upstreamResp.Header.Get("Content-Encoding")),
 	)
@@ -200,7 +201,8 @@ func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *h
 		if err != nil {
 			if err == io.EOF {
 				// 流结束
-				sf.logger.Info("SSE stream completed normally",
+				sf.logger.Info("SSE流正常完成",
+					slog.String("trace_id", traceID),
 					slog.Int("bytes_sent", bytesSent),
 					slog.Int("event_count", eventCount),
 				)
@@ -208,6 +210,7 @@ func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *h
 			}
 			// 上游读取错误
 			sf.logger.Error("error reading from upstream SSE stream",
+				slog.String("trace_id", traceID),
 				slog.String("error", err.Error()),
 				slog.String("error_type", err.Error()),
 				slog.Int("bytes_sent", bytesSent),
@@ -227,6 +230,7 @@ func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *h
 		// 写入客户端
 		if _, err := writer.Write(buf); err != nil {
 			sf.logger.Error("error writing to client",
+				slog.String("trace_id", traceID),
 				slog.String("error", err.Error()),
 				slog.Int("bytes_sent", bytesSent),
 				slog.Int("event_count", eventCount),
@@ -250,6 +254,7 @@ func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *h
 			if len(line) > 2 { // \r\n 或 \n
 				eventCount++
 				sf.logger.Debug("SSE event forwarded",
+					slog.String("trace_id", traceID),
 					slog.Int("event_number", eventCount),
 					slog.Int("line_length", len(line)),
 					slog.String("line_prefix", truncateString(line, 50)),
@@ -266,7 +271,8 @@ func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *h
 		select {
 		case <-c.Request.Context().Done():
 			contextErr := c.Request.Context().Err()
-			sf.logger.Warn("client connection closed during SSE forwarding",
+			sf.logger.Warn("SSE转发期间客户端连接关闭",
+				slog.String("trace_id", traceID),
 				slog.Int("bytes_sent", bytesSent),
 				slog.Int("event_count", eventCount),
 				slog.String("context_error", contextErr.Error()),

@@ -24,13 +24,14 @@ func NewResponseForwarder(logger *slog.Logger) *ResponseForwarder {
 
 // ForwardResponse 转发非流式响应
 // 读取完整响应并转发到客户端
-func (rf *ResponseForwarder) ForwardResponse(c *gin.Context, upstreamResp *http.Response) ([]byte, error) {
+func (rf *ResponseForwarder) ForwardResponse(c *gin.Context, upstreamResp *http.Response, traceID string) ([]byte, error) {
 	defer upstreamResp.Body.Close()
 
 	// 读取响应 Body
 	body, err := io.ReadAll(upstreamResp.Body)
 	if err != nil {
 		rf.logger.Error("读取上游响应体失败",
+			slog.String("trace_id", traceID),
 			slog.String("error", err.Error()),
 			slog.Int("status_code", upstreamResp.StatusCode),
 		)
@@ -38,6 +39,7 @@ func (rf *ResponseForwarder) ForwardResponse(c *gin.Context, upstreamResp *http.
 	}
 
 	rf.logger.Debug("收到上游响应",
+		slog.String("trace_id", traceID),
 		slog.Int("status_code", upstreamResp.StatusCode),
 		slog.Int("body_size", len(body)),
 	)
@@ -57,6 +59,7 @@ func (rf *ResponseForwarder) ForwardResponse(c *gin.Context, upstreamResp *http.
 
 		if _, err := c.Writer.Write(body); err != nil {
 			rf.logger.Error("写入响应到客户端失败",
+				slog.String("trace_id", traceID),
 				slog.String("error", err.Error()),
 			)
 			return body, err
@@ -93,6 +96,7 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 	upstreamResp *http.Response,
 	upstreamModel string,
 	unifiedModel string,
+	traceID string,
 ) (string, error) {
 	defer upstreamResp.Body.Close()
 
@@ -105,9 +109,10 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 	// 如果是 JSON 响应,尝试替换模型名
 	contentType := upstreamResp.Header.Get("Content-Type")
 	if len(body) > 0 && (contentType == "" || bytes.Contains([]byte(contentType), []byte("application/json"))) {
-		modifiedBody, err := rf.replaceModelInJSON(body, upstreamModel, unifiedModel)
+		modifiedBody, err := rf.replaceModelInJSON(body, upstreamModel, unifiedModel, traceID)
 		if err != nil {
-			rf.logger.Warn("替换 JSON 响应中的模型名失败",
+			rf.logger.Debug("替换 JSON 响应中的模型名失败",
+				slog.String("trace_id", traceID),
 				slog.String("error", err.Error()),
 			)
 			// 失败时使用原始 Body
@@ -132,7 +137,7 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 }
 
 // replaceModelInJSON 在 JSON 响应中替换模型名
-func (rf *ResponseForwarder) replaceModelInJSON(body []byte, upstreamModel string, unifiedModel string) ([]byte, error) {
+func (rf *ResponseForwarder) replaceModelInJSON(body []byte, upstreamModel string, unifiedModel string, traceID string) ([]byte, error) {
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
 		return body, err
@@ -150,6 +155,7 @@ func (rf *ResponseForwarder) replaceModelInJSON(body []byte, upstreamModel strin
 	}
 
 	rf.logger.Debug("响应中的模型名已替换",
+		slog.String("trace_id", traceID),
 		slog.String("upstream_model", upstreamModel),
 		slog.String("unified_model", unifiedModel),
 	)
@@ -158,8 +164,9 @@ func (rf *ResponseForwarder) replaceModelInJSON(body []byte, upstreamModel strin
 }
 
 // ForwardErrorResponse 转发错误响应
-func (rf *ResponseForwarder) ForwardErrorResponse(c *gin.Context, statusCode int, message string) {
+func (rf *ResponseForwarder) ForwardErrorResponse(c *gin.Context, statusCode int, message string, traceID string) {
 	rf.logger.Debug("转发错误响应",
+		slog.String("trace_id", traceID),
 		slog.Int("status_code", statusCode),
 		slog.String("message", message),
 	)

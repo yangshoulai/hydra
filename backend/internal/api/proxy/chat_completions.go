@@ -29,7 +29,7 @@ func (h *ChatCompletionsHandler) Handle(c *gin.Context) {
 	startTime := time.Now()
 	traceID := middleware.GetTraceID(c)
 
-	h.logger.Info("chat completions request received",
+	h.logger.Info("收到聊天补全请求",
 		slog.String("trace_id", traceID),
 		slog.String("method", c.Request.Method),
 		slog.String("path", c.Request.URL.Path),
@@ -42,7 +42,7 @@ func (h *ChatCompletionsHandler) Handle(c *gin.Context) {
 	duration := time.Since(startTime)
 
 	if err != nil {
-		h.logger.Error("chat completions request failed",
+		h.logger.Error("聊天补全请求失败",
 			slog.String("trace_id", traceID),
 			slog.Duration("duration", duration),
 			slog.String("error", err.Error()),
@@ -61,7 +61,7 @@ func (h *ChatCompletionsHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("chat completions request completed",
+	h.logger.Info("聊天补全请求完成",
 		slog.String("trace_id", traceID),
 		slog.Duration("duration", duration),
 		slog.Int("status_code", c.Writer.Status()),

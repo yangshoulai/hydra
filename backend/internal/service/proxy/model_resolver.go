@@ -67,7 +67,7 @@ func (mr *ModelResolver) ResolveModelMapping(ctx context.Context, unifiedModel s
 		}
 
 		// 获取上游模型名（传空字符串表示匹配所有端点类型）
-		upstreamModel, err := mr.modelRouter.RouteModel(unifiedModel, &channel, "")
+		upstreamModel, err := mr.modelRouter.RouteModel(unifiedModel, &channel, "", "")
 		if err != nil {
 			mr.logger.Debug("failed to route model for channel",
 				slog.Uint64("channel_id", uint64(channel.ID)),

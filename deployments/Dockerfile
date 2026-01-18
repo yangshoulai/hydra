@@ -36,11 +36,16 @@ FROM alpine:latest
 
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates sqlite-libs
+# Install runtime dependencies and timezone data
+RUN apk --no-cache add ca-certificates sqlite-libs tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+# Set timezone environment variable
+ENV TZ=Asia/Shanghai
 
 # Copy binary and static files
-COPY --from=backend-builder /app/hydra .
+COPY --from=backend-builder /app/hydra ./
 COPY --from=backend-builder /app/static ./static
 COPY configs/config.example.yaml ./configs/config.yaml
 

@@ -41,11 +41,12 @@ func NewChannelSelector(
 }
 
 // SelectChannel 按优先级和权重选择一个可用的 Channel
-func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, endpointType string) (*models.Channel, error) {
+func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, endpointType string, traceID string) (*models.Channel, error) {
 	// 获取所有支持该模型和端点类型的 Channel
 	channels, err := cs.channelRepo.FindByModelAndEndpointType(ctx, modelName, endpointType)
 	if err != nil {
 		cs.logger.Error("查找支持模型的渠道失败",
+			slog.String("trace_id", traceID),
 			slog.String("model", modelName),
 			slog.String("endpoint_type", endpointType),
 			slog.String("error", err.Error()),
@@ -55,6 +56,7 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 
 	if len(channels) == 0 {
 		cs.logger.Warn("没有渠道支持该模型",
+			slog.String("trace_id", traceID),
 			slog.String("model", modelName),
 			slog.String("endpoint_type", endpointType),
 		)
@@ -62,10 +64,11 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 	}
 
 	// 过滤出可用的 Channel
-	availableChannels := cs.filterAvailableChannels(channels)
+	availableChannels := cs.filterAvailableChannels(channels, traceID)
 
 	if len(availableChannels) == 0 {
 		cs.logger.Warn("no available channels for model",
+			slog.String("trace_id", traceID),
 			slog.String("model", modelName),
 			slog.Int("total_channels", len(channels)),
 		)
@@ -88,6 +91,7 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 		selectedChannel := cs.selectByWeight(channelsInGroup)
 		if selectedChannel != nil {
 			cs.logger.Debug("channel selected",
+				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(selectedChannel.ID)),
 				slog.String("channel_name", selectedChannel.Name),
 				slog.Int("priority", selectedChannel.Priority),
@@ -98,19 +102,21 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 	}
 
 	cs.logger.Warn("all channels are unavailable",
+		slog.String("trace_id", traceID),
 		slog.String("model", modelName),
 	)
 	return nil, ErrNoAvailableChannel
 }
 
 // filterAvailableChannels 过滤出可用的 Channel
-func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel) []models.Channel {
+func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, traceID string) []models.Channel {
 	available := make([]models.Channel, 0, len(channels))
 
 	for _, channel := range channels {
 		// 检查 Channel 是否激活
 		if !channel.IsActive() {
 			cs.logger.Debug("channel is not active",
+				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(channel.ID)),
 				slog.String("status", channel.Status),
 			)
@@ -120,14 +126,16 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel) []
 		// 检查熔断器状态
 		if !cs.circuitManager.IsChannelAvailable(channel.ID) {
 			cs.logger.Debug("channel is not available (circuit breaker)",
+				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(channel.ID)),
 			)
 			continue
 		}
 
 		// 检查是否有可用的 Key
-		if cs.keySelector.GetAvailableKeyCount(&channel) == 0 {
+		if cs.keySelector.GetAvailableKeyCount(&channel, traceID) == 0 {
 			cs.logger.Debug("channel has no available keys",
+				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(channel.ID)),
 			)
 			continue
@@ -193,6 +201,6 @@ func (cs *ChannelSelector) GetAvailableChannelCount(ctx context.Context, modelNa
 		return 0, err
 	}
 
-	available := cs.filterAvailableChannels(channels)
+	available := cs.filterAvailableChannels(channels, "")
 	return len(available), nil
 }

@@ -156,9 +156,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("log.debug_enabled", false)
 	v.SetDefault("log.file.enabled", true)
 	v.SetDefault("log.file.path", "./logs/hydra.log")
-	v.SetDefault("log.file.max_size", 100)
-	v.SetDefault("log.file.max_backups", 10)
-	v.SetDefault("log.file.max_age", 0)
+	v.SetDefault("log.file.max_size", 100)    // 100MB，按大小轮转
+	v.SetDefault("log.file.max_backups", 10)  // 保留10个备份
+	v.SetDefault("log.file.max_age", 30)      // 保留30天
 	v.SetDefault("log.file.compress", true)
 
 	// Circuit Breaker

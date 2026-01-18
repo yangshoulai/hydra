@@ -31,14 +31,16 @@ func NewModelRouter(logger *slog.Logger) *ModelRouter {
 // unifiedModel: 用户请求的统一模型名(如 gpt-4)
 // channel: 选定的渠道
 // endpointType: 端点类型(如 openai, openai-response, anthropic)
+// traceID: 请求追踪ID
 // 返回: 上游真实模型名(如 gpt-4-0613)
-func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, endpointType string) (string, error) {
+func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, endpointType string, traceID string) (string, error) {
 	if channel == nil {
 		return "", errors.New("channel is nil")
 	}
 
 	if len(channel.ModelConfigs) == 0 {
 		mr.logger.Warn("channel has no model configurations",
+			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 		)
@@ -55,6 +57,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 
 	if len(matchedConfigs) == 0 {
 		mr.logger.Debug("no matching model configuration found",
+			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("unified_model", unifiedModel),
@@ -66,6 +69,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 	selectedConfig := matchedConfigs[rand.IntN(len(matchedConfigs))]
 	if len(matchedConfigs) > 1 {
 		mr.logger.Debug("multiple model configurations found, randomly selected one",
+			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("unified_model", unifiedModel),
 			slog.Int("count", len(matchedConfigs)),
@@ -73,6 +77,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 	}
 
 	mr.logger.Debug("model routed",
+		slog.String("trace_id", traceID),
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
 		slog.String("unified_model", unifiedModel),

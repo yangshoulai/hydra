@@ -197,6 +197,16 @@ func (b *RequestLogBuilder) ResponseBody(body string) *RequestLogBuilder {
 	return b
 }
 
+func (b *RequestLogBuilder) RequestHeaders(headers string) *RequestLogBuilder {
+	b.log.RequestHeaders = headers
+	return b
+}
+
+func (b *RequestLogBuilder) ResponseHeaders(headers string) *RequestLogBuilder {
+	b.log.ResponseHeaders = headers
+	return b
+}
+
 func (b *RequestLogBuilder) Build() *models.RequestLog {
 	return b.log
 }

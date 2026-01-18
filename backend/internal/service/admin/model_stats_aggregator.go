@@ -47,7 +47,9 @@ type ModelDetailInfo struct {
 // GetTodayModelStats 获取今日模型统计
 func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelStats, error) {
 	now := time.Now()
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	// 使用 UTC 时间计算今天的开始时间（数据库存储的是 UTC）
+	nowUTC := now.UTC()
+	startOfDayUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 
 	db := m.requestLogRepo.GetDB().WithContext(ctx)
 
@@ -56,7 +58,7 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	// 统计活跃模型数（今日有请求的不同模型数）
 	var activeModels int64
 	if err := db.Model(&models.RequestLog{}).
-		Where("created_at >= ?", startOfDay).
+		Where("created_at >= ?", startOfDayUTC).
 		Where("unified_model != ''").
 		Distinct("unified_model").
 		Count(&activeModels).Error; err != nil {
@@ -68,7 +70,7 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	// 统计今日模型请求总数
 	var totalRequests int64
 	if err := db.Model(&models.RequestLog{}).
-		Where("created_at >= ?", startOfDay).
+		Where("created_at >= ?", startOfDayUTC).
 		Where("unified_model != ''").
 		Count(&totalRequests).Error; err != nil {
 		m.logger.Error("failed to count total requests", slog.String("error", err.Error()))
@@ -79,7 +81,7 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	// 统计成功请求数
 	var successRequests int64
 	if err := db.Model(&models.RequestLog{}).
-		Where("created_at >= ?", startOfDay).
+		Where("created_at >= ?", startOfDayUTC).
 		Where("unified_model != ''").
 		Where("is_success = ?", true).
 		Count(&successRequests).Error; err != nil {
@@ -100,7 +102,7 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	var modelStats []modelStat
 	if err := db.Model(&models.RequestLog{}).
 		Select("unified_model as model_name, COUNT(*) as total_requests, SUM(CASE WHEN is_success = true THEN 1 ELSE 0 END) as success_requests").
-		Where("created_at >= ?", startOfDay).
+		Where("created_at >= ?", startOfDayUTC).
 		Where("unified_model != ''").
 		Group("unified_model").
 		Order("total_requests DESC").

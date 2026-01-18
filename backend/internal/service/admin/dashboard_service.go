@@ -70,7 +70,7 @@ type DashboardMetrics struct {
 
 // GetMetrics 获取仪表盘指标
 func (ds *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, error) {
-	ds.logger.Info("generating dashboard metrics")
+	ds.logger.Debug("生成仪表板指标")
 
 	startTime := time.Now()
 	metrics := &DashboardMetrics{
@@ -130,7 +130,7 @@ func (ds *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, 
 	}
 
 	duration := time.Since(startTime)
-	ds.logger.Info("dashboard metrics generated",
+	ds.logger.Debug("仪表板指标生成完成",
 		slog.Duration("generation_time", duration),
 	)
 

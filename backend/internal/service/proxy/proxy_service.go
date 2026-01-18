@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -108,8 +109,8 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	// 1. 读取请求 Body
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Failed to read request body")
-		ps.logRequestError(ctx, traceID, c, "read_request_body", err, startTime, nil, "", "")
+		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Failed to read request body", traceID)
+		ps.logRequestError(ctx, traceID, c, "read_request_body", err, startTime, nil, "", "", nil, 0)
 		return err
 	}
 	// 重置 Body 使其可以再次读取
@@ -121,8 +122,8 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	// 2. 解析请求获取模型名
 	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes)
 	if err != nil {
-		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Invalid request: "+err.Error())
-		ps.logRequestError(ctx, traceID, c, "parse_model", err, startTime, nil, "", requestBodyStr)
+		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Invalid request: "+err.Error(), traceID)
+		ps.logRequestError(ctx, traceID, c, "parse_model", err, startTime, nil, "", requestBodyStr, nil, 0)
 		return err
 	}
 
@@ -131,7 +132,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	// 根据端点确定端点类型
 	endpointType := ps.getEndpointType(endpoint)
 
-	ps.logger.Info("处理代理请求",
+	ps.logWithTrace("处理代理请求", traceID,
 		slog.String("endpoint", endpoint),
 		slog.String("endpoint_type", endpointType),
 		slog.String("model", unifiedModel),
@@ -150,28 +151,29 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			endpointType,
 			ps.retryCoordinator.maxRetries-retryCtx.AttemptCount,
 			retryCtx.FailedChannelIDs,
+			traceID,
 		)
 
 		if err != nil {
-			ps.logger.Error("请求路由失败",
+			ps.logErrorWithTrace("请求路由失败", traceID,
 				slog.String("model", unifiedModel),
 				slog.String("error", err.Error()),
 			)
 			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable,
-				"No available channels for model: "+unifiedModel)
-			ps.logRequestError(ctx, traceID, c, "route_failed", err, startTime, nil, unifiedModel, requestBodyStr)
+				"No available channels for model: "+unifiedModel, traceID)
+			ps.logRequestError(ctx, traceID, c, "route_failed", err, startTime, nil, unifiedModel, requestBodyStr, nil, 0)
 			return err
 		}
 
 		// 构建上游请求
 		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, endpoint)
 		if err != nil {
-			ps.logger.Error("构建代理请求失败", slog.String("error", err.Error()))
+			ps.logErrorWithTrace("构建代理请求失败", traceID, slog.String("error", err.Error()))
 			continue
 		}
 
 		// 发送请求
-		upstreamResp, err := ps.httpClient.Do(upstreamReq)
+		upstreamResp, err := ps.httpClient.Do(upstreamReq, traceID)
 
 		// 分类故障
 		failureType := ps.failureClassifier.ClassifyResponseError(upstreamResp, err)
@@ -182,11 +184,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, err, failureType)
 
 			// 记录这次失败的尝试
-			ps.logRequestError(ctx, traceID, c, "upstream_request_failed", err, startTime, routeResult, unifiedModel, requestBodyStr)
+			ps.logRequestError(ctx, traceID, c, "upstream_request_failed", err, startTime, routeResult, unifiedModel, requestBodyStr, nil, retryCtx.AttemptCount)
 
 			if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 				ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway,
-					"Upstream request failed: "+err.Error())
+					"Upstream request failed: "+err.Error(), traceID)
 				return err
 			}
 
@@ -199,11 +201,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		if upstreamResp.StatusCode == http.StatusOK {
 			sniffResult, err := ps.responseSniffer.SniffResponse(upstreamResp)
 			if err != nil {
-				ps.logger.Error("嗅探响应失败",
+				ps.logErrorWithTrace("嗅探响应失败", traceID,
 					slog.String("error", err.Error()),
 				)
 			} else if sniffResult.IsFake200 {
-				ps.logger.Warn("检测到假 200 响应",
+				ps.logWarnWithTrace("检测到假 200 响应", traceID,
 					slog.String("rule", sniffResult.MatchedRule),
 				)
 
@@ -213,11 +215,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 					errors.New("fake 200 response"), FailureTypeSoft)
 
 				// 记录这次失败的尝试
-				ps.logRequestError(ctx, traceID, c, "fake_200_response", errors.New("fake 200 response"), startTime, routeResult, unifiedModel, requestBodyStr)
+				ps.logRequestError(ctx, traceID, c, "fake_200_response", errors.New("fake 200 response"), startTime, routeResult, unifiedModel, requestBodyStr, nil, retryCtx.AttemptCount)
 
 				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway,
-						"All upstream attempts failed")
+						"All upstream attempts failed", traceID)
 					return errors.New("fake 200 response")
 				}
 
@@ -235,7 +237,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 					errors.New("upstream error"), failureType)
 
 				// 记录这次失败的尝试
-				ps.logRequestError(ctx, traceID, c, "upstream_http_error", errors.New("upstream error"), startTime, routeResult, unifiedModel, requestBodyStr)
+				ps.logRequestError(ctx, traceID, c, "upstream_http_error", errors.New("upstream error"), startTime, routeResult, unifiedModel, requestBodyStr, upstreamResp, retryCtx.AttemptCount)
 
 				if ps.retryCoordinator.ShouldRetry(retryCtx) {
 					ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
@@ -244,11 +246,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			} else {
 				// 不可重试的错误（如 400, 401, 403 等），也需要记录审计日志
 				ps.logRequestError(ctx, traceID, c, "upstream_http_error_non_retryable",
-					errors.New("upstream error"), startTime, routeResult, unifiedModel, requestBodyStr)
+					errors.New("upstream error"), startTime, routeResult, unifiedModel, requestBodyStr, upstreamResp, retryCtx.AttemptCount)
 			}
 
 			// 转发错误响应
-			_, err = ps.responseForwarder.ForwardResponse(c, upstreamResp)
+			_, err = ps.responseForwarder.ForwardResponse(c, upstreamResp, traceID)
 			return err
 		}
 
@@ -259,18 +261,18 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		var responseBodyStr string
 		if isStream {
 			// 流式响应：记录流式内容
-			responseBodyStr, err = ps.sseForwarder.ForwardStreamWithCapture(c, upstreamResp)
+			responseBodyStr, err = ps.sseForwarder.ForwardStreamWithCapture(c, upstreamResp, traceID)
 		} else {
 			// 非流式响应：ForwardJSONResponse 返回响应 body
 			responseBodyStr, err = ps.responseForwarder.ForwardJSONResponse(c, upstreamResp,
-				routeResult.UpstreamModel, routeResult.UnifiedModel)
+				routeResult.UpstreamModel, routeResult.UnifiedModel, traceID)
 		}
 
 		// 记录成功的审计日志
 		if err == nil {
-			ps.logRequestSuccess(ctx, traceID, c, routeResult, upstreamResp.StatusCode, startTime, isStream, requestBodyStr, responseBodyStr)
+			ps.logRequestSuccess(ctx, traceID, c, routeResult, upstreamResp, upstreamResp.StatusCode, startTime, isStream, requestBodyStr, responseBodyStr, retryCtx.AttemptCount)
 		} else {
-			ps.logRequestError(ctx, traceID, c, "forward_response", err, startTime, routeResult, unifiedModel, requestBodyStr)
+			ps.logRequestError(ctx, traceID, c, "forward_response", err, startTime, routeResult, unifiedModel, requestBodyStr, upstreamResp, retryCtx.AttemptCount)
 		}
 
 		return err
@@ -309,11 +311,13 @@ func (ps *ProxyService) logRequestSuccess(
 	traceID string,
 	c *gin.Context,
 	routeResult *RouteResult,
+	upstreamResp *http.Response,
 	statusCode int,
 	startTime time.Time,
 	isStream bool,
 	requestBody string,
 	responseBody string,
+	retryCount int,
 ) {
 	responseTime := int(time.Since(startTime).Milliseconds())
 
@@ -332,14 +336,30 @@ func (ps *ProxyService) logRequestSuccess(
 		ResponseTime(responseTime).
 		IsSuccess(true).
 		IsStream(isStream).
+		RetryCount(retryCount).
 		ClientIP(c.ClientIP()).
 		UserAgent(c.Request.UserAgent())
 
-	// 如果调试模式启用，记录完整的请求和响应 body
+	// 如果调试模式启用，记录完整的请求和响应 body、请求头和响应头
 	if ps.auditLogger.IsDebugModeEnabled() {
 		// 限制记录长度，避免过大的 body
-		const maxBodyLength = 10240 // 10KB
+		const maxBodyLength = 10 * 1024 * 1024 // 10MB
 
+		// 记录请求头
+		requestHeaders := headersToJSON(c.Request.Header)
+		if requestHeaders != "" {
+			builder.RequestHeaders(requestHeaders)
+		}
+
+		// 记录响应头
+		if upstreamResp != nil {
+			responseHeaders := headersToJSON(upstreamResp.Header)
+			if responseHeaders != "" {
+				builder.ResponseHeaders(responseHeaders)
+			}
+		}
+
+		// 记录请求体
 		if len(requestBody) > 0 {
 			if len(requestBody) > maxBodyLength {
 				builder.RequestBody(requestBody[:maxBodyLength] + "...(truncated)")
@@ -348,6 +368,7 @@ func (ps *ProxyService) logRequestSuccess(
 			}
 		}
 
+		// 记录响应体
 		if len(responseBody) > 0 {
 			if len(responseBody) > maxBodyLength {
 				builder.ResponseBody(responseBody[:maxBodyLength] + "...(truncated)")
@@ -374,6 +395,8 @@ func (ps *ProxyService) logRequestError(
 	routeResult *RouteResult,
 	unifiedModel string,
 	requestBody string,
+	upstreamResp *http.Response,
+	retryCount int,
 ) {
 	responseTime := int(time.Since(startTime).Milliseconds())
 
@@ -385,6 +408,7 @@ func (ps *ProxyService) logRequestError(
 		StatusCode(500).
 		ResponseTime(responseTime).
 		IsSuccess(false).
+		RetryCount(retryCount).
 		ErrorMessage(errorType + ": " + err.Error()).
 		ClientIP(c.ClientIP()).
 		UserAgent(c.Request.UserAgent())
@@ -397,19 +421,41 @@ func (ps *ProxyService) logRequestError(
 			ChannelID(routeResult.Channel.ID).
 			ChannelName(routeResult.Channel.Name).
 			KeyID(routeResult.Key.ID)
+
+		// 如果有上游响应，使用实际的状态码
+		if upstreamResp != nil {
+			builder.StatusCode(upstreamResp.StatusCode)
+		}
 	} else if unifiedModel != "" {
 		// 如果没有路由结果但有模型名，记录模型信息
 		builder.RequestedModel(unifiedModel).
 			UnifiedModel(unifiedModel)
 	}
 
-	// 如果调试模式启用，记录请求 body
-	if ps.auditLogger.IsDebugModeEnabled() && len(requestBody) > 0 {
-		const maxBodyLength = 10240 // 10KB
-		if len(requestBody) > maxBodyLength {
-			builder.RequestBody(requestBody[:maxBodyLength] + "...(truncated)")
-		} else {
-			builder.RequestBody(requestBody)
+	// 如果调试模式启用，记录请求 body、请求头和响应头
+	if ps.auditLogger.IsDebugModeEnabled() {
+		// 记录请求头
+		requestHeaders := headersToJSON(c.Request.Header)
+		if requestHeaders != "" {
+			builder.RequestHeaders(requestHeaders)
+		}
+
+		// 记录响应头（如果有上游响应）
+		if upstreamResp != nil {
+			responseHeaders := headersToJSON(upstreamResp.Header)
+			if responseHeaders != "" {
+				builder.ResponseHeaders(responseHeaders)
+			}
+		}
+
+		// 记录请求体
+		const maxBodyLength = 10 * 1024 * 1024 // 10MB
+		if len(requestBody) > 0 {
+			if len(requestBody) > maxBodyLength {
+				builder.RequestBody(requestBody[:maxBodyLength] + "...(truncated)")
+			} else {
+				builder.RequestBody(requestBody)
+			}
 		}
 	}
 
@@ -424,7 +470,51 @@ func GetTraceIDFromContext(c *gin.Context) string {
 	if traceID, exists := c.Get("trace_id"); exists {
 		return traceID.(string)
 	}
-	return "unknown"
+	return ""
+}
+
+// logWithTrace 记录带有 trace_id 的 Info 日志
+func (ps *ProxyService) logWithTrace(msg string, traceID string, args ...slog.Attr) {
+	allArgs := append([]slog.Attr{slog.String("trace_id", traceID)}, args...)
+	// 将 slog.Attr 转换为 []any
+	anyArgs := make([]any, len(allArgs))
+	for i, attr := range allArgs {
+		anyArgs[i] = attr
+	}
+	ps.logger.Log(context.Background(), slog.LevelInfo, msg, anyArgs...)
+}
+
+// logWarnWithTrace 记录带有 trace_id 的 Warn 日志
+func (ps *ProxyService) logWarnWithTrace(msg string, traceID string, args ...slog.Attr) {
+	allArgs := append([]slog.Attr{slog.String("trace_id", traceID)}, args...)
+	// 将 slog.Attr 转换为 []any
+	anyArgs := make([]any, len(allArgs))
+	for i, attr := range allArgs {
+		anyArgs[i] = attr
+	}
+	ps.logger.Log(context.Background(), slog.LevelWarn, msg, anyArgs...)
+}
+
+// logErrorWithTrace 记录带有 trace_id 的 Error 日志
+func (ps *ProxyService) logErrorWithTrace(msg string, traceID string, args ...slog.Attr) {
+	allArgs := append([]slog.Attr{slog.String("trace_id", traceID)}, args...)
+	// 将 slog.Attr 转换为 []any
+	anyArgs := make([]any, len(allArgs))
+	for i, attr := range allArgs {
+		anyArgs[i] = attr
+	}
+	ps.logger.Log(context.Background(), slog.LevelError, msg, anyArgs...)
+}
+
+// logDebugWithTrace 记录带有 trace_id 的 Debug 日志
+func (ps *ProxyService) logDebugWithTrace(msg string, traceID string, args ...slog.Attr) {
+	allArgs := append([]slog.Attr{slog.String("trace_id", traceID)}, args...)
+	// 将 slog.Attr 转换为 []any
+	anyArgs := make([]any, len(allArgs))
+	for i, attr := range allArgs {
+		anyArgs[i] = attr
+	}
+	ps.logger.Log(context.Background(), slog.LevelDebug, msg, anyArgs...)
 }
 
 // getAccessTokenFromContext 从上下文获取访问令牌（脱敏）
@@ -433,6 +523,29 @@ func getAccessTokenFromContext(c *gin.Context) string {
 		return token.(string)
 	}
 	return ""
+}
+
+// headersToJSON 将 HTTP 头转换为 JSON 字符串
+func headersToJSON(headers http.Header) string {
+	if headers == nil {
+		return ""
+	}
+
+	// 转换为 map
+	headerMap := make(map[string]string)
+	for key, values := range headers {
+		if len(values) > 0 {
+			headerMap[key] = values[0] // 只取第一个值
+		}
+	}
+
+	// 转换为 JSON
+	jsonBytes, err := json.Marshal(headerMap)
+	if err != nil {
+		return ""
+	}
+
+	return string(jsonBytes)
 }
 
 // OnConfigChanged 实现 ConfigListener 接口，响应配置变更

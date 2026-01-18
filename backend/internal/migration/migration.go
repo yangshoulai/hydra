@@ -26,6 +26,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_3_0_RemoveSoftDelete(tx)
 			},
 		},
+		// v1.4.0 添加请求头和响应头字段
+		{
+			ID: "v1.4.0_add_request_response_headers",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_4_0_AddRequestResponseHeaders(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

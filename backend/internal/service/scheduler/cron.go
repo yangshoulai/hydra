@@ -35,7 +35,7 @@ type ScheduledTask func(ctx context.Context) error
 // spec: cron表达式（支持秒级精度，例如："0 0 3 * * *" 表示每天凌晨3点）
 // task: 任务执行函数
 func (s *CronScheduler) AddJob(name string, spec string, task ScheduledTask) error {
-	s.logger.Info("adding scheduled job",
+	s.logger.Info("添加定时任务",
 		slog.String("job_name", name),
 		slog.String("cron_spec", spec),
 	)
@@ -43,17 +43,17 @@ func (s *CronScheduler) AddJob(name string, spec string, task ScheduledTask) err
 	// 包装任务，添加context和错误处理
 	wrappedTask := func() {
 		ctx := context.Background()
-		s.logger.Info("executing scheduled job",
+		s.logger.Info("执行定时任务",
 			slog.String("job_name", name),
 		)
 
 		if err := task(ctx); err != nil {
-			s.logger.Error("scheduled job execution failed",
+			s.logger.Error("定时任务执行失败",
 				slog.String("job_name", name),
 				slog.String("error", err.Error()),
 			)
 		} else {
-			s.logger.Info("scheduled job execution completed",
+			s.logger.Info("定时任务执行完成",
 				slog.String("job_name", name),
 			)
 		}
@@ -62,14 +62,14 @@ func (s *CronScheduler) AddJob(name string, spec string, task ScheduledTask) err
 	// 添加任务到cron
 	_, err := s.cron.AddFunc(spec, wrappedTask)
 	if err != nil {
-		s.logger.Error("failed to add scheduled job",
+		s.logger.Error("添加定时任务失败",
 			slog.String("job_name", name),
 			slog.String("error", err.Error()),
 		)
 		return err
 	}
 
-	s.logger.Info("scheduled job added successfully",
+	s.logger.Info("定时任务添加成功",
 		slog.String("job_name", name),
 	)
 
@@ -78,7 +78,7 @@ func (s *CronScheduler) AddJob(name string, spec string, task ScheduledTask) err
 
 // RemoveJob 移除定时任务
 func (s *CronScheduler) RemoveJob(name string) {
-	s.logger.Info("removing scheduled job",
+	s.logger.Info("移除定时任务",
 		slog.String("job_name", name),
 	)
 	// cron库没有直接支持通过名称移除任务的API
@@ -88,16 +88,16 @@ func (s *CronScheduler) RemoveJob(name string) {
 
 // Start 启动调度器
 func (s *CronScheduler) Start() {
-	s.logger.Info("starting cron scheduler")
+	s.logger.Info("启动定时任务调度器")
 	s.cron.Start()
 }
 
 // Stop 停止调度器
 func (s *CronScheduler) Stop() {
-	s.logger.Info("stopping cron scheduler")
+	s.logger.Info("停止定时任务调度器")
 	ctx := s.cron.Stop()
 	<-ctx.Done()
-	s.logger.Info("cron scheduler stopped")
+	s.logger.Info("定时任务调度器已停止")
 }
 
 // GetNextRunTime 获取任务下次运行时间

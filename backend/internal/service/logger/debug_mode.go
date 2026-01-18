@@ -53,7 +53,7 @@ func (m *DebugModeManager) Initialize(ctx context.Context) error {
 
 	m.enabled = enabled
 
-	m.logger.Info("debug mode initialized",
+	m.logger.Info("调试模式已初始化",
 		slog.Bool("enabled", m.enabled),
 	)
 
@@ -75,7 +75,7 @@ func (m *DebugModeManager) SetEnabled(ctx context.Context, enabled bool) error {
 	// 更新系统设置
 	value := strconv.FormatBool(enabled)
 	if err := m.settingService.Set(ctx, models.SettingLogDebugEnabled, value); err != nil {
-		m.logger.Error("failed to update debug mode in settings",
+		m.logger.Error("更新系统设置中的调试模式失败",
 			slog.Bool("enabled", enabled),
 			slog.String("error", err.Error()),
 		)
@@ -86,7 +86,7 @@ func (m *DebugModeManager) SetEnabled(ctx context.Context, enabled bool) error {
 	oldEnabled := m.enabled
 	m.enabled = enabled
 
-	m.logger.Info("debug mode changed",
+	m.logger.Info("调试模式已更改",
 		slog.Bool("old_enabled", oldEnabled),
 		slog.Bool("new_enabled", enabled),
 	)
@@ -118,7 +118,7 @@ func (m *DebugModeManager) OnChange(callback func(enabled bool)) {
 
 	m.onChangeCallbacks = append(m.onChangeCallbacks, callback)
 
-	m.logger.Debug("debug mode change callback registered",
+	m.logger.Debug("调试模式变更回调已注册",
 		slog.Int("total_callbacks", len(m.onChangeCallbacks)),
 	)
 }
@@ -134,7 +134,7 @@ func (m *DebugModeManager) OnConfigChanged(ctx context.Context, category string)
 	debugModeStr := m.settingService.GetString(ctx, models.SettingLogDebugEnabled, "false")
 	enabled, err := strconv.ParseBool(debugModeStr)
 	if err != nil {
-		m.logger.Warn("failed to parse debug mode from config change",
+		m.logger.Warn("解析配置变更中的调试模式失败",
 			slog.String("value", debugModeStr),
 			slog.String("error", err.Error()),
 		)
@@ -149,7 +149,7 @@ func (m *DebugModeManager) OnConfigChanged(ctx context.Context, category string)
 
 	// 如果状态有变化，记录日志并通知所有监听器
 	if oldEnabled != enabled {
-		m.logger.Info("debug mode updated via config change",
+		m.logger.Info("通过配置变更更新调试模式",
 			slog.Bool("old_enabled", oldEnabled),
 			slog.Bool("new_enabled", enabled),
 		)

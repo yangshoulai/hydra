@@ -78,10 +78,11 @@ func NewHTTPClient(config *HTTPClientConfig, logger *slog.Logger) *HTTPClient {
 }
 
 // Do 发送 HTTP 请求
-func (hc *HTTPClient) Do(req *http.Request) (*http.Response, error) {
+func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, error) {
 	startTime := time.Now()
 
 	hc.logger.Debug("sending upstream request",
+		slog.String("trace_id", traceID),
 		slog.String("method", req.Method),
 		slog.String("url", req.URL.String()),
 	)
@@ -92,6 +93,7 @@ func (hc *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 	if err != nil {
 		hc.logger.Error("upstream request failed",
+			slog.String("trace_id", traceID),
 			slog.String("method", req.Method),
 			slog.String("url", req.URL.String()),
 			slog.Duration("duration", duration),
@@ -101,6 +103,7 @@ func (hc *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	hc.logger.Debug("upstream request completed",
+		slog.String("trace_id", traceID),
 		slog.String("method", req.Method),
 		slog.String("url", req.URL.String()),
 		slog.Int("status_code", resp.StatusCode),

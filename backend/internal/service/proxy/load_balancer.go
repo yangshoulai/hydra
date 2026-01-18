@@ -52,12 +52,14 @@ func NewLoadBalancer(
 // Route 为请求路由到合适的 Channel 和 Key
 // unifiedModel: 用户请求的统一模型名
 // endpointType: 端点类型(如 openai, openai-response, anthropic)
+// traceID: 请求追踪ID
 // 返回: 路由结果(包含 Channel, Key, 上游模型名)
-func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpointType string) (*RouteResult, error) {
+func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpointType string, traceID string) (*RouteResult, error) {
 	// 1. 选择 Channel (同时考虑模型和端点类型)
-	channel, err := lb.channelSelector.SelectChannel(ctx, unifiedModel, endpointType)
+	channel, err := lb.channelSelector.SelectChannel(ctx, unifiedModel, endpointType, traceID)
 	if err != nil {
 		lb.logger.Warn("选择渠道失败",
+			slog.String("trace_id", traceID),
 			slog.String("unified_model", unifiedModel),
 			slog.String("endpoint_type", endpointType),
 			slog.String("error", err.Error()),
@@ -66,9 +68,19 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	}
 
 	// 2. 选择 Key
-	key, err := lb.keySelector.SelectKey(channel)
+	key, err := lb.keySelector.SelectKey(channel, traceID)
 	if err != nil {
+		// 如果是没有可用的 key，返回 ErrNoAvailableChannel 让上层尝试其他 channel
+		if errors.Is(err, ErrNoAvailableKey) {
+			lb.logger.Debug("channel has no available keys during selection, will retry with other channels",
+				slog.String("trace_id", traceID),
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("channel_name", channel.Name),
+			)
+			return nil, ErrNoAvailableChannel
+		}
 		lb.logger.Warn("选择密钥失败",
+			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("error", err.Error()),
@@ -77,9 +89,10 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	}
 
 	// 3. 路由模型
-	upstreamModel, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType)
+	upstreamModel, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType, traceID)
 	if err != nil {
 		lb.logger.Warn("模型路由失败",
+			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("unified_model", unifiedModel),
@@ -96,6 +109,7 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	}
 
 	lb.logger.Info("请求路由成功",
+		slog.String("trace_id", traceID),
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
 		slog.Uint64("key_id", uint64(key.ID)),
@@ -111,12 +125,14 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 // endpointType: 端点类型(如 openai, openai-response, anthropic)
 // maxRetries: 最大重试次数
 // excludeChannels: 排除的渠道ID列表(已经尝试过失败的)
+// traceID: 请求追踪ID
 func (lb *LoadBalancer) RouteWithRetry(
 	ctx context.Context,
 	unifiedModel string,
 	endpointType string,
 	maxRetries int,
 	excludeChannels []uint,
+	traceID string,
 ) (*RouteResult, error) {
 	excludeMap := make(map[uint]bool)
 	for _, channelID := range excludeChannels {
@@ -124,7 +140,7 @@ func (lb *LoadBalancer) RouteWithRetry(
 	}
 
 	for i := 0; i <= maxRetries; i++ {
-		result, err := lb.Route(ctx, unifiedModel, endpointType)
+		result, err := lb.Route(ctx, unifiedModel, endpointType, traceID)
 		if err != nil {
 			// 如果是无可用 Channel,直接返回
 			if errors.Is(err, ErrNoAvailableChannel) {
@@ -137,6 +153,7 @@ func (lb *LoadBalancer) RouteWithRetry(
 		// 检查是否已在排除列表中
 		if excludeMap[result.Channel.ID] {
 			lb.logger.Debug("channel is in exclude list, retrying",
+				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(result.Channel.ID)),
 				slog.Int("retry_count", i),
 			)
@@ -146,7 +163,8 @@ func (lb *LoadBalancer) RouteWithRetry(
 		return result, nil
 	}
 
-	lb.logger.Error("all retry attempts failed",
+	lb.logger.Error("所有重试尝试均失败",
+		slog.String("trace_id", traceID),
 		slog.String("unified_model", unifiedModel),
 		slog.Int("max_retries", maxRetries),
 	)

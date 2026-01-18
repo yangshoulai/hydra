@@ -43,7 +43,7 @@ func (h *ModelsHandler) Handle(c *gin.Context) {
 	traceID := middleware.GetTraceID(c)
 	ctx := c.Request.Context()
 
-	h.logger.Debug("models list request received",
+	h.logger.Debug("收到模型列表请求",
 		slog.String("trace_id", traceID),
 	)
 
@@ -86,7 +86,7 @@ func (h *ModelsHandler) Handle(c *gin.Context) {
 		Data:   modelObjects,
 	}
 
-	h.logger.Info("models list request completed",
+	h.logger.Info("模型列表请求完成",
 		slog.String("trace_id", traceID),
 		slog.Int("model_count", len(modelObjects)),
 	)

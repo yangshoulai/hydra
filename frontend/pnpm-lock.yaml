@@ -20,6 +20,9 @@ importers:
       echarts:
         specifier: ^5.5.0
         version: 5.6.0
+      highlight.js:
+        specifier: ^11.11.1
+        version: 11.11.1
       naive-ui:
         specifier: ^2.43.2
         version: 2.43.2(vue@3.5.26(typescript@5.9.3))

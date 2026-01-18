@@ -26,6 +26,8 @@ export interface RequestLog {
   user_agent: string
   request_body?: string
   response_body?: string
+  request_headers?: string
+  response_headers?: string
 }
 
 export interface LogQueryRequest {

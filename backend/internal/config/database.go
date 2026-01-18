@@ -28,7 +28,7 @@ func InitDatabase(cfg *Config) (*gorm.DB, error) {
 	gormConfig := &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent), // 使用自定义日志
 		NowFunc: func() time.Time {
-			return time.Now().UTC()
+			return time.Now().UTC() // 数据库存储 UTC 时间
 		},
 		DisableForeignKeyConstraintWhenMigrating: false,
 	}

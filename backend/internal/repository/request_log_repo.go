@@ -100,11 +100,12 @@ func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilte
 	}
 
 	// 分页查询
-	err := query.
-		Offset(filter.Offset).
-		Limit(filter.Limit).
-		Order("created_at DESC").
-		Find(&logs).Error
+	db := query.Order("created_at DESC")
+	// 只有当 Limit > 0 时才应用分页限制
+	if filter.Limit > 0 {
+		db = db.Offset(filter.Offset).Limit(filter.Limit)
+	}
+	err := db.Find(&logs).Error
 
 	return logs, total, err
 }

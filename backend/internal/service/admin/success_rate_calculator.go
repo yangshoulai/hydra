@@ -11,7 +11,7 @@ import (
 
 // SuccessRateCalculator 成功率计算器
 type SuccessRateCalculator struct {
-	logger       *slog.Logger
+	logger         *slog.Logger
 	requestLogRepo *repository.RequestLogRepository
 }
 
@@ -21,7 +21,7 @@ func NewSuccessRateCalculator(
 	requestLogRepo *repository.RequestLogRepository,
 ) *SuccessRateCalculator {
 	return &SuccessRateCalculator{
-		logger:       logger,
+		logger:         logger,
 		requestLogRepo: requestLogRepo,
 	}
 }
@@ -37,14 +37,16 @@ type SuccessRateStats struct {
 // CalculateTodaySuccessRate 计算今日成功率
 func (src *SuccessRateCalculator) CalculateTodaySuccessRate(ctx context.Context) (*SuccessRateStats, error) {
 	now := time.Now()
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	// 使用 UTC 时间计算今天的开始时间（数据库存储的是 UTC）
+	nowUTC := now.UTC()
+	startOfDayUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 
-	src.logger.Info("calculating today's success rate",
-		slog.Time("start_of_day", startOfDay),
-		slog.Time("now", now),
+	src.logger.Debug("计算今天的成功率",
+		slog.Time("start_of_day", startOfDayUTC),
+		slog.Time("now", nowUTC),
 	)
 
-	return src.calculateSuccessRate(ctx, startOfDay, now)
+	return src.calculateSuccessRate(ctx, startOfDayUTC, nowUTC)
 }
 
 // CalculateSuccessRateByTimeRange 计算指定时间范围的成功率

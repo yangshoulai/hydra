@@ -42,6 +42,15 @@ func InitLogger(cfg *LoggerConfig) (*slog.Logger, error) {
 	opts := &slog.HandlerOptions{
 		Level:     level,
 		AddSource: cfg.AddSource,
+		// 使用 ReplaceAttr 将时间转换为本地时间
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				// 将 UTC 时间转换为本地时间
+				localTime := a.Value.Time().Local()
+				a.Value = slog.StringValue(localTime.Format("2006-01-02T15:04:05Z07:00"))
+			}
+			return a
+		},
 	}
 
 	// 构建日志输出目标

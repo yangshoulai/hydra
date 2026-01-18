@@ -34,13 +34,14 @@ func NewKeySelector(logger *slog.Logger, circuitManager *circuit.Manager) *KeySe
 
 // SelectKey 从 Channel 的 Key 池中选择一个可用的 Key
 // 使用轮询(Round Robin)策略
-func (ks *KeySelector) SelectKey(channel *models.Channel) (*models.Key, error) {
+func (ks *KeySelector) SelectKey(channel *models.Channel, traceID string) (*models.Key, error) {
 	if channel == nil {
 		return nil, errors.New("channel is nil")
 	}
 
 	if len(channel.Keys) == 0 {
 		ks.logger.Warn("channel has no keys",
+			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 		)
@@ -48,10 +49,11 @@ func (ks *KeySelector) SelectKey(channel *models.Channel) (*models.Key, error) {
 	}
 
 	// 获取所有可用的 Key
-	availableKeys := ks.getAvailableKeys(channel)
+	availableKeys := ks.getAvailableKeys(channel, traceID)
 
 	if len(availableKeys) == 0 {
 		ks.logger.Warn("no available keys in channel",
+			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.Int("total_keys", len(channel.Keys)),
@@ -63,6 +65,7 @@ func (ks *KeySelector) SelectKey(channel *models.Channel) (*models.Key, error) {
 	selectedKey := ks.selectByRoundRobin(channel.ID, availableKeys)
 
 	ks.logger.Debug("key selected",
+		slog.String("trace_id", traceID),
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
 		slog.Uint64("key_id", uint64(selectedKey.ID)),
@@ -73,7 +76,7 @@ func (ks *KeySelector) SelectKey(channel *models.Channel) (*models.Key, error) {
 }
 
 // getAvailableKeys 获取所有可用的 Key
-func (ks *KeySelector) getAvailableKeys(channel *models.Channel) []*models.Key {
+func (ks *KeySelector) getAvailableKeys(channel *models.Channel, traceID string) []*models.Key {
 	availableKeys := make([]*models.Key, 0, len(channel.Keys))
 
 	for i := range channel.Keys {
@@ -82,6 +85,7 @@ func (ks *KeySelector) getAvailableKeys(channel *models.Channel) []*models.Key {
 		// 检查 Key 是否被禁用
 		if key.Status == "disabled" {
 			ks.logger.Debug("key is disabled",
+				slog.String("trace_id", traceID),
 				slog.Uint64("key_id", uint64(key.ID)),
 			)
 			continue
@@ -90,6 +94,7 @@ func (ks *KeySelector) getAvailableKeys(channel *models.Channel) []*models.Key {
 		// 检查熔断器状态
 		if !ks.circuitManager.IsKeyAvailable(key.ID) {
 			ks.logger.Debug("key is not available (circuit breaker)",
+				slog.String("trace_id", traceID),
 				slog.Uint64("key_id", uint64(key.ID)),
 			)
 			continue
@@ -135,9 +140,9 @@ func (ks *KeySelector) ResetCounter(channelID uint) {
 }
 
 // GetAvailableKeyCount 获取指定 Channel 的可用 Key 数量
-func (ks *KeySelector) GetAvailableKeyCount(channel *models.Channel) int {
+func (ks *KeySelector) GetAvailableKeyCount(channel *models.Channel, traceID string) int {
 	if channel == nil {
 		return 0
 	}
-	return len(ks.getAvailableKeys(channel))
+	return len(ks.getAvailableKeys(channel, traceID))
 }

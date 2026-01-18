@@ -11,7 +11,7 @@ import (
 
 // QPSAggregator QPS 时间序列聚合器
 type QPSAggregator struct {
-	logger       *slog.Logger
+	logger         *slog.Logger
 	requestLogRepo *repository.RequestLogRepository
 }
 
@@ -21,7 +21,7 @@ func NewQPSAggregator(
 	requestLogRepo *repository.RequestLogRepository,
 ) *QPSAggregator {
 	return &QPSAggregator{
-		logger:       logger,
+		logger:         logger,
 		requestLogRepo: requestLogRepo,
 	}
 }
@@ -35,39 +35,45 @@ type QPSDataPoint struct {
 // AggregateLastHour 聚合过去 1 小时的 QPS 数据（按分钟）
 func (qa *QPSAggregator) AggregateLastHour(ctx context.Context) ([]QPSDataPoint, error) {
 	now := time.Now()
-	startTime := now.Add(-1 * time.Hour)
+	// 使用 UTC 时间进行查询（数据库存储的是 UTC）
+	nowUTC := now.UTC()
+	startTimeUTC := nowUTC.Add(-1 * time.Hour)
 
-	qa.logger.Info("aggregating QPS data for last hour",
-		slog.Time("start_time", startTime),
-		slog.Time("end_time", now),
+	qa.logger.Debug("聚合最近一小时的QPS数据",
+		slog.Time("start_time", startTimeUTC),
+		slog.Time("end_time", nowUTC),
 	)
 
-	// 查询过去 1 小时的所有请求日志
-	logs, err := qa.requestLogRepo.GetByTimeRange(ctx, startTime, now)
+	// 查询过去 1 小时的所有请求日志（使用 UTC 时间）
+	logs, err := qa.requestLogRepo.GetByTimeRange(ctx, startTimeUTC, nowUTC)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get request logs: %w", err)
 	}
 
-	// 按分钟分组统计
+	// 按分钟分组统计（使用本地时间）
 	minuteBuckets := make(map[string]int)
 
 	for _, log := range logs {
+		// 将 UTC 时间转换为本地时间再分组
+		localTime := log.CreatedAt.Local()
 		// 按分钟分组 (格式: 2024-01-12 15:30)
-		minuteKey := log.CreatedAt.Format("2006-01-02 15:04")
+		minuteKey := localTime.Format("2006-01-02 15:04")
 		minuteBuckets[minuteKey]++
 	}
 
-	// 生成 60 个数据点（每分钟一个点）
+	// 生成 60 个数据点（每分钟一个点）- 使用本地时间
 	dataPoints := make([]QPSDataPoint, 0, 60)
 	for i := 59; i >= 0; i-- {
+		// 使用本地时间生成时间点
 		timestamp := now.Add(-time.Duration(i) * time.Minute)
-		minuteKey := timestamp.Format("2006-01-02 15:04")
+		localTime := timestamp.Local()
+		minuteKey := localTime.Format("2006-01-02 15:04")
 
 		count := minuteBuckets[minuteKey]
 		qps := float64(count) / 60.0 // 每分钟的请求数除以 60 秒
 
 		dataPoints = append(dataPoints, QPSDataPoint{
-			Timestamp: timestamp.Format("15:04"),
+			Timestamp: localTime.Format("15:04"),
 			QPS:       qps,
 		})
 	}
@@ -126,9 +132,11 @@ func (qa *QPSAggregator) AggregateByInterval(
 // GetCurrentQPS 获取当前 QPS（最近 1 分钟）
 func (qa *QPSAggregator) GetCurrentQPS(ctx context.Context) (float64, error) {
 	now := time.Now()
-	startTime := now.Add(-1 * time.Minute)
+	// 使用 UTC 时间进行查询（数据库存储的是 UTC）
+	nowUTC := now.UTC()
+	startTimeUTC := nowUTC.Add(-1 * time.Minute)
 
-	logs, err := qa.requestLogRepo.GetByTimeRange(ctx, startTime, now)
+	logs, err := qa.requestLogRepo.GetByTimeRange(ctx, startTimeUTC, nowUTC)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get request logs: %w", err)
 	}

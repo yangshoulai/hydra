@@ -60,7 +60,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	// 发送探测请求
 	resp, err := ph.httpClient.Do(req)
 	if err != nil {
-		ph.logger.Warn("probe request failed (network error)",
+		ph.logger.Warn("探测请求失败（网络错误）",
 			slog.Uint64("key_id", uint64(key.ID)),
 			slog.String("error", err.Error()),
 		)
@@ -139,7 +139,7 @@ func (ph *ProbeHandler) HandleProbeResult(keyID uint, channelID uint, success bo
 
 			newState := keyBreaker.GetState()
 			if newState == KeyStateCooling {
-				ph.logger.Warn("key re-entered cooling state after probe failure",
+				ph.logger.Warn("探测失败后密钥重新进入冷却状态",
 					slog.Uint64("key_id", uint64(keyID)),
 					slog.String("previous_state", string(currentState)),
 				)

@@ -12,9 +12,9 @@ import (
 
 // ChannelHealthAggregator 渠道健康状态汇总器
 type ChannelHealthAggregator struct {
-	logger       *slog.Logger
-	channelRepo  *repository.ChannelRepository
-	keyRepo      *repository.KeyRepository
+	logger         *slog.Logger
+	channelRepo    *repository.ChannelRepository
+	keyRepo        *repository.KeyRepository
 	requestLogRepo *repository.RequestLogRepository
 }
 
@@ -26,34 +26,32 @@ func NewChannelHealthAggregator(
 	requestLogRepo *repository.RequestLogRepository,
 ) *ChannelHealthAggregator {
 	return &ChannelHealthAggregator{
-		logger:       logger,
-		channelRepo:  channelRepo,
-		keyRepo:      keyRepo,
+		logger:         logger,
+		channelRepo:    channelRepo,
+		keyRepo:        keyRepo,
 		requestLogRepo: requestLogRepo,
 	}
 }
 
 // ChannelHealthInfo 渠道健康信息
 type ChannelHealthInfo struct {
-	ChannelID        uint                   `json:"channel_id"`
-	ChannelName      string                 `json:"channel_name"`
-	Status           string                 `json:"status"`
-	Priority         int                    `json:"priority"`
-	Weight           int                    `json:"weight"`
-	TotalKeys        int                    `json:"total_keys"`
-	HealthyKeys      int                    `json:"healthy_keys"`
-	UnhealthyKeys    int                    `json:"unhealthy_keys"`
-	HealthPercentage float64                `json:"health_percentage"`
-	LastRequestTime  *time.Time             `json:"last_request_time,omitempty"`
-	SuccessRate      float64                `json:"success_rate"`
-	TotalRequests    int                    `json:"total_requests"`
-	ErrorDistribution map[string]int        `json:"error_distribution,omitempty"`
+	ChannelID         uint           `json:"channel_id"`
+	ChannelName       string         `json:"channel_name"`
+	Status            string         `json:"status"`
+	Priority          int            `json:"priority"`
+	Weight            int            `json:"weight"`
+	TotalKeys         int            `json:"total_keys"`
+	HealthyKeys       int            `json:"healthy_keys"`
+	UnhealthyKeys     int            `json:"unhealthy_keys"`
+	HealthPercentage  float64        `json:"health_percentage"`
+	LastRequestTime   *time.Time     `json:"last_request_time,omitempty"`
+	SuccessRate       float64        `json:"success_rate"`
+	TotalRequests     int            `json:"total_requests"`
+	ErrorDistribution map[string]int `json:"error_distribution,omitempty"`
 }
 
 // AggregateAllChannels 汇总所有渠道的健康状态
 func (cha *ChannelHealthAggregator) AggregateAllChannels(ctx context.Context) ([]ChannelHealthInfo, error) {
-	cha.logger.Info("aggregating channel health status")
-
 	// 获取所有渠道
 	channels, err := cha.channelRepo.FindAll(ctx)
 	if err != nil {
@@ -106,11 +104,11 @@ func (cha *ChannelHealthAggregator) aggregateChannelHealth(
 	channel *models.Channel,
 ) (*ChannelHealthInfo, error) {
 	healthInfo := &ChannelHealthInfo{
-		ChannelID:        channel.ID,
-		ChannelName:      channel.Name,
-		Status:           channel.Status,
-		Priority:         channel.Priority,
-		Weight:           channel.Weight,
+		ChannelID:         channel.ID,
+		ChannelName:       channel.Name,
+		Status:            channel.Status,
+		Priority:          channel.Priority,
+		Weight:            channel.Weight,
 		ErrorDistribution: make(map[string]int),
 	}
 
@@ -138,9 +136,11 @@ func (cha *ChannelHealthAggregator) aggregateChannelHealth(
 
 	// 获取该渠道今日请求统计
 	now := time.Now()
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	// 使用 UTC 时间计算今天的开始时间（数据库存储的是 UTC）
+	nowUTC := now.UTC()
+	startOfDayUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 
-	logs, err := cha.requestLogRepo.GetByChannelIDAndTimeRange(ctx, channel.ID, startOfDay, now)
+	logs, err := cha.requestLogRepo.GetByChannelIDAndTimeRange(ctx, channel.ID, startOfDayUTC, nowUTC)
 	if err != nil {
 		cha.logger.Warn("failed to get request logs for channel",
 			slog.Int64("channel_id", int64(channel.ID)),
@@ -184,7 +184,7 @@ type OverallHealthStatus struct {
 }
 
 func (cha *ChannelHealthAggregator) GetOverallHealthStatus(ctx context.Context) (*OverallHealthStatus, error) {
-	cha.logger.Info("calculating overall health status")
+	cha.logger.Debug("计算整体健康状态")
 
 	healthInfos, err := cha.AggregateAllChannels(ctx)
 	if err != nil {

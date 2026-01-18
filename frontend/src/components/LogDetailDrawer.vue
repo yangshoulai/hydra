@@ -1,5 +1,5 @@
 <template>
-  <n-drawer v-model:show="visible" :width="900" placement="right" class="log-detail-drawer">
+  <n-drawer v-model:show="visible" :width="1200" placement="right" class="log-detail-drawer">
     <n-drawer-content :title="title" closable>
       <template v-if="log">
         <n-space vertical :size="24">
@@ -49,8 +49,42 @@
                 </n-space>
               </n-descriptions-item>
 
+              <n-descriptions-item v-if="log.request_headers" label="请求头" :span="2">
+                <template #default>
+                  <div class="code-block-wrapper">
+                    <n-button
+                        size="tiny"
+                        quaternary
+                        circle
+                        class="copy-button"
+                        @click="copyToClipboard(formatHeaders(log.request_headers), '请求头')"
+                    >
+                      <template #icon>
+                        <n-icon><CopyIcon/></n-icon>
+                      </template>
+                    </n-button>
+                    <n-code :code="formatHeaders(log.request_headers)" language="json" :word-wrap="true" :hljs="hljs"/>
+                  </div>
+                </template>
+              </n-descriptions-item>
+
               <n-descriptions-item v-if="log.request_body" label="请求体" :span="2">
-                <n-code :code="log.request_body" language="json" :word-wrap="true"/>
+                <template #default>
+                  <div class="code-block-wrapper">
+                    <n-button
+                        size="tiny"
+                        quaternary
+                        circle
+                        class="copy-button"
+                        @click="copyToClipboard(formatJSON(log.request_body), '请求体')"
+                    >
+                      <template #icon>
+                        <n-icon><CopyIcon/></n-icon>
+                      </template>
+                    </n-button>
+                    <n-code :code="formatJSON(log.request_body)" language="json" :word-wrap="true" :hljs="hljs"/>
+                  </div>
+                </template>
               </n-descriptions-item>
             </n-descriptions>
           </n-card>
@@ -130,10 +164,62 @@
                 </n-alert>
               </n-descriptions-item>
 
+              <n-descriptions-item v-if="log.response_headers" label="响应头" :span="3">
+                <template #default>
+                  <div class="code-block-wrapper">
+                    <n-button
+                        size="tiny"
+                        quaternary
+                        circle
+                        class="copy-button"
+                        @click="copyToClipboard(formatHeaders(log.response_headers), '响应头')"
+                    >
+                      <template #icon>
+                        <n-icon><CopyIcon/></n-icon>
+                      </template>
+                    </n-button>
+                    <n-code :code="formatHeaders(log.response_headers)" language="json" :word-wrap="true" :hljs="hljs"/>
+                  </div>
+                </template>
+              </n-descriptions-item>
+
               <n-descriptions-item v-if="log.response_body" label="响应体" :span="3">
-                <n-code :code="log.response_body" language="json" :word-wrap="true"/>
+                <template #default>
+                  <div class="code-block-wrapper">
+                    <n-button
+                        size="tiny"
+                        quaternary
+                        circle
+                        class="copy-button"
+                        @click="copyToClipboard(getFormattedResponseBody(), '响应体')"
+                    >
+                      <template #icon>
+                        <n-icon><CopyIcon/></n-icon>
+                      </template>
+                    </n-button>
+                    <n-code
+                        :code="getFormattedResponseBody()"
+                        :language="getResponseLanguage()"
+                        :word-wrap="true"
+                        :hljs="hljs"
+                    />
+                  </div>
+                </template>
               </n-descriptions-item>
             </n-descriptions>
+          </n-card>
+
+          <!-- 调用过程卡片 -->
+          <n-card title="调用过程" size="small" :bordered="false" class="detail-section">
+            <n-data-table
+                :columns="timelineColumns"
+                :data="timelineData"
+                :pagination="false"
+                :bordered="true"
+                size="small"
+                :row-key="(row: RequestLog) => row.id"
+                :row-props="getRowProps"
+            />
           </n-card>
 
           <!-- 客户端信息卡片 -->
@@ -164,11 +250,20 @@
 </template>
 
 <script setup lang="ts">
-import {computed} from 'vue'
-import {NAlert, NCard, NCode, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NIcon, NSpace, NTag, NText} from 'naive-ui'
-import {GlobeOutline, KeyOutline, TimeOutline} from '@vicons/ionicons5'
+import {computed, onMounted, ref, watch, h} from 'vue'
+import {useMessage, type DataTableColumns} from 'naive-ui'
+import {NAlert, NButton, NCard, NCode, NDataTable, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NIcon, NSpace, NTag, NText} from 'naive-ui'
+import {CopyOutline, GlobeOutline, KeyOutline, TimeOutline} from '@vicons/ionicons5'
 import type {RequestLog} from '../types/log'
 import TraceIdCopy from './TraceIdCopy.vue'
+import {logApi} from '../services/logService'
+import hljs from 'highlight.js/lib/core'
+import json from 'highlight.js/lib/languages/json'
+
+// 注册 JSON 语言
+hljs.registerLanguage('json', json)
+
+const message = useMessage()
 
 interface Props {
   log: RequestLog | null
@@ -185,6 +280,10 @@ const emit = defineEmits<Emits>()
 const TimeIcon = TimeOutline
 const KeyIcon = KeyOutline
 const GlobeIcon = GlobeOutline
+const CopyIcon = CopyOutline
+
+// 调用过程数据
+const timelineData = ref<RequestLog[]>([])
 
 // 控制显示状态
 const visible = computed({
@@ -195,6 +294,106 @@ const visible = computed({
 // 标题
 const title = computed(() => {
   return props.log ? `日志详情 - #${props.log.id}` : '日志详情'
+})
+
+// 调用过程表格列定义
+const timelineColumns = computed<DataTableColumns<RequestLog>>(() => [
+  {
+    title: '时间',
+    key: 'created_at',
+    width: 160,
+    render: (row) => formatTime(row.created_at)
+  },
+  {
+    title: '渠道',
+    key: 'channel_name',
+    width: 160,
+    render: (row) => row.channel_name || '-'
+  },
+  {
+    title: '渠道模型',
+    key: 'upstream_model',
+    width: 240,
+    render: (row) => row.upstream_model || '-'
+  },
+  {
+    title: '状态',
+    key: 'status',
+    width: 80,
+    align:'center',
+    render: (row) => {
+      const type = row.is_success ? 'success' : 'error'
+      const label = row.is_success ? '成功' : '失败'
+      return h(NTag, {type, size: 'small', bordered: false}, {default: () => label})
+    }
+  },
+  {
+    title: '状态码',
+    key: 'status_code',
+    width: 80,
+    align:'center',
+    render: (row) => {
+      const type = getStatusCodeType(row.status_code)
+      return h(NTag, {type, size: 'small', bordered: false}, {default: () => row.status_code})
+    }
+  },
+  {
+    title: '响应时间',
+    key: 'response_time',
+    width: 80,
+    align:'right',
+    render: (row) => {
+      const seconds = (row.response_time / 1000).toFixed(2)
+      const timeType = getResponseTimeStatusType(row.response_time)
+      return h('div', {class: 'flex items-center gap-2 justify-end'}, [
+        h(NTag, {type: timeType, size: 'small', bordered: false}, {default: () => `${seconds}s`})
+      ])
+    }
+  }
+])
+
+// 获取响应时间状态类型（用于 timeline）
+function getResponseTimeStatusType(time: number): 'success' | 'warning' | 'error' {
+  const seconds = time / 1000
+  if (seconds < 5) return 'success'
+  if (seconds < 10) return 'warning'
+  return 'error'
+}
+
+// 获取行属性，用于高亮当前日志
+function getRowProps(row: RequestLog) {
+  if (props.log && row.id === props.log.id) {
+    return {
+      style: 'background-color: #e6f7ff; font-weight: 500;'
+    }
+  }
+  return {}
+}
+
+// 加载调用过程数据
+async function loadTimelineData() {
+  if (!props.log?.trace_id) {
+    timelineData.value = []
+    return
+  }
+
+  try {
+    const data = await logApi.getTimelineByTraceID(props.log.trace_id)
+    timelineData.value = data
+  } catch (error) {
+    console.error('Failed to load timeline data:', error)
+    message.error('加载调用过程失败')
+  }
+}
+
+// 监听 log 变化，重新加载调用过程
+watch(() => props.log, () => {
+  loadTimelineData()
+}, {immediate: true})
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadTimelineData()
 })
 
 // 获取HTTP方法类型
@@ -236,6 +435,62 @@ function formatTime(timeStr: string) {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'
+  })
+}
+
+// 格式化请求头/响应头
+function formatHeaders(headersStr: string): string {
+  try {
+    const headers = JSON.parse(headersStr)
+    return JSON.stringify(headers, null, 2)
+  } catch {
+    return headersStr
+  }
+}
+
+// 格式化 JSON
+function formatJSON(jsonStr: string): string {
+  try {
+    const obj = JSON.parse(jsonStr)
+    return JSON.stringify(obj, null, 2)
+  } catch {
+    return jsonStr
+  }
+}
+
+// 获取格式化后的响应体
+function getFormattedResponseBody(): string {
+  if (!props.log?.response_body) return ''
+  // 如果是流式响应，直接返回原始内容（可能是 SSE 格式）
+  if (props.log.is_stream) {
+    return props.log.response_body
+  }
+  // 非流式响应尝试格式化 JSON
+  return formatJSON(props.log.response_body)
+}
+
+// 获取响应体的语言类型
+function getResponseLanguage(): string {
+  if (!props.log?.response_body) return 'text'
+  // 如果是流式响应，使用文本模式
+  if (props.log.is_stream) {
+    return 'text'
+  }
+  // 非流式响应尝试检测是否为 JSON
+  try {
+    JSON.parse(props.log.response_body)
+    return 'json'
+  } catch {
+    return 'text'
+  }
+}
+
+// 复制到剪贴板
+function copyToClipboard(text: string, label: string) {
+  navigator.clipboard.writeText(text).then(() => {
+    message.success(`${label}已复制到剪贴板`)
+  }).catch(() => {
+    message.error('复制失败')
   })
 }
 </script>
@@ -287,5 +542,23 @@ function formatTime(timeStr: string) {
 
 :deep(.n-descriptions-table-content__content) {
   background: #ffffff;
+}
+
+.code-block-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.code-block-wrapper:hover .copy-button {
+  opacity: 1;
 }
 </style>
