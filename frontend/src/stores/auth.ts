@@ -21,18 +21,6 @@ export const useAuthStore = defineStore('auth', () => {
     // Actions
 
     /**
-     * 初始化认证状态 - 从localStorage恢复token
-     */
-    function initialize() {
-        const savedToken = localStorage.getItem('access_token')
-        if (savedToken) {
-            token.value = savedToken
-            // 可以选择自动获取用户信息
-            fetchUserInfo()
-        }
-    }
-
-    /**
      * 登录
      */
     async function login(credentials: LoginRequest) {
@@ -55,48 +43,6 @@ export const useAuthStore = defineStore('auth', () => {
             return {success: false, error: error.value}
         } finally {
             loading.value = false
-        }
-    }
-
-    /**
-     * 登出
-     */
-    async function logout() {
-        try {
-            if (token.value) {
-                await authApi.logout()
-            }
-        } catch (err) {
-            console.error('Logout error:', err)
-        } finally {
-            // 清除本地状态
-            token.value = null
-            user.value = null
-            error.value = null
-
-            // 清除localStorage
-            localStorage.removeItem('access_token')
-            localStorage.removeItem('token_expires_at')
-        }
-    }
-
-    /**
-     * 获取当前用户信息
-     */
-    async function fetchUserInfo() {
-        if (!token.value) {
-            return
-        }
-
-        try {
-            const userInfo = await authApi.me()
-            user.value = userInfo
-        } catch (err: any) {
-            console.error('Failed to fetch user info:', err)
-            // 如果token无效，清除认证状态
-            if (err.response?.status === 401) {
-                await logout()
-            }
         }
     }
 
@@ -133,10 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
         currentUser,
 
         // Actions
-        initialize,
         login,
-        logout,
-        fetchUserInfo,
         isTokenExpired,
         setAuth
     }

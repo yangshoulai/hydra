@@ -168,6 +168,72 @@ func (s *ModelService) List(ctx context.Context) ([]models.Model, error) {
 	return s.modelRepo.List(ctx)
 }
 
+// ModelListRequest 模型列表请求
+type ModelListRequest struct {
+	Page       int    `form:"page" binding:"omitempty,min=1"`
+	PageSize   int    `form:"page_size" binding:"omitempty,min=1,max=1000"`
+	Name       string `form:"name" binding:"omitempty,max=100"`           // 模型名称模糊查询
+	ProviderID string `form:"provider_id" binding:"omitempty,max=50"`     // 厂商ID精确查询
+	SortBy     string `form:"sort_by" binding:"omitempty,oneof=id name"` // 排序字段
+	SortOrder  string `form:"sort_order" binding:"omitempty,oneof=asc desc"`
+}
+
+// ModelListResponse 模型列表响应
+type ModelListResponse struct {
+	Total    int64          `json:"total"`
+	Page     int            `json:"page"`
+	PageSize int            `json:"page_size"`
+	Items    []models.Model `json:"items"`
+}
+
+// ListWithFilter 分页查询模型列表（带过滤和排序）
+func (s *ModelService) ListWithFilter(ctx context.Context, req ModelListRequest) (*ModelListResponse, error) {
+	// 设置默认值
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 20
+	}
+
+	// 计算偏移量
+	offset := (req.Page - 1) * req.PageSize
+
+	// 构建过滤条件
+	var filter *repository.ModelFilter
+	if req.Name != "" || req.ProviderID != "" {
+		filter = &repository.ModelFilter{
+			Name:       req.Name,
+			ProviderID: req.ProviderID,
+		}
+	}
+
+	// 构建排序选项
+	var sortOpts *repository.ModelSortOptions
+	if req.SortBy != "" {
+		sortOpts = &repository.ModelSortOptions{
+			Field:     req.SortBy,
+			Direction: req.SortOrder,
+		}
+		if sortOpts.Direction == "" {
+			sortOpts.Direction = "asc" // 默认升序
+		}
+	}
+
+	// 查询模型列表
+	models, total, _, err := s.modelRepo.ListWithFilter(ctx, offset, req.PageSize, filter, sortOpts, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ModelListResponse{
+		Total:    total,
+		Page:     req.Page,
+		PageSize: req.PageSize,
+		Items:    models,
+	}, nil
+}
+
 // ListWithActiveChannelConfigs 查询有激活渠道配置的模型列表（对外API用）
 func (s *ModelService) ListWithActiveChannelConfigs(ctx context.Context) ([]models.Model, error) {
 	return s.modelRepo.ListWithActiveChannelConfigs(ctx)

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
+	"github.com/yangshoulai/hydra/internal/service/circuit"
 	"gorm.io/gorm"
 )
 
@@ -18,6 +19,7 @@ type ChannelHandler struct {
 	modelConfigRepo *repository.ChannelModelConfigRepository
 	db              *gorm.DB
 	logger          *slog.Logger
+	circuitManager  *circuit.Manager
 }
 
 // NewChannelHandler 创建渠道处理器
@@ -26,27 +28,40 @@ func NewChannelHandler(
 	modelConfigRepo *repository.ChannelModelConfigRepository,
 	db *gorm.DB,
 	logger *slog.Logger,
+	circuitManager *circuit.Manager,
 ) *ChannelHandler {
 	return &ChannelHandler{
 		channelRepo:     channelRepo,
 		modelConfigRepo: modelConfigRepo,
 		db:              db,
 		logger:          logger,
+		circuitManager:  circuitManager,
 	}
 }
 
 // ChannelListRequest 渠道列表请求
 type ChannelListRequest struct {
-	Page     int `form:"page" binding:"omitempty,min=1"`
-	PageSize int `form:"page_size" binding:"omitempty,min=1,max=1000"`
+	Page      int    `form:"page" binding:"omitempty,min=1"`
+	PageSize  int    `form:"page_size" binding:"omitempty,min=1,max=1000"`
+	Name      string `form:"name" binding:"omitempty,max=100"`                                 // 名称过滤
+	BaseURL   string `form:"base_url" binding:"omitempty,max=500"`                             // Base URL 过滤
+	Status    string `form:"status" binding:"omitempty,oneof=active disabled"`                 // 状态过滤
+	SortBy    string `form:"sort_by" binding:"omitempty,oneof=id name priority weight status"` // 排序字段
+	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`                    // 排序方向
 }
 
 // ChannelListResponse 渠道列表响应
 type ChannelListResponse struct {
-	Total    int64             `json:"total"`
-	Page     int               `json:"page"`
-	PageSize int               `json:"page_size"`
-	Items    []*models.Channel `json:"items"`
+	Total    int64                   `json:"total"`
+	Page     int                     `json:"page"`
+	PageSize int                     `json:"page_size"`
+	Items    []ChannelWithModelCount `json:"items"`
+}
+
+// ChannelWithModelCount 带模型数量的渠道信息
+type ChannelWithModelCount struct {
+	*models.Channel
+	ModelCount int `json:"model_count"`
 }
 
 // CreateChannelRequest 创建渠道请求
@@ -103,8 +118,27 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 	// 计算偏移量
 	offset := (req.Page - 1) * req.PageSize
 
+	// 构建过滤条件
+	filter := &repository.ChannelFilter{
+		Name:    req.Name,
+		BaseURL: req.BaseURL,
+		Status:  req.Status,
+	}
+
+	// 构建排序选项
+	var sortOpts *repository.ChannelSortOptions
+	if req.SortBy != "" {
+		sortOpts = &repository.ChannelSortOptions{
+			Field:     req.SortBy,
+			Direction: req.SortOrder,
+		}
+		if sortOpts.Direction == "" {
+			sortOpts.Direction = "asc" // 默认升序
+		}
+	}
+
 	// 查询渠道列表
-	channels, total, err := h.channelRepo.List(c.Request.Context(), offset, req.PageSize)
+	channels, total, err := h.channelRepo.ListWithFilter(c.Request.Context(), offset, req.PageSize, filter, sortOpts)
 	if err != nil {
 		h.logger.Error("查询渠道列表失败",
 			slog.String("error", err.Error()),
@@ -115,11 +149,30 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 		return
 	}
 
+	// 查询每个渠道的模型配置数量
+	result := make([]ChannelWithModelCount, 0, len(channels))
+	for _, channel := range channels {
+		// 查询该渠道的模型配置数量
+		count, err := h.modelConfigRepo.CountByChannelID(c.Request.Context(), channel.ID)
+		if err != nil {
+			h.logger.Warn("查询渠道模型数量失败",
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("error", err.Error()),
+			)
+			count = 0
+		}
+
+		result = append(result, ChannelWithModelCount{
+			Channel:    channel,
+			ModelCount: count,
+		})
+	}
+
 	c.JSON(http.StatusOK, ChannelListResponse{
 		Total:    total,
 		Page:     req.Page,
 		PageSize: req.PageSize,
-		Items:    channels,
+		Items:    result,
 	})
 }
 
@@ -381,14 +434,14 @@ func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("渠道已删除",
-		slog.Uint64("channel_id", id),
-		slog.String("name", channel.Name),
-	)
+	// 清理熔断器缓存
+	if h.circuitManager != nil {
+		h.circuitManager.RemoveChannelBreakersAndKeys(uint(id))
+	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "channel deleted successfully",
-	})
+	h.logger.Info("渠道已删除", slog.Uint64("channel_id", id), slog.String("name", channel.Name))
+
+	c.JSON(http.StatusOK, gin.H{"message": "channel deleted successfully"})
 }
 
 // GetChannelsByModel 获取模型关联的渠道列表

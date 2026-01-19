@@ -19,11 +19,3 @@ export interface AdminUser {
     created_at: string
     updated_at: string
 }
-
-export interface AuthMeResponse {
-    id: number
-    username: string
-    email?: string
-    created_at: string
-    updated_at: string
-}

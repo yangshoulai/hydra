@@ -10,6 +10,7 @@ import type {
   CreateChannelRequest,
   UpdateChannelRequest,
   ChannelListResponse,
+  ChannelListParams,
   CreateKeyRequest,
   ResetKeyRequest,
   ChannelHealthCheckResult,
@@ -23,10 +24,10 @@ export const channelApi = {
   /**
    * 获取渠道列表
    */
-  async list(page = 1, pageSize = 20): Promise<ChannelListResponse> {
+  async list(params?: ChannelListParams): Promise<ChannelListResponse> {
     const response = await apiClient.get<ChannelListResponse>(
       '/admin/api/channels',
-      { params: { page, page_size: pageSize } }
+      { params }
     )
     return response.data
   },

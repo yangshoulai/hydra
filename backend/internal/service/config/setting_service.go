@@ -140,7 +140,10 @@ func (s *SettingService) get(ctx context.Context, key string) (string, error) {
 
 // Set 设置配置值
 func (s *SettingService) Set(ctx context.Context, key string, value string) error {
-	err := s.systemSettingRepo.Set(ctx, key, value)
+	// 获取默认 category（Repository 会保留原有 category）
+	category := s.getDefaultCategory(key)
+
+	err := s.systemSettingRepo.Set(ctx, key, value, category)
 	if err != nil {
 		s.logger.Error("设置配置失败",
 			slog.String("key", key),
@@ -159,18 +162,28 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 	s.logger.Info("设置已更新",
 		slog.String("key", key),
 		slog.String("value", value),
+		slog.String("category", category),
 	)
 
-	// 触发配置变更通知
-	category := s.getCategoryByKey(key)
-	s.notifier.Notify(ctx, category)
+	// 获取实际的 category（用于通知）
+	actualCategory, _ := s.getCategoryFromDB(ctx, key)
+	if actualCategory == "" {
+		actualCategory = category
+	}
+	s.notifier.Notify(ctx, actualCategory)
 
 	return nil
 }
 
 // BatchSet 批量设置配置
 func (s *SettingService) BatchSet(ctx context.Context, settings map[string]string) error {
-	err := s.systemSettingRepo.BatchSet(ctx, settings)
+	// 为每个 key 获取默认 category（Repository 会保留原有 category）
+	categories := make(map[string]string)
+	for key := range settings {
+		categories[key] = s.getDefaultCategory(key)
+	}
+
+	err := s.systemSettingRepo.BatchSet(ctx, settings, categories)
 	if err != nil {
 		s.logger.Error("批量设置配置失败",
 			slog.String("error", err.Error()),
@@ -178,8 +191,8 @@ func (s *SettingService) BatchSet(ctx context.Context, settings map[string]strin
 		return err
 	}
 
-	// 收集所有变更的分类
-	categories := make(map[string]bool)
+	// 收集所有实际的分类（用于通知）
+	uniqueCategories := make(map[string]bool)
 
 	// 更新缓存
 	for key, value := range settings {
@@ -188,8 +201,12 @@ func (s *SettingService) BatchSet(ctx context.Context, settings map[string]strin
 			expiresAt: time.Now().Add(s.cacheTTL),
 		})
 
-		category := s.getCategoryByKey(key)
-		categories[category] = true
+		// 获取实际的 category
+		actualCategory, _ := s.getCategoryFromDB(ctx, key)
+		if actualCategory == "" {
+			actualCategory = categories[key]
+		}
+		uniqueCategories[actualCategory] = true
 	}
 
 	s.logger.Info("批量更新设置完成",
@@ -197,15 +214,30 @@ func (s *SettingService) BatchSet(ctx context.Context, settings map[string]strin
 	)
 
 	// 触发配置变更通知（通知所有涉及的分类）
-	for category := range categories {
+	for category := range uniqueCategories {
 		s.notifier.Notify(ctx, category)
 	}
 
 	return nil
 }
 
-// getCategoryByKey 根据配置键获取分类
-func (s *SettingService) getCategoryByKey(key string) string {
+// getCategoryFromDB 从数据库获取配置的 category
+func (s *SettingService) getCategoryFromDB(ctx context.Context, key string) (string, error) {
+	setting, err := s.systemSettingRepo.GetByKey(ctx, key)
+	if err != nil {
+		return "", err
+	}
+
+	if setting != nil && setting.Category != "" {
+		return setting.Category, nil
+	}
+
+	// 如果记录不存在或 category 为空，返回错误让调用者使用默认值
+	return "", fmt.Errorf("setting not found or category is empty")
+}
+
+// getDefaultCategory 根据配置键获取默认分类（用于新创建的配置）
+func (s *SettingService) getDefaultCategory(key string) string {
 	switch {
 	case key == models.SettingCircuitBreakerFailureThreshold ||
 		key == models.SettingCircuitBreakerCoolingDuration ||

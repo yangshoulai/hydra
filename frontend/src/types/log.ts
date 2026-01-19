@@ -35,12 +35,12 @@ export interface LogQueryRequest {
   page_size?: number
   trace_id?: string
   access_token?: string
-  requested_model?: string
-  channel_id?: number
-  status_code?: number
-  is_success?: boolean
-  start_time?: string
-  end_time?: string
+  requested_model?: string | null
+  channel_id?: number | null
+  status_code?: number | null
+  is_success?: boolean | null
+  start_time?: string | null
+  end_time?: string | null
   order_by?: 'created_at' | 'response_time'
   order?: 'asc' | 'desc'
 }

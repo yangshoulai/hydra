@@ -72,27 +72,85 @@ func (r *ChannelRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&models.Channel{}, id).Error
 }
 
+// ChannelFilter 渠道过滤选项
+type ChannelFilter struct {
+	Name    string // 名称模糊查询
+	BaseURL string // Base URL 模糊查询
+	Status  string // 状态精确查询
+}
+
+// ChannelSortOptions 渠道排序选项
+type ChannelSortOptions struct {
+	Field     string // 排序字段：id, name, priority, weight, status
+	Direction string // 排序方向：asc, desc
+}
+
 // List 分页查询渠道列表
 func (r *ChannelRepository) List(ctx context.Context, offset, limit int) ([]*models.Channel, int64, error) {
+	return r.ListWithFilter(ctx, offset, limit, nil, nil)
+}
+
+// ListWithFilter 分页查询渠道列表（带过滤）
+func (r *ChannelRepository) ListWithFilter(ctx context.Context, offset, limit int, filter *ChannelFilter, sortOpts *ChannelSortOptions) ([]*models.Channel, int64, error) {
 	var channels []*models.Channel
 	var total int64
 
+	query := r.db.WithContext(ctx).Model(&models.Channel{})
+
+	// 应用过滤条件
+	if filter != nil {
+		if filter.Name != "" {
+			query = query.Where("name LIKE ?", "%"+filter.Name+"%")
+		}
+		if filter.BaseURL != "" {
+			query = query.Where("base_url LIKE ?", "%"+filter.BaseURL+"%")
+		}
+		if filter.Status != "" {
+			query = query.Where("status = ?", filter.Status)
+		}
+	}
+
 	// 查询总数
-	if err := r.db.WithContext(ctx).Model(&models.Channel{}).Count(&total).Error; err != nil {
+	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
+	// 构建排序
+	orderBy := "priority ASC, id DESC" // 默认排序
+	if sortOpts != nil && sortOpts.Field != "" {
+		direction := "ASC"
+		if sortOpts.Direction == "desc" {
+			direction = "DESC"
+		}
+
+		// 验证排序字段，防止 SQL 注入
+		allowedFields := map[string]bool{
+			"id":       true,
+			"name":     true,
+			"priority": true,
+			"weight":   true,
+			"status":   true,
+		}
+
+		if allowedFields[sortOpts.Field] {
+			orderBy = sortOpts.Field + " " + direction
+		}
+	}
+
 	// 分页查询
-	err := r.db.WithContext(ctx).
+	err := query.
 		Preload("Keys").
 		Preload("ModelConfigs").
 		Offset(offset).
 		Limit(limit).
-		Order("priority ASC, id ASC").
+		Order(orderBy).
 		Find(&channels).Error
 
 	return channels, total, err
 }
+
+// List 分页查询渠道列表（已废弃，使用 ListWithFilter）
+// func (r *ChannelRepository) List(ctx context.Context, offset, limit int) ([]*models.Channel, int64, error) {
 
 // FindByModel 根据统一模型名查询所有支持该模型的渠道
 func (r *ChannelRepository) FindByModel(ctx context.Context, unifiedModel string) ([]models.Channel, error) {

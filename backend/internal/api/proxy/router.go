@@ -71,8 +71,5 @@ func RegisterRoutes(
 		v1.GET("/models", modelsHandler.Handle)
 	}
 
-	logger.Info("代理路由注册成功",
-		slog.String("prefix", "/v1"),
-		slog.Int("routes_count", 4),
-	)
+	logger.Info("代理路由注册成功", slog.String("prefix", "/v1"))
 }

@@ -20,6 +20,57 @@
       </n-space>
     </n-card>
 
+    <!-- 过滤表单 -->
+    <n-form inline :label-width="50" :model="filters" :label-placement="'left'" :label-align="'left'" :show-feedback="false">
+      <n-grid :cols="24" :x-gap="24" responsive="screen">
+        <n-form-item-gi :span="6" label="名称">
+          <n-input
+              v-model:value="filters.name"
+              placeholder="输入渠道名称"
+              clearable
+              @update:value="handleFilterChange"
+          />
+        </n-form-item-gi>
+        <n-form-item-gi :span="6" label="BASE URL" :label-width="80">
+          <n-input
+              v-model:value="filters.base_url"
+              placeholder="输入 Base URL"
+              clearable
+              @update:value="handleFilterChange"
+          />
+        </n-form-item-gi>
+        <n-form-item-gi :span="6" label="状态">
+          <n-select
+              v-model:value="filters.status"
+              placeholder="选择状态"
+              clearable
+              :options="statusOptions"
+              @update:value="handleFilterChange"
+          />
+        </n-form-item-gi>
+        <n-form-item-gi :span="6">
+          <n-space>
+            <n-button type="primary" @click="handleSearch">
+              <template #icon>
+                <n-icon>
+                  <SearchOutline/>
+                </n-icon>
+              </template>
+              查询
+            </n-button>
+            <n-button @click="handleReset">
+              <template #icon>
+                <n-icon>
+                  <RefreshOutline/>
+                </n-icon>
+              </template>
+              重置
+            </n-button>
+          </n-space>
+        </n-form-item-gi>
+      </n-grid>
+    </n-form>
+
     <!-- 数据表格 -->
     <n-data-table
         :columns="columns"
@@ -28,9 +79,10 @@
         :pagination="false"
         :single-line="false"
         bordered
-        :scroll-x="1600"
+        :scroll-x="1440"
         striped
         :row-key="(row: Channel) => row.id"
+        @update:sorter="handleSorterChange"
     />
 
     <div class="flex justify-end">
@@ -75,11 +127,11 @@
 </template>
 
 <script setup lang="ts">
-import {h, onMounted, reactive, ref} from 'vue'
-import {type DataTableColumns, NButton, NCard, NDataTable, NIcon, NPagination, NSpace, NTag, NText} from 'naive-ui'
-import {AddOutline, GridOutline, KeyOutline} from '@vicons/ionicons5'
+import {computed, h, onMounted, reactive, ref} from 'vue'
+import {type DataTableColumns, NButton, NCard, NDataTable, NForm, NFormItemGi, NGrid, NIcon, NInput, NPagination, NSelect, NSpace, NTag, NText} from 'naive-ui'
+import {AddOutline, CreateOutline, GridOutline, KeyOutline, RefreshOutline, SearchOutline, TrashOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
-import type {Channel} from '../types/channel'
+import type {Channel, ChannelListParams} from '../types/channel'
 import ChannelDialog from '../components/ChannelDialog.vue'
 import KeyManagementDialog from '../components/KeyManagementDialog.vue'
 import ModelManagementDialog from '../components/ModelManagementDialog.vue' // State
@@ -92,6 +144,25 @@ const editingChannel = ref<Channel | null>(null)
 const showKeyManagement = ref(false)
 const showModelManagement = ref(false)
 const selectedChannel = ref<Channel | null>(null)
+
+// 过滤条件
+const filters = reactive<ChannelListParams>({
+  name: '',
+  base_url: '',
+  status: null
+})
+
+// 排序状态
+const sortState = reactive({
+  columnKey: '' as 'id' | 'name' | 'priority' | 'weight' | 'status' | '',
+  order: false as boolean | 'asc' | 'desc' // false: 无排序, 'asc': 升序, 'desc': 降序
+})
+
+// 状态选项
+const statusOptions = [
+  {label: '激活', value: 'active'},
+  {label: '禁用', value: 'disabled'}
+]
 
 // 分页
 const pagination = reactive({
@@ -111,129 +182,25 @@ const pagination = reactive({
   }
 })
 
-// 表格列定义
-const columns: DataTableColumns<Channel> = [
-  {
-    title: 'ID',
-    key: 'id',
-    width: 80,
-    align: 'left'
-  },
-  {
-    title: '名称',
-    key: 'name',
-    width: 240
-  },
-  {
-    title: 'BASE URL',
-    key: 'base_url',
-    width: 320,
-    ellipsis: {
-      tooltip: true
-    }
-  },
-  {
-    title: '状态',
-    key: 'status',
-    align: 'center',
-    width: 160,
-    render(row) {
-      return h(
-          NTag,
-          {
-            type: row.status === 'active' ? 'success' : 'warning',
-            size: "small"
-          },
-          {
-            default: () => (row.status === 'active' ? '激活' : '禁用')
-          }
-      )
-    }
-  },
-  {
-    title: '优先级',
-    key: 'priority',
-    width: 160,
-    align: 'right'
-  },
-  {
-    title: '权重',
-    key: 'weight',
-    width: 160,
-    align: 'right'
-  },
-  {
-    title: '密钥数量',
-    key: 'keys_count',
-    width: 120,
-    render(row) {
-      return row.keys?.length || 0
-    },
-    align: 'right'
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 360,
-    align: 'center',
-    fixed: 'right',
-    render(row) {
-      return h(
-          'div',
-          {class: 'flex gap-2 justify-center'},
-          [
-            h(
-                NButton,
-                {
-                  size: 'small',
-                  type:'info',
-                  onClick: () => handleKeyManagement(row)
-                },
-                {
-                  default: () => '密钥管理',
-                  icon: () => h(NIcon, {}, {default: () => h(KeyOutline)})
-                }
-            ),
-            h(
-                NButton,
-                {
-                  size: 'small',
-                  type:'primary',
-                  onClick: () => handleModelManagement(row)
-                },
-                {
-                  default: () => '模型管理',
-                  icon: () => h(NIcon, {}, {default: () => h(GridOutline)})
-                }
-            ),
-            h(
-                NButton,
-                {
-                  size: 'small',
-                  onClick: () => handleEdit(row)
-                },
-                {default: () => '编辑'}
-            ),
-            h(
-                NButton,
-                {
-                  size: 'small',
-                  type: 'error',
-                  onClick: () => handleDelete(row)
-                },
-                {default: () => '删除'}
-            )
-          ]
-      )
-    }
-  }
-]
-
 // 获取渠道列表
 async function fetchChannels() {
   loading.value = true
   try {
-    const result = await channelApi.list(pagination.page, pagination.pageSize)
+    const params: ChannelListParams = {
+      page: pagination.page,
+      page_size: pagination.pageSize,
+      name: filters.name || undefined,
+      base_url: filters.base_url || undefined,
+      status: filters.status || undefined
+    }
+
+    // 添加排序参数
+    if (sortState.columnKey && sortState.order) {
+      params.sort_by = sortState.columnKey
+      params.sort_order = sortState.order as 'asc' | 'desc'
+    }
+
+    const result = await channelApi.list(params)
     channels.value = result.items
     pagination.total = result.total
   } catch (error: any) {
@@ -243,6 +210,212 @@ async function fetchChannels() {
     loading.value = false
   }
 }
+
+// 处理排序变化
+function handleSorterChange(sorter: { columnKey: string; order: 'ascend' | 'descend' | false }) {
+  if (sorter.columnKey) {
+    sortState.columnKey = sorter.columnKey as 'id' | 'name' | 'priority' | 'weight' | 'status'
+    sortState.order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : false
+  } else {
+    sortState.columnKey = '' as 'id' | 'name' | 'priority' | 'weight' | 'status'
+    sortState.order = false
+  }
+
+  pagination.page = 1
+  fetchChannels()
+}
+
+// 过滤条件变化时重置到第一页
+function handleFilterChange() {
+  pagination.page = 1
+}
+
+// 搜索
+function handleSearch() {
+  pagination.page = 1
+  fetchChannels()
+}
+
+// 重置
+function handleReset() {
+  filters.name = ''
+  filters.base_url = ''
+  filters.status = null
+  pagination.page = 1
+  fetchChannels()
+}
+
+// 表格列定义（使用 computed 响应式更新排序状态）
+const columns = computed<DataTableColumns<Channel>>(() => {
+  const getSortOrder = (key: string) => {
+    if (sortState.columnKey === key) {
+      return sortState.order === 'asc' ? 'ascend' : sortState.order === 'desc' ? 'descend' : false
+    }
+    return false
+  }
+
+  return [
+    {
+      title: 'ID',
+      key: 'id',
+      width: 80,
+      align: 'left',
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('id')
+    },
+    {
+      title: '名称',
+      key: 'name',
+      width: 200
+    },
+    {
+      title: 'BASE URL',
+      key: 'base_url',
+      width: 280,
+      ellipsis: {
+        tooltip: true
+      },
+      render(row) {
+        return h(
+            NButton,
+            {
+              text: true,
+              tag: 'a',
+              size: "small",
+              href: row.base_url,
+              type: "primary",
+              target: "_blank"
+            },
+            {
+              default: () => (row.base_url)
+            }
+        )
+      }
+    },
+    {
+      title: '状态',
+      key: 'status',
+      align: 'center',
+      width: 80,
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('status'),
+      render(row) {
+        return h(
+            NTag,
+            {
+              type: row.status === 'active' ? 'success' : 'warning',
+              size: "small"
+            },
+            {
+              default: () => (row.status === 'active' ? '激活' : '禁用')
+            }
+        )
+      }
+    },
+    {
+      title: '优先级',
+      key: 'priority',
+      width: 80,
+      align: 'right',
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('priority')
+    },
+    {
+      title: '权重',
+      key: 'weight',
+      width: 80,
+      align: 'right',
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('weight')
+    },
+    {
+      title: '模型数量',
+      key: 'model_count',
+      width: 80,
+      align: 'right',
+      render(row) {
+        return row.model_count || 0
+      }
+    },
+    {
+      title: '密钥数量',
+      key: 'keys_count',
+      width: 80,
+      render(row) {
+        return row.keys?.length || 0
+      },
+      align: 'right'
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 280,
+      align: 'center',
+      fixed: 'right',
+      render(row) {
+        return h(
+            'div',
+            {class: 'flex gap-2 justify-center'},
+            [
+              h(
+                  NButton,
+                  {
+                    size: 'tiny',
+                    type: 'info',
+                    onClick: () => handleKeyManagement(row)
+                  },
+                  {
+                    default: () => '密钥管理',
+                    icon: () => h(NIcon, {}, {default: () => h(KeyOutline)})
+                  }
+              ),
+              h(
+                  NButton,
+                  {
+                    size: 'tiny',
+                    type: 'primary',
+                    onClick: () => handleModelManagement(row)
+                  },
+                  {
+                    default: () => '模型管理',
+                    icon: () => h(NIcon, {}, {default: () => h(GridOutline)})
+                  }
+              ),
+              h(
+                  NButton,
+                  {
+                    size: 'tiny',
+                    type: 'warning',
+                    onClick: () => handleEdit(row)
+                  },
+                  {
+                    default: () => '编辑',
+                    icon: () => h(NIcon, {}, {default: () => h(CreateOutline)})
+                  }
+              ),
+              h(
+                  NButton,
+                  {
+                    size: 'tiny',
+                    type: 'error',
+                    onClick: () => handleDelete(row)
+                  },
+                  {
+                    default: () => '删除',
+                    icon: () => h(NIcon, {}, {default: () => h(TrashOutline)})
+                  }
+              )
+            ]
+        )
+      }
+    }
+  ]
+})
+
 
 // 密钥管理
 function handleKeyManagement(channel: Channel) {

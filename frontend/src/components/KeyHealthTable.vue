@@ -1,45 +1,25 @@
 <template>
   <div class="key-health-table">
     <n-data-table
-      :columns="columns"
-      :data="displayData"
-      :loading="loading"
-      :pagination="pagination"
-      :row-key="(row: KeyHealthRow) => row.key_id"
-      size="small"
+        :columns="columns"
+        :data="displayData"
+        :loading="loading"
+        :pagination="pagination"
+        :row-key="(row: KeyHealthRow) => row.key_id"
+        size="small"
+        :bordered="true"
+        :striped="true"
+        :single-line="false"
     />
-
-<!--    &lt;!&ndash; 健康状态统计 &ndash;&gt;-->
-<!--    <n-space v-if="healthResult" style="margin-top: 16px">-->
-<!--      <n-statistic label="总Key数" :value="healthResult.total_keys" />-->
-<!--      <n-statistic label="健康Key数">-->
-<!--        <template #default>-->
-<!--          <n-text type="success" strong>{{ healthResult.healthy_keys }}</n-text>-->
-<!--        </template>-->
-<!--      </n-statistic>-->
-<!--      <n-statistic label="异常Key数">-->
-<!--        <template #default>-->
-<!--          <n-text type="error" strong>{{ healthResult.total_keys - healthResult.healthy_keys }}</n-text>-->
-<!--        </template>-->
-<!--      </n-statistic>-->
-<!--    </n-space>-->
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, onMounted } from 'vue'
-import {
-  NDataTable,
-  NSpace,
-  NText,
-  NTag,
-  NButton,
-  NIcon,
-  type DataTableColumns
-} from 'naive-ui'
-import { RefreshOutline, CheckmarkCircle, CloseCircle, AlertCircle, CopyOutline, PulseOutline } from '@vicons/ionicons5'
-import { channelApi } from '../services/channelService'
-import type { ChannelHealthCheckResult, Channel, Key, SingleKeyHealthResult } from '../types/channel'
+import {computed, h, onMounted, ref} from 'vue'
+import {type DataTableColumns, NButton, NDataTable, NIcon, NSpace, NTag, NText} from 'naive-ui'
+import {AlertCircle, CheckmarkCircle, CloseCircle, CopyOutline, PulseOutline, RefreshOutline, TrashOutline} from '@vicons/ionicons5'
+import {channelApi} from '../services/channelService'
+import type {Channel, ChannelHealthCheckResult, Key, SingleKeyHealthResult} from '../types/channel'
 
 interface Props {
   channelId: number
@@ -84,8 +64,8 @@ const displayData = computed<KeyHealthRow[]>(() => {
       key_preview: row.key_value ? maskKey(row.key_value) : '***',
       // 如果有测试结果，使用测试结果的状态
       status: testingKeys.value.has(row.key_id)
-        ? 'testing'
-        : keyStatusMap.value.get(row.key_id)?.status || row.status,
+          ? 'testing'
+          : keyStatusMap.value.get(row.key_id)?.status || row.status,
       message: keyStatusMap.value.get(row.key_id)?.message || row.message,
       latency: keyStatusMap.value.get(row.key_id)?.latency || row.latency
     }))
@@ -98,8 +78,8 @@ const displayData = computed<KeyHealthRow[]>(() => {
       key_value: key.key_value,
       key_preview: key.key_preview || maskKey(key.key_value),
       status: testingKeys.value.has(key.id)
-        ? 'testing'
-        : testResult?.status || (key.status === 'active' ? 'healthy' : 'unhealthy'),
+          ? 'testing'
+          : testResult?.status || (key.status === 'active' ? 'healthy' : 'unhealthy'),
       message: testResult?.message || (key.status === 'active' ? 'Key is active' : 'Key is not active'),
       latency: testResult?.latency || '-',
       key
@@ -126,44 +106,44 @@ const columns: DataTableColumns<KeyHealthRow> = [
     width: 280,
     render(row) {
       return h(
-        'div',
-        {
-          style: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }
-        },
-        [
-          h(
-            NText,
-            {
-              code: true,
-              style: {
-                fontFamily: 'monospace',
-                fontSize: '13px',
-                color: '#4b5563'
-              }
-            },
-            {
-              default: () => row.key_preview
+          'div',
+          {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }
-          ),
-          h(
-            NIcon,
-            {
-              size: 16,
-              style: {
-                cursor: 'pointer',
-                color: '#60a5fa'
-              },
-              onClick: () => handleCopyKey(row.key_value)
-            },
-            {
-              default: () => h(CopyOutline)
-            }
-          )
-        ]
+          },
+          [
+            h(
+                NText,
+                {
+                  code: true,
+                  style: {
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    color: '#4b5563'
+                  }
+                },
+                {
+                  default: () => row.key_preview
+                }
+            ),
+            h(
+                NIcon,
+                {
+                  size: 16,
+                  style: {
+                    cursor: 'pointer',
+                    color: '#60a5fa'
+                  },
+                  onClick: () => handleCopyKey(row.key_value)
+                },
+                {
+                  default: () => h(CopyOutline)
+                }
+            )
+          ]
       )
     }
   },
@@ -179,85 +159,88 @@ const columns: DataTableColumns<KeyHealthRow> = [
     title: '状态',
     key: 'status',
     align: 'center',
-    width: 160,
+    width: 120,
     render(row) {
       const config = {
-        healthy: { type: 'success' as const, text: '健康', icon: CheckmarkCircle },
-        unhealthy: { type: 'error' as const, text: '异常', icon: CloseCircle },
-        error: { type: 'warning' as const, text: '错误', icon: AlertCircle },
-        testing: { type: 'info' as const, text: '测试中', icon: RefreshOutline }
+        healthy: {type: 'success' as const, text: '健康', icon: CheckmarkCircle},
+        unhealthy: {type: 'error' as const, text: '异常', icon: CloseCircle},
+        error: {type: 'warning' as const, text: '错误', icon: AlertCircle},
+        testing: {type: 'info' as const, text: '测试中', icon: RefreshOutline}
       }
       const status = config[row.status]
       return h(
-        'div',
-        { style: { display: 'flex', alignItems: 'center', gap: '8px', 'justifyContent': 'center' } },
-        [
-          h(NIcon, {
-            color: status.type === 'success' ? '#18a058' :
-                   status.type === 'error' ? '#d03050' :
-                   status.type === 'warning' ? '#f0a020' :
-                   '#2080f0',
-            class: row.status === 'testing' ? 'spin-icon' : ''
-          }, {
-            default: () => h(status.icon)
-          }),
-          h(NTag, { type: status.type, size: 'small' }, { default: () => status.text })
-        ]
+          'div',
+          {style: {display: 'flex', alignItems: 'center', gap: '8px', 'justifyContent': 'center'}},
+          [
+            h(NIcon, {
+              color: status.type === 'success' ? '#18a058' :
+                  status.type === 'error' ? '#d03050' :
+                      status.type === 'warning' ? '#f0a020' :
+                          '#2080f0',
+              class: row.status === 'testing' ? 'spin-icon' : ''
+            }, {
+              default: () => h(status.icon)
+            }),
+            h(NTag, {type: status.type, size: 'small'}, {default: () => status.text})
+          ]
       )
     }
   },
   {
     title: '延迟',
     key: 'latency',
-    width: 160,
+    width: 120,
     align: 'right',
     render(row) {
       if (row.latency === '-') {
-        return h(NText, { depth: 3 }, { default: () => '-' })
+        return h(NText, {depth: 3}, {default: () => '-'})
       }
       // 解析延迟字符串并显示
-      return h(NText, {}, { default: () => row.latency })
+      return h(NText, {}, {default: () => row.latency})
     }
   },
   {
     title: '操作',
     key: 'actions',
     align: 'center',
-    width: 240,
+    width: 200,
     fixed: 'right',
     render(row) {
       return h(
-        NSpace,
-        {
-          justify: 'center'
-        },
-        {
-          default: () => [
-            h(
-              NButton,
-              {
-                size: 'small',
-                type: 'info',
-                loading: testingKeys.value.has(row.key_id),
-                disabled: testingKeys.value.has(row.key_id),
-                onClick: () => handleTestKey(row.key_id)
-              },
-              {
-                default: () => '测试',
-                icon: () => h(NIcon, {}, { default: () => h(PulseOutline) })
-              }
-            ),
-            row.key && h(
-              NButton,
-              {
-                size: 'small',
-                type: 'error',
-                onClick: () => handleDeleteKey(row.key_id)
-              },
-              { default: () => '删除' }
-            )
-          ]
-        }
+          NSpace,
+          {
+            justify: 'center'
+          },
+          {
+            default: () => [
+              h(
+                  NButton,
+                  {
+                    size: 'tiny',
+                    type: 'info',
+                    loading: testingKeys.value.has(row.key_id),
+                    disabled: testingKeys.value.has(row.key_id),
+                    onClick: () => handleTestKey(row.key_id)
+                  },
+                  {
+                    default: () => '测试',
+                    icon: () => h(NIcon, {}, {default: () => h(PulseOutline)})
+                  }
+              ),
+              row.key && h(
+                  NButton,
+                  {
+                    size: 'tiny',
+                    type: 'error',
+                    onClick: () => handleDeleteKey(row.key_id)
+                  },
+                  {
+                    default: () => '删除',
+                    icon: () => h(NIcon, null, {default: () => h(TrashOutline)})
+                  }
+              )
+            ]
+          }
       )
     }
   }

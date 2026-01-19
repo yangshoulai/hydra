@@ -7,13 +7,23 @@ import type {
   Model,
   CreateModelRequest,
   UpdateModelRequest,
+  ModelListParams,
+  ModelListResponse,
 } from '@/types/model'
 
 export const modelApi = {
   /**
-   * 获取所有模型
+   * 获取模型列表（分页，支持过滤和排序）
    */
-  async list(): Promise<Model[]> {
+  async list(params?: ModelListParams): Promise<ModelListResponse> {
+    const response = await apiClient.get<ModelListResponse>('/admin/api/models', { params })
+    return response.data
+  },
+
+  /**
+   * 获取所有模型（不分页，已废弃）
+   */
+  async listAll(): Promise<Model[]> {
     const response = await apiClient.get<Model[]>('/admin/api/models')
     return response.data
   },

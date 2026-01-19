@@ -9,7 +9,7 @@
 *.dylib
 *.test
 *.out
-hydra
+
 
 # Build output
 /backend/hydra
@@ -130,8 +130,6 @@ Desktop.ini
 
 # Runtime data (keep directory structure but ignore contents)
 /data/*
-!data/.gitkeep
-!data/README.md
 
 # ========== Testing ==========
 # Test artifacts
@@ -152,3 +150,9 @@ Desktop.ini
 *.crt
 secrets/
 credentials.json
+
+
+.claude/
+.serena/
+.specify/
+bin/

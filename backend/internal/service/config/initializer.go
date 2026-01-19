@@ -152,7 +152,7 @@ func (i *Initializer) Initialize(ctx context.Context) error {
 				UpdatedAt: time.Now(),
 			}
 
-			if err := i.systemSettingRepo.Set(ctx, newSetting.Key, newSetting.Value); err != nil {
+			if err := i.systemSettingRepo.Set(ctx, newSetting.Key, newSetting.Value, newSetting.Category); err != nil {
 				i.logger.Error("创建系统设置失败",
 					slog.String("key", setting.Key),
 					slog.String("error", err.Error()),
@@ -189,7 +189,7 @@ func (i *Initializer) ResetToDefaults(ctx context.Context) error {
 	i.logger.Warn("重置所有设置为默认值")
 
 	for _, setting := range DefaultSettings {
-		if err := i.systemSettingRepo.Set(ctx, setting.Key, setting.Value); err != nil {
+		if err := i.systemSettingRepo.Set(ctx, setting.Key, setting.Value, setting.Category); err != nil {
 			i.logger.Error("重置设置失败",
 				slog.String("key", setting.Key),
 				slog.String("error", err.Error()),

@@ -12,120 +12,106 @@
         </div>
       </template>
 
-      <n-form ref="formRef" :model="formData" :show-label="false" @keyup.enter="handleQuery">
-        <n-space vertical :size="12">
-          <n-space :size="12" wrap>
-            <!-- Trace ID -->
-            <n-form-item label="Trace ID" :show-label="true" label-placement="left" :label-width="80">
-              <n-input
-                  v-model:value="formData.trace_id"
-                  placeholder="输入 Trace ID"
-                  clearable
-                  style="width: 200px"
-              >
-                <template #prefix>
-                  <n-icon color="#60a5fa">
-                    <PulseOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-            </n-form-item>
-
-            <!-- 访问令牌 -->
-            <n-form-item label="访问令牌" :show-label="true" label-placement="left" :label-width="80">
-              <n-input
-                  v-model:value="formData.access_token"
-                  placeholder="输入令牌名称"
-                  clearable
-                  style="width: 180px"
-              >
-                <template #prefix>
-                  <n-icon color="#10b981">
-                    <KeyOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-            </n-form-item>
-
-            <!-- 请求模型 -->
-            <n-form-item label="请求模型" :show-label="true" label-placement="left" :label-width="80">
-              <n-select
-                  v-model:value="formData.requested_model"
-                  placeholder="选择模型"
-                  clearable
-                  :options="modelOptions"
-                  :loading="loadingModels"
-                  filterable
-                  style="width: 200px"
-              />
-            </n-form-item>
-
-            <!-- 渠道 -->
-            <n-form-item label="渠道" :show-label="true" label-placement="left" :label-width="80">
-              <n-select
-                  v-model:value="formData.channel_id"
-                  placeholder="选择渠道"
-                  clearable
-                  :options="channelOptions"
-                  :loading="loadingChannels"
-                  filterable
-                  style="width: 180px"
-              />
-            </n-form-item>
-
-            <n-form-item label="状态码" :show-label="true" label-placement="left" :label-width="80">
-              <n-select
-                  v-model:value="formData.status_code"
-                  placeholder="选择状态码"
-                  clearable
-                  :options="statusCodeOptions"
-                  style="width: 160px"
-              />
-            </n-form-item>
-
-            <!-- 成功状态 -->
-            <n-form-item label="请求状态" :show-label="true" label-placement="left" :label-width="80">
-              <n-select
-                  v-model:value="formData.is_success"
-                  placeholder="全部"
-                  clearable
-                  :options="successOptions"
-                  style="width: 140px"
-              />
-            </n-form-item>
-
-            <!-- 时间范围 -->
-            <n-form-item label="时间范围" :show-label="true" label-placement="left" :label-width="80">
-              <n-date-picker
-                  v-model:value="dateRange"
-                  type="datetimerange"
-                  clearable
-                  style="width: 400px"
-                  @update:value="handleDateChange"
-              />
-            </n-form-item>
-          </n-space>
-
-          <!-- 操作按钮 -->
-          <n-space :size="12" justify="center">
-            <n-button type="primary" @click="handleQuery">
-              <template #icon>
-                <n-icon>
-                  <SearchIcon/>
+      <n-form inline ref="formRef" :label-width="80" :model="formData" :label-placement="'left'" :label-align="'left'" :show-feedback="false"
+              @keyup.enter="handleQuery">
+        <n-grid :cols="24" :x-gap="24" :y-gap="24" responsive="screen">
+          <n-form-item-gi :span="6" label="Trace ID" :show-label="true" label-placement="left" :label-width="80">
+            <n-input
+                v-model:value="formData.trace_id"
+                placeholder="输入 Trace ID"
+                clearable>
+              <template #prefix>
+                <n-icon color="#60a5fa">
+                  <PulseOutline/>
                 </n-icon>
               </template>
-              查询
-            </n-button>
-            <n-button @click="handleReset">
-              <template #icon>
-                <n-icon>
-                  <RefreshIcon/>
+            </n-input>
+          </n-form-item-gi>
+          <n-form-item-gi :span="6" label="访问令牌">
+            <n-input
+                v-model:value="formData.access_token"
+                placeholder="输入令牌名称"
+                clearable>
+              <template #prefix>
+                <n-icon color="#10b981">
+                  <KeyOutline/>
                 </n-icon>
               </template>
-              重置
-            </n-button>
-          </n-space>
-        </n-space>
+            </n-input>
+          </n-form-item-gi>
+          <n-form-item-gi :span="6" label="请求模型">
+            <n-select
+                v-model:value="formData.requested_model"
+                placeholder="选择模型"
+                clearable
+                :options="modelOptions"
+                :loading="loadingModels"
+                filterable
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi :span="6" label="上游渠道">
+            <n-select
+                v-model:value="formData.channel_id"
+                placeholder="选择渠道"
+                clearable
+                :options="channelOptions"
+                :loading="loadingChannels"
+                filterable
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi :span="6" label="状态码">
+            <n-select
+                v-model:value="formData.status_code"
+                placeholder="选择状态码"
+                clearable
+                :options="statusCodeOptions"
+                filterable
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi :span="6" label="请求状态">
+            <n-select
+                v-model:value="formData.is_success"
+                placeholder="全部"
+                clearable
+                :options="successOptions"
+                filterable
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi :span="12" label="时间范围">
+            <n-date-picker
+                v-model:value="dateRange"
+                type="datetimerange"
+                clearable
+                style="width: 400px"
+                @update:value="handleDateChange"
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi :span="6">
+            <n-space>
+              <n-button type="primary" @click="handleQuery">
+                <template #icon>
+                  <n-icon>
+                    <SearchOutline/>
+                  </n-icon>
+                </template>
+                查询
+              </n-button>
+              <n-button @click="handleReset">
+                <template #icon>
+                  <n-icon>
+                    <RefreshOutline/>
+                  </n-icon>
+                </template>
+                重置
+              </n-button>
+            </n-space>
+          </n-form-item-gi>
+        </n-grid>
       </n-form>
     </n-card>
   </div>
@@ -133,18 +119,7 @@
 
 <script setup lang="ts">
 import {onMounted, reactive, ref} from 'vue'
-import {
-  NButton,
-  NCard,
-  NDatePicker,
-  NForm,
-  NFormItem,
-  NIcon,
-  NInput,
-  NSelect,
-  NSpace,
-  type SelectOption
-} from 'naive-ui'
+import {NButton, NCard, NDatePicker, NForm, NFormItemGi, NGrid, NIcon, NInput, NSelect, NSpace, type SelectOption} from 'naive-ui'
 import {FilterOutline, KeyOutline, PulseOutline, RefreshOutline, SearchOutline} from '@vicons/ionicons5'
 import type {LogQueryRequest} from '../types/log'
 import {channelApi} from '../services/channelService'
@@ -157,28 +132,26 @@ interface Emits {
 const emit = defineEmits<Emits>()
 
 const FilterIcon = FilterOutline
-const RefreshIcon = RefreshOutline
-const SearchIcon = SearchOutline
 
 // 表单数据
 const formData = reactive<{
   trace_id: string
   access_token: string
-  requested_model?: string
-  channel_id?: number
-  status_code?: number
-  is_success?: string
-  start_time?: string
-  end_time?: string
+  requested_model?: string | null
+  channel_id?: number | null
+  status_code?: number | null
+  is_success?: string | null
+  start_time?: string | null
+  end_time?: string | null
 }>({
   trace_id: '',
   access_token: '',
-  requested_model: undefined,
-  channel_id: undefined,
-  status_code: undefined,
-  is_success: undefined,
-  start_time: undefined,
-  end_time: undefined
+  requested_model: null,
+  channel_id: null,
+  status_code: null,
+  is_success: null,
+  start_time: null,
+  end_time: null
 })
 
 // 日期范围
@@ -213,7 +186,7 @@ const successOptions = [
 async function loadChannels() {
   loadingChannels.value = true
   try {
-    const result = await channelApi.list(1, 1000) // 获取所有渠道
+    const result = await channelApi.list({page: 1, page_size: 1000}) // 获取所有渠道
     channelOptions.value = result.items.map((channel) => ({
       label: channel.name,
       value: channel.id
@@ -229,8 +202,8 @@ async function loadChannels() {
 async function loadModels() {
   loadingModels.value = true
   try {
-    const models = await modelApi.list()
-    modelOptions.value = models.map((model) => ({
+    const result = await modelApi.list({page: 1, page_size: 1000}) // 获取所有模型
+    modelOptions.value = result.items.map((model) => ({
       label: model.name,
       value: model.name
     }))
@@ -247,8 +220,8 @@ function handleDateChange(value: [number, number] | null) {
     formData.start_time = new Date(value[0]).toISOString()
     formData.end_time = new Date(value[1]).toISOString()
   } else {
-    formData.start_time = undefined
-    formData.end_time = undefined
+    formData.start_time = null
+    formData.end_time = null
   }
 }
 
@@ -256,7 +229,12 @@ function handleDateChange(value: [number, number] | null) {
 function handleQuery() {
   const queryData: LogQueryRequest = {
     ...formData,
-    is_success: formData.is_success === 'true' ? true : formData.is_success === 'false' ? false : undefined
+    is_success: formData.is_success === 'true' ? true : formData.is_success === 'false' ? false : null,
+    requested_model: formData.requested_model || undefined,
+    channel_id: formData.channel_id || undefined,
+    status_code: formData.status_code || undefined,
+    start_time: formData.start_time || undefined,
+    end_time: formData.end_time || undefined
   }
   emit('filter', queryData)
 }
@@ -265,18 +243,24 @@ function handleQuery() {
 function handleReset() {
   formData.trace_id = ''
   formData.access_token = ''
-  formData.requested_model = undefined
-  formData.channel_id = undefined
-  formData.status_code = undefined
-  formData.is_success = undefined
-  formData.start_time = undefined
-  formData.end_time = undefined
+  formData.requested_model = null
+  formData.channel_id = null
+  formData.status_code = null
+  formData.is_success = null
+  formData.start_time = null
+  formData.end_time = null
   dateRange.value = null
+  setDefaultDateTime()
 
   // 重置后自动查询
   const queryData: LogQueryRequest = {
     ...formData,
-    is_success: undefined
+    is_success: null,
+    requested_model: undefined,
+    channel_id: undefined,
+    status_code: undefined,
+    start_time: formData.start_time || undefined,
+    end_time: formData.end_time || undefined
   }
   emit('filter', queryData)
 }
@@ -290,7 +274,11 @@ defineExpose({
 onMounted(() => {
   loadChannels()
   loadModels()
+  setDefaultDateTime()
 
+})
+
+function setDefaultDateTime() {
   // 设置默认时间范围为前24小时到后24小时（共2天）
   const now = Date.now()
   const dayAgo = now - 24 * 60 * 60 * 1000  // 24小时前
@@ -298,7 +286,8 @@ onMounted(() => {
   dateRange.value = [dayAgo, dayAhead]
   formData.start_time = new Date(dayAgo).toISOString()
   formData.end_time = new Date(dayAhead).toISOString()
-})
+}
+
 </script>
 
 <style scoped>

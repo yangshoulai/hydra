@@ -104,3 +104,22 @@ func (r *KeyRepository) DeleteByChannelID(ctx context.Context, channelID uint) e
 		Where("channel_id = ?", channelID).
 		Delete(&models.Key{}).Error
 }
+
+// FindAllActive 查询所有激活的 Key
+func (r *KeyRepository) FindAllActive(ctx context.Context) ([]*models.Key, error) {
+	var keys []*models.Key
+	err := r.db.WithContext(ctx).
+		Where("status = ?", "active").
+		Order("id ASC").
+		Find(&keys).Error
+	return keys, err
+}
+
+// FindAll 查询所有 Key（不限制状态）
+func (r *KeyRepository) FindAll(ctx context.Context) ([]*models.Key, error) {
+	var keys []*models.Key
+	err := r.db.WithContext(ctx).
+		Order("id ASC").
+		Find(&keys).Error
+	return keys, err
+}

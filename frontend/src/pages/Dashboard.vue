@@ -128,6 +128,7 @@
             :single-line="true"
             striped
             size="small"
+            :scroll-x="700"
         />
       </n-space>
     </n-card>
@@ -203,6 +204,7 @@
             :single-line="true"
             striped
             size="small"
+            :scroll-x="560"
         />
       </n-space>
     </n-card>
@@ -211,18 +213,7 @@
 
 <script setup lang="ts">
 import {h, onMounted} from 'vue'
-import {
-  type DataTableColumns,
-  NCard,
-  NDataTable,
-  NGrid,
-  NGridItem,
-  NIcon,
-  NNumberAnimation,
-  NProgress,
-  NSpace,
-  NTag
-} from 'naive-ui'
+import {type DataTableColumns, NCard, NDataTable, NGrid, NGridItem, NIcon, NNumberAnimation, NProgress, NSpace, NTag} from 'naive-ui'
 import {
   CheckmarkCircle as CheckmarkCircleIcon,
   CloseCircle as CloseCircleIcon,
@@ -283,7 +274,7 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
     sorter: (a, b) => a.success_rate - b.success_rate,
     render: (row) => {
       const rate = row.success_rate
-      const type = rate >= 95 ? 'success' : rate >= 80 ? 'warning' : 'error'
+      const type = rate >= 90 ? 'success' : rate >= 80 ? 'warning' : 'error'
       return h('div', {class: 'flex items-center gap-2 pl-2 pr-2'}, [
         h(NProgress, {
           type: 'line',
@@ -334,14 +325,14 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
   {
     title: '模型名称',
     key: 'model_name',
-    width: 120,
+    width: 160,
     ellipsis: {tooltip: true},
     sorter: (a, b) => a.model_name.localeCompare(b.model_name)
   },
   {
     title: '请求总数',
     key: 'total_requests',
-    width: 120,
+    width: 80,
     align: 'right',
     render: (row) => formatNumber(row.total_requests),
     sorter: (a, b) => a.total_requests - b.total_requests
@@ -349,7 +340,7 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
   {
     title: '成功请求',
     key: 'success_requests',
-    width: 120,
+    width: 80,
     align: 'right',
     render: (row) => formatNumber(row.success_requests),
     sorter: (a, b) => a.success_requests - b.success_requests
@@ -357,7 +348,7 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
   {
     title: '失败请求',
     key: 'failed_requests',
-    width: 120,
+    width: 80,
     align: 'right',
     render: (row) => formatNumber(row.failed_requests),
     sorter: (a, b) => a.failed_requests - b.failed_requests
@@ -366,11 +357,11 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
     title: '成功率',
     key: 'success_rate',
     align: 'center',
-    width: 120,
+    width: 160,
     sorter: (a, b) => a.success_rate - b.success_rate,
     render: (row) => {
       const rate = row.success_rate
-      const type = rate >= 95 ? 'success' : rate >= 80 ? 'warning' : 'error'
+      const type = rate >= 90 ? 'success' : rate >= 80 ? 'warning' : 'error'
       return h('div', {class: 'flex items-center gap-2 pl-2 pr-2'}, [
         h(NProgress, {
           type: 'line',

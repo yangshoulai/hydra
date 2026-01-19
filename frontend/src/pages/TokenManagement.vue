@@ -20,16 +20,80 @@
       </n-space>
     </n-card>
 
+    <!-- 过滤表单 -->
+    <n-form inline :label-width="50" :model="filters" :label-placement="'left'" :label-align="'left'" :show-feedback="false">
+      <n-grid :cols="24" :x-gap="24" responsive="screen">
+        <n-form-item-gi :span="6" label="名称">
+          <n-input
+              v-model:value="filters.name"
+              placeholder="输入令牌名称"
+              clearable
+              @update:value="handleFilterChange"
+          />
+        </n-form-item-gi>
+        <n-form-item-gi :span="6" label="状态">
+          <n-select
+              v-model:value="filters.status"
+              placeholder="选择状态"
+              clearable
+              :options="statusOptions"
+              @update:value="handleFilterChange"
+          />
+        </n-form-item-gi>
+        <n-form-item-gi :span="6" label="令牌">
+          <n-input
+              v-model:value="filters.token"
+              placeholder="输入令牌"
+              clearable
+              @update:value="handleFilterChange"
+          />
+        </n-form-item-gi>
+        <n-form-item-gi :span="6">
+          <n-space>
+            <n-button type="primary" @click="handleSearch">
+              <template #icon>
+                <n-icon>
+                  <SearchOutline/>
+                </n-icon>
+              </template>
+              查询
+            </n-button>
+            <n-button @click="handleReset">
+              <template #icon>
+                <n-icon>
+                  <RefreshOutline/>
+                </n-icon>
+              </template>
+              重置
+            </n-button>
+          </n-space>
+        </n-form-item-gi>
+      </n-grid>
+    </n-form>
+
     <n-data-table
         :columns="columns"
         :data="tokens"
-        :pagination="pagination"
-        :scroll-x="1680"
+        :pagination="false"
+        :scroll-x="1480"
         :single-line="false"
         striped
         :loading="isLoading"
-        :row-key="(row: Channel) => row.id"
+        :row-key="(row: Token) => row.id"
+        @update:sorter="handleSorterChange"
     />
+
+    <div class="flex justify-end">
+      <n-pagination
+          :page="pagination.page"
+          :on-update-page="pagination.onChange"
+          @update:page-size="pagination.onUpdatePageSize"
+          :page-size="pagination.pageSize"
+          :item-count="pagination.total"
+          :page-sizes="pagination.pageSizes"
+          :show-size-picker="pagination.showSizePicker"
+      />
+    </div>
 
 
     <!-- 创建令牌对话框 -->
@@ -233,7 +297,7 @@
 </template>
 
 <script setup lang="ts">
-import {h, onMounted, reactive, ref} from 'vue'
+import {computed, h, onMounted, reactive, ref} from 'vue'
 import {
   type DataTableColumns,
   NAlert,
@@ -244,11 +308,15 @@ import {
   NDivider,
   NForm,
   NFormItem,
+  NFormItemGi,
+  NGrid,
   NIcon,
   NInput,
   NModal,
+  NPagination,
   NRadio,
   NRadioGroup,
+  NSelect,
   NSpace,
   NTag,
   NText,
@@ -263,12 +331,15 @@ import {
   InfiniteOutline,
   InformationCircleOutline,
   KeyOutline,
+  RefreshOutline,
+  SearchOutline,
   TextOutline,
+  ToggleOutline,
+  TrashOutline,
   WarningOutline
 } from '@vicons/ionicons5'
-import type {CreateTokenResponse, Token} from '@/services/tokensService'
+import type {CreateTokenResponse, Token, TokenListParams} from '@/services/tokensService'
 import tokensService from '@/services/tokensService'
-import type {Channel} from "@/types/channel.ts";
 
 const dialog = useDialog()
 const message = useMessage()
@@ -280,6 +351,25 @@ const showSuccessDialog = ref(false)
 
 const tokens = ref<Token[]>([])
 const createdToken = ref<CreateTokenResponse | null>(null)
+
+// 过滤条件
+const filters = reactive<TokenListParams>({
+  name: '',
+  status: null,
+  token: ''
+})
+
+// 排序状态
+const sortState = reactive({
+  columnKey: 'created_at' as 'id' | 'status' | 'created_at' | 'last_used_at',
+  order: 'desc' as 'asc' | 'desc'
+})
+
+// 状态选项
+const statusOptions = [
+  {label: '启用', value: 'active'},
+  {label: '禁用', value: 'disabled'}
+]
 
 const formData = ref({
   name: '',
@@ -319,145 +409,224 @@ const formatDateTime = (timestamp: number) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
-// 表格列定义
-const columns: DataTableColumns<Token> = [
-  {
-    title: 'ID',
-    key: 'id',
-    width: 120,
-    align: 'left'
-  },
-  {
-    title: '名称',
-    key: 'name',
-    width: 200,
-  },
-  {
-    title: '令牌',
-    key: 'token_preview',
-    width: 280,
-    render: (row) => {
-      return h(NText, {code: true}, {default: () => row.token_preview})
-    },
-  },
-  {
-    title: '状态',
-    key: 'status',
-    align: 'center',
-    width: 120,
-    render: (row) => {
-      // 检查是否过期
-      const isExpired = row.expires_at ? new Date(row.expires_at) < new Date() : false
-      const isDisabled = row.status !== 'active'
+// 表格列定义（使用 computed 响应式更新排序状态）
+const columns = computed<DataTableColumns<Token>>(() => {
+  const getSortOrder = (key: string) => {
+    if (sortState.columnKey === key) {
+      return sortState.order === 'asc' ? 'ascend' : 'descend'
+    }
+    return false
+  }
 
-      let type: 'success' | 'warning' | 'default' = 'success'
-      let text = '启用'
+  return [
+    {
+      title: 'ID',
+      key: 'id',
+      width: 80,
+      align: 'left',
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('id')
+    },
+    {
+      title: '名称',
+      key: 'name',
+      width: 200
+    },
+    {
+      title: '令牌',
+      key: 'token_preview',
+      width: 240,
+      render: (row) => {
+        return h(NText, {code: true}, {default: () => row.token_preview})
+      },
+    },
+    {
+      title: '状态',
+      key: 'status',
+      align: 'center',
+      width: 120,
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('status'),
+      render: (row) => {
+        // 检查是否过期
+        const isExpired = row.expires_at ? new Date(row.expires_at) < new Date() : false
+        const isDisabled = row.status !== 'active'
 
-      if (isExpired) {
-        type = 'warning'
-        text = '已过期'
-      } else if (isDisabled) {
-        type = 'default'
-        text = '禁用'
-      }
+        let type: 'success' | 'warning' | 'default' = 'success'
+        let text = '启用'
 
-      return h(
-          NTag,
-          {type, size: 'small'},
-          {default: () => text}
-      )
+        if (isExpired) {
+          type = 'warning'
+          text = '已过期'
+        } else if (isDisabled) {
+          type = 'default'
+          text = '禁用'
+        }
+
+        return h(
+            NTag,
+            {type, size: 'small'},
+            {default: () => text}
+        )
+      },
     },
-  },
-  {
-    title: '过期时间',
-    key: 'expires_at',
-    align: 'center',
-    width: 200,
-    render: (row) => {
-      if (!row.expires_at) {
-        return h('span', {style: 'color: #9ca3af;'}, '永不过期')
-      }
-      const isExpired = new Date(row.expires_at) < new Date()
-      const style = isExpired ? 'color: #f59e0b; font-weight: 500;' : 'color: #4b5563;'
-      return h('span', {style}, row.expires_at)
+    {
+      title: '过期时间',
+      key: 'expires_at',
+      align: 'center',
+      width: 200,
+      render: (row) => {
+        if (!row.expires_at) {
+          return h('span', {style: 'color: #9ca3af;'}, '永不过期')
+        }
+        const isExpired = new Date(row.expires_at) < new Date()
+        const style = isExpired ? 'color: #f59e0b; font-weight: 500;' : 'color: #4b5563;'
+        return h('span', {style}, row.expires_at)
+      },
     },
-  },
-  {
-    title: '创建时间',
-    key: 'created_at',
-    width: 200,
-    align: 'center',
-  },
-  {
-    title: '最后使用',
-    key: 'last_used_at',
-    width: 200,
-    align: 'center',
-    render: (row) => {
-      return row.last_used_at || '-'
+    {
+      title: '创建时间',
+      key: 'created_at',
+      width: 200,
+      align: 'center',
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('created_at')
     },
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 200,
-    align: 'center',
-    fixed: 'right',
-    render: (row) => {
-      return h('div', {style: 'display: flex; gap: 8px; justify-content: center;'}, [
-        h(
-            NButton,
-            {
-              size: 'small',
-              type: 'primary',
-              onClick: () => handleCopyTokenFromList(row),
-            },
-            {default: () => '复制'}
-        ),
-        h(
-            NButton,
-            {
-              size: 'small',
-              type: 'warning',
-              onClick: () => handleToggleStatus(row),
-              style: 'margin-left: 8px',
-            },
-            {default: () => (row.status === 'active' ? '禁用' : '启用')}
-        ),
-        h(
-            NButton,
-            {
-              size: 'small',
-              type: 'error',
-              style: 'margin-left: 8px',
-              onClick: () => handleDelete(row),
-            },
-            {default: () => '删除'}
-        ),
-      ])
+    {
+      title: '最后使用',
+      key: 'last_used_at',
+      width: 200,
+      align: 'center',
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('last_used_at'),
+      render: (row) => {
+        return row.last_used_at || '-'
+      },
     },
-  },
-]
+    {
+      title: '操作',
+      key: 'actions',
+      width: 240,
+      align: 'center',
+      fixed: 'right',
+      render: (row) => {
+        return h('div', {style: 'display: flex; gap: 8px; justify-content: center;'}, [
+          h(
+              NButton,
+              {
+                size: 'tiny',
+                type: 'primary',
+                onClick: () => handleCopyTokenFromList(row),
+              },
+              {
+                default: () => '复制',
+                icon: () => h(NIcon, null, {default: () => h(CopyOutline)})
+              }
+          ),
+          h(
+              NButton,
+              {
+                size: 'tiny',
+                type: 'warning',
+                onClick: () => handleToggleStatus(row),
+                style: 'margin-left: 8px',
+              },
+              {
+                default: () => (row.status === 'active' ? '禁用' : '启用'),
+                icon: () => h(NIcon, null, {default: () => h(ToggleOutline)})
+              }
+          ),
+          h(
+              NButton,
+              {
+                size: 'tiny',
+                type: 'error',
+                style: 'margin-left: 8px',
+                onClick: () => handleDelete(row),
+              },
+              {
+                default: () => '删除',
+                icon: () => h(NIcon, null, {default: () => h(TrashOutline)})
+              }
+          ),
+        ])
+      },
+    },
+  ]
+})
 
 const pagination = reactive({
   page: 1,
-  pageSize: 10,
+  pageSize: 20,
+  total: 0,
   showSizePicker: true,
   pageSizes: [10, 20, 50],
   onChange: (page: number) => {
     pagination.page = page
+    loadTokens()
   },
   onUpdatePageSize: (pageSize: number) => {
     pagination.pageSize = pageSize
     pagination.page = 1
+    loadTokens()
   }
 })
+
+// 处理排序变化
+function handleSorterChange(sorter: { columnKey: string; order: 'ascend' | 'descend' | false }) {
+  if (sorter.columnKey) {
+    sortState.columnKey = sorter.columnKey as 'id' | 'status' | 'created_at' | 'last_used_at'
+    sortState.order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : 'asc'
+  } else {
+    sortState.columnKey = 'created_at'
+    sortState.order = 'desc'
+  }
+
+  pagination.page = 1
+  loadTokens()
+}
+
+// 过滤条件变化时重置到第一页
+function handleFilterChange() {
+  pagination.page = 1
+}
+
+// 搜索
+function handleSearch() {
+  pagination.page = 1
+  loadTokens()
+}
+
+// 重置
+function handleReset() {
+  filters.name = ''
+  filters.status = null
+  filters.token = ''
+  pagination.page = 1
+  loadTokens()
+}
 
 // 加载令牌列表
 const loadTokens = async () => {
   isLoading.value = true
   try {
-    tokens.value = await tokensService.getAllTokens()
+    const params: TokenListParams = {
+      page: pagination.page,
+      page_size: pagination.pageSize,
+      name: filters.name || undefined,
+      status: filters.status || undefined,
+      token: filters.token || undefined,
+      sort_by: sortState.columnKey,
+      sort_order: sortState.order
+    }
+
+    const result = await tokensService.list(params)
+    tokens.value = result.items
+    pagination.total = result.total
   } catch (error) {
     console.error('Failed to load tokens:', error)
     message.error('无法加载令牌列表')

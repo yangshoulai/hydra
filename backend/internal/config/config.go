@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -115,7 +116,8 @@ func Load(configPath string) (*Config, error) {
 
 	// 读取配置文件
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
 		// 配置文件不存在时使用默认值
@@ -154,43 +156,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.retention_days", 30)
 	v.SetDefault("log.debug_enabled", false)
+	v.SetDefault("log.add_source", false)
 	v.SetDefault("log.file.enabled", true)
 	v.SetDefault("log.file.path", "./logs/hydra.log")
-	v.SetDefault("log.file.max_size", 100)    // 100MB，按大小轮转
-	v.SetDefault("log.file.max_backups", 10)  // 保留10个备份
-	v.SetDefault("log.file.max_age", 30)      // 保留30天
+	v.SetDefault("log.file.max_size", 100)   // 100MB，按大小轮转
+	v.SetDefault("log.file.max_backups", 10) // 保留10个备份
+	v.SetDefault("log.file.max_age", 30)     // 保留30天
 	v.SetDefault("log.file.compress", true)
-
-	// Circuit Breaker
-	v.SetDefault("circuit_breaker.failure_threshold", 3)
-	v.SetDefault("circuit_breaker.cooling_duration_sec", 60)
-	v.SetDefault("circuit_breaker.max_retry", 3)
-
-	// Sniffer
-	v.SetDefault("sniffer.error_keywords", []string{
-		"无可用后端", "额度不足", "maintenance", "系统繁忙",
-		"服务暂不可用", "service unavailable", "quota exceeded",
-	})
-
-	// Proxy
-	v.SetDefault("proxy.request_timeout", "60s")
-	v.SetDefault("proxy.max_response_size", 10485760)
-	v.SetDefault("proxy.max_concurrent", 1000)
-
-	// Admin
-	v.SetDefault("admin.session_secret", "change-me-in-production")
-	v.SetDefault("admin.session_max_age", 86400)
-	v.SetDefault("admin.cookie_secure", false)
-	v.SetDefault("admin.cookie_http_only", true)
-	v.SetDefault("admin.cookie_same_site", "lax")
-
-	// CORS
-	v.SetDefault("cors.enabled", false)
-	v.SetDefault("cors.allowed_origins", []string{"*"})
-	v.SetDefault("cors.allowed_methods", []string{"GET", "POST", "PUT", "DELETE", "PATCH"})
-	v.SetDefault("cors.allowed_headers", []string{"Origin", "Content-Type", "Authorization"})
-	v.SetDefault("cors.exposed_headers", []string{"X-Trace-ID"})
-	v.SetDefault("cors.max_age", 86400)
 }
 
 // validate 验证配置

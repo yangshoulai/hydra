@@ -20,9 +20,7 @@ func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.
 			// 解析 Bearer token
 			parts := strings.SplitN(authorizationValue, " ", 2)
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error": "Invalid authorization header format",
-				})
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
 				c.Abort()
 				return
 			}
@@ -31,9 +29,7 @@ func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.
 			tokenValue = xApiKeyValue
 		}
 		if tokenValue == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Missing authorization header",
-			})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization header"})
 			c.Abort()
 			return
 		}
@@ -41,28 +37,23 @@ func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.
 		token, err := tokenRepo.FindByToken(c.Request.Context(), tokenValue)
 		if err != nil {
 			traceID := GetTraceID(c)
-			logger.Warn("令牌验证失败",
-				slog.String("trace_id", traceID),
-				slog.String("error", err.Error()),
-			)
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid or expired token",
-			})
+			logger.Warn("令牌验证失败", slog.String("trace_id", traceID), slog.String("error", err.Error()))
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			c.Abort()
 			return
 		}
 
 		// 检查 token 是否启用
 		if !token.IsActive() {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Token is disabled",
-			})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token is disabled"})
 			c.Abort()
 			return
 		}
 
 		// 更新最后使用时间(异步)
-		go tokenRepo.UpdateLastUsed(c.Request.Context(), token.ID)
+		go func() {
+			_ = tokenRepo.UpdateLastUsed(c.Request.Context(), token.ID)
+		}()
 
 		// 将 token 信息存储到上下文
 		c.Set("access_token_id", token.ID)

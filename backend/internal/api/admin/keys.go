@@ -269,6 +269,11 @@ func (h *KeyHandler) DeleteKey(c *gin.Context) {
 		return
 	}
 
+	// 清理熔断器缓存
+	if h.circuitManager != nil {
+		h.circuitManager.RemoveKeyBreaker(uint(id))
+	}
+
 	h.logger.Info("key deleted",
 		slog.Uint64("key_id", id),
 		slog.Uint64("channel_id", uint64(key.ChannelID)),

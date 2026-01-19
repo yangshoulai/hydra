@@ -20,17 +20,74 @@
       </n-space>
     </n-card>
 
+    <!-- 过滤表单 -->
+    <n-form inline :label-width="80" :model="filters" :label-placement="'left'" :label-align="'left'" :show-feedback="false">
+      <n-grid :cols="24" :x-gap="24" responsive="screen">
+        <n-form-item-gi :span="6" label="模型名称">
+          <n-input
+              v-model:value="filters.name"
+              placeholder="输入模型名称"
+              clearable
+              @update:value="handleFilterChange"
+          />
+        </n-form-item-gi>
+        <n-form-item-gi :span="6" label="厂商" :label-width="50">
+          <n-select
+              v-model:value="filters.provider_id"
+              placeholder="选择厂商"
+              clearable
+              :options="providerOptions"
+              @update:value="handleFilterChange"
+          />
+        </n-form-item-gi>
+        <n-form-item-gi :span="6">
+          <n-space>
+            <n-button type="primary" @click="handleSearch">
+              <template #icon>
+                <n-icon>
+                  <SearchOutline/>
+                </n-icon>
+              </template>
+              查询
+            </n-button>
+            <n-button @click="handleReset">
+              <template #icon>
+                <n-icon>
+                  <RefreshOutline/>
+                </n-icon>
+              </template>
+              重置
+            </n-button>
+          </n-space>
+        </n-form-item-gi>
+      </n-grid>
+    </n-form>
+
     <!-- 模型列表 -->
     <n-data-table
         :columns="columns"
         :data="models"
-        :pagination="pagination"
+        :pagination="false"
         :bordered="true"
         striped
         :single-line="false"
         :loading="loading"
-        :scroll-x="1260"
+        :scroll-x="1320"
+        :row-key="(row: Model) => row.id"
+        @update:sorter="handleSorterChange"
     />
+
+    <div class="flex justify-end">
+      <n-pagination
+          :page="pagination.page"
+          :on-update-page="pagination.onChange"
+          @update:page-size="pagination.onUpdatePageSize"
+          :page-size="pagination.pageSize"
+          :item-count="pagination.total"
+          :page-sizes="pagination.pageSizes"
+          :show-size-picker="pagination.showSizePicker"
+      />
+    </div>
 
     <!-- 创建模型对话框 -->
     <n-modal
@@ -247,7 +304,7 @@
 
 <script setup lang="ts">
 // @ts-nocheck
-import {h, onMounted, reactive, ref} from 'vue'
+import {computed, h, onMounted, reactive, ref} from 'vue'
 import {
   type DataTableColumns,
   type FormInst,
@@ -258,9 +315,12 @@ import {
   NDataTable,
   NForm,
   NFormItem,
+  NFormItemGi,
+  NGrid,
   NIcon,
   NInput,
   NModal,
+  NPagination,
   NSelect,
   NSpace,
   NText
@@ -272,11 +332,13 @@ import {
   CreateOutline,
   InformationCircleOutline,
   LayersOutline,
+  RefreshOutline,
   SaveOutline,
+  SearchOutline,
   TextOutline,
   TrashOutline
 } from '@vicons/ionicons5'
-import {type CreateModelRequest, modelApi, type UpdateModelRequest} from '../services/modelService'
+import {type CreateModelRequest, modelApi, type ModelListParams, type UpdateModelRequest} from '../services/modelService'
 import type {Model} from '../types/model'
 import providerApi from '@/services/providerService'
 import type {Provider} from '@/types/model'
@@ -295,6 +357,18 @@ const showChannelsDrawer = ref(false)
 const currentEditModel = ref<Model | null>(null)
 const selectedModelId = ref(0)
 const selectedModelName = ref('')
+
+// 过滤条件
+const filters = reactive<ModelListParams>({
+  name: '',
+  provider_id: null
+})
+
+// 排序状态
+const sortState = reactive({
+  columnKey: '' as 'id' | 'name' | '',
+  order: false as boolean | 'asc' | 'desc'
+})
 
 // 厂商选项
 const providerOptions = ref<Array<{ label: string, value: string }>>([])
@@ -347,138 +421,197 @@ const editRules: FormRules = {
 }
 
 // 分页配置
-
-// 表格列
-const columns: DataTableColumns<Model> = [
-  {
-    title: 'ID',
-    key: 'id',
-    width: 80,
-    align: 'left',
-    sorter: (a, b) => a.id - b.id
-  },
-  {
-    title: '模型名称',
-    key: 'name',
-    width: 240,
-    render: (row) => {
-      return h(NText, {code: true}, {default: () => row.name})
-    },
-    sorter: (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-  },
-  {
-    title: '厂商',
-    key: 'provider',
-    width: 240,
-    sorter: (a, b) => {
-      const aName = a.provider?.name || ''
-      const bName = b.provider?.name || ''
-      return aName.localeCompare(bName)
-    },
-    render: (row) => {
-      if (row.provider) {
-        return h(NText, {tag: 'strong'}, {default: () => row.provider!.name})
-      }
-      return h(NText, {depth: 3}, {default: () => '未设置'})
-    }
-  },
-  {
-    title: '渠道数',
-    key: 'channel_count',
-    width: 100,
-    align: 'center',
-    sorter: (a, b) => a.channel_count - b.channel_count
-  },
-  {
-    title: '备注',
-    key: 'remark',
-    width: 200,
-    ellipsis: {
-      tooltip: true
-    }
-  },
-  {
-    title: '创建时间',
-    key: 'created_at',
-    width: 200,
-    align: 'center',
-    render: (row) => {
-      return new Date(row.created_at).toLocaleString('zh-CN')
-    }
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 200,
-    fixed: 'right',
-    align: 'center',
-    render: (row) => {
-      return h(
-          NSpace,
-          {size: 'small', justify: 'center'},
-          {
-            default: () => [
-              h(
-                  NButton,
-                  {
-                    size: 'small',
-                    type: 'primary',
-                    onClick: () => handleViewChannels(row)
-                  },
-                  {
-                    default: () => '渠道',
-                    icon: () => h(NIcon, null, {default: () => h(LayersOutline)})
-                  }
-              ),
-              h(
-                  NButton,
-                  {
-                    size: 'small',
-                    onClick: () => handleEdit(row)
-                  },
-                  {
-                    default: () => '编辑',
-                    icon: () => h(NIcon, null, {default: () => h(CreateOutline)})
-                  }
-              ),
-              h(
-                  NButton,
-                  {
-                    size: 'small',
-                    type: 'error',
-                    onClick: () => handleDelete(row)
-                  },
-                  {
-                    default: () => '删除',
-                    icon: () => h(NIcon, null, {default: () => h(TrashOutline)})
-                  }
-              )
-            ]
-          }
-      )
-    }
-  }
-]
-
 const pagination = reactive({
   page: 1,
   pageSize: 20,
+  total: 0,
   showSizePicker: true,
   pageSizes: [10, 20, 50],
   onChange: (page: number) => {
     pagination.page = page
+    loadModels()
   },
   onUpdatePageSize: (pageSize: number) => {
     pagination.pageSize = pageSize
     pagination.page = 1
+    loadModels()
   }
 })
+
+// 表格列定义（使用 computed 响应式更新排序状态）
+const columns = computed<DataTableColumns<Model>>(() => {
+  const getSortOrder = (key: string) => {
+    if (sortState.columnKey === key) {
+      return sortState.order === 'asc' ? 'ascend' : sortState.order === 'desc' ? 'descend' : false
+    }
+    return false
+  }
+
+  return [
+    {
+      title: 'ID',
+      key: 'id',
+      width: 80,
+      align: 'left',
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('id')
+    },
+    {
+      title: '模型名称',
+      key: 'name',
+      width: 280,
+      render: (row) => {
+        return h(NText, {code: true}, {default: () => row.name})
+      },
+      sortable: true,
+      sorter: 'default',
+      sortOrder: getSortOrder('name')
+    },
+    {
+      title: '厂商',
+      key: 'provider',
+      width: 200,
+      render: (row) => {
+        if (row.provider) {
+          return h(NText, {tag: 'strong'}, {default: () => row.provider!.name})
+        }
+        return h(NText, {depth: 3}, {default: () => '未设置'})
+      }
+    },
+    {
+      title: '渠道数',
+      key: 'channel_count',
+      width: 120,
+      align: 'right',
+      render: (row) => row.channel_count || 0
+    },
+    {
+      title: '备注',
+      key: 'remark',
+      width: 200,
+      ellipsis: {
+        tooltip: true
+      }
+    },
+    {
+      title: '创建时间',
+      key: 'created_at',
+      width: 200,
+      align: 'center',
+      render: (row) => {
+        return new Date(row.created_at).toLocaleString('zh-CN')
+      }
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 240,
+      fixed: 'right',
+      align: 'center',
+      render: (row) => {
+        return h(
+            NSpace,
+            {size: 'small', justify: 'center'},
+            {
+              default: () => [
+                h(
+                    NButton,
+                    {
+                      size: 'tiny',
+                      type: 'primary',
+                      onClick: () => handleViewChannels(row)
+                    },
+                    {
+                      default: () => '渠道',
+                      icon: () => h(NIcon, null, {default: () => h(LayersOutline)})
+                    }
+                ),
+                h(
+                    NButton,
+                    {
+                      size: 'tiny',
+                      type: 'warning',
+                      onClick: () => handleEdit(row)
+                    },
+                    {
+                      default: () => '编辑',
+                      icon: () => h(NIcon, null, {default: () => h(CreateOutline)})
+                    }
+                ),
+                h(
+                    NButton,
+                    {
+                      size: 'tiny',
+                      type: 'error',
+                      onClick: () => handleDelete(row)
+                    },
+                    {
+                      default: () => '删除',
+                      icon: () => h(NIcon, null, {default: () => h(TrashOutline)})
+                    }
+                )
+              ]
+            }
+        )
+      }
+    }
+  ]
+})
+
+// 处理排序变化
+function handleSorterChange(sorter: { columnKey: string; order: 'ascend' | 'descend' | false }) {
+  if (sorter.columnKey) {
+    sortState.columnKey = sorter.columnKey as 'id' | 'name'
+    sortState.order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : false
+  } else {
+    sortState.columnKey = '' as 'id' | 'name'
+    sortState.order = false
+  }
+
+  pagination.page = 1
+  loadModels()
+}
+
+// 过滤条件变化时重置到第一页
+function handleFilterChange() {
+  pagination.page = 1
+}
+
+// 搜索
+function handleSearch() {
+  pagination.page = 1
+  loadModels()
+}
+
+// 重置
+function handleReset() {
+  filters.name = ''
+  filters.provider_id = null
+  pagination.page = 1
+  loadModels()
+}
 
 // 加载模型列表
 async function loadModels() {
   loading.value = true
   try {
-    models.value = await modelApi.list()
+    const params: ModelListParams = {
+      page: pagination.page,
+      page_size: pagination.pageSize,
+      name: filters.name || undefined,
+      provider_id: filters.provider_id || undefined
+    }
+
+    // 添加排序参数
+    if (sortState.columnKey && sortState.order) {
+      params.sort_by = sortState.columnKey
+      params.sort_order = sortState.order as 'asc' | 'desc'
+    }
+
+    const result = await modelApi.list(params)
+    models.value = result.items
+    pagination.total = result.total
   } catch (error: any) {
     console.error('Failed to load models:', error)
     window.$message?.error(error.response?.data?.error || '加载模型列表失败')

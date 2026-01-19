@@ -3,7 +3,7 @@
  */
 
 import {apiClient} from './api'
-import type {AuthMeResponse, LoginRequest, LoginResponse} from '../types/auth'
+import type {LoginRequest, LoginResponse} from '../types/auth'
 
 
 export const authApi = {
@@ -15,21 +15,6 @@ export const authApi = {
             `/admin/api/auth/login`,
             data
         )
-        return response.data
-    },
-
-    /**
-     * 登出
-     */
-    async logout(): Promise<void> {
-        await apiClient.post('/admin/api/auth/logout')
-    },
-
-    /**
-     * 获取当前用户信息
-     */
-    async me(): Promise<AuthMeResponse> {
-        const response = await apiClient.get<AuthMeResponse>('/admin/api/auth/me')
         return response.data
     },
 

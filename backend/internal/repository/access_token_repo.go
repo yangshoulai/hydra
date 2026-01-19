@@ -76,11 +76,82 @@ func (r *AccessTokenRepository) FindByTokenHash(ctx context.Context, tokenHash s
 
 // List 查询所有令牌
 func (r *AccessTokenRepository) List(ctx context.Context) ([]*models.AccessToken, error) {
-	var tokens []*models.AccessToken
-	err := r.db.WithContext(ctx).
-		Order("created_at DESC").
-		Find(&tokens).Error
+	tokens, _, err := r.ListWithFilter(ctx, 0, 0, nil, nil)
 	return tokens, err
+}
+
+// AccessTokenFilter 令牌过滤选项
+type AccessTokenFilter struct {
+	Name   string // 名称模糊查询
+	Status string // 状态精确查询: active, disabled
+	Token  string // 令牌模糊查询
+}
+
+// AccessTokenSortOptions 令牌排序选项
+type AccessTokenSortOptions struct {
+	Field     string // 排序字段：id, status, created_at, last_used_at
+	Direction string // 排序方向：asc, desc
+}
+
+// ListWithFilter 分页查询令牌列表（带过滤和排序）
+func (r *AccessTokenRepository) ListWithFilter(
+	ctx context.Context,
+	offset, limit int,
+	filter *AccessTokenFilter,
+	sortOpts *AccessTokenSortOptions,
+) ([]*models.AccessToken, int64, error) {
+	var tokens []*models.AccessToken
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&models.AccessToken{})
+
+	// 应用过滤条件
+	if filter != nil {
+		if filter.Name != "" {
+			query = query.Where("name LIKE ?", "%"+filter.Name+"%")
+		}
+		if filter.Status != "" {
+			query = query.Where("status = ?", filter.Status)
+		}
+		if filter.Token != "" {
+			query = query.Where("token LIKE ?", "%"+filter.Token+"%")
+		}
+	}
+
+	// 查询总数
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 构建排序
+	orderBy := "created_at DESC" // 默认排序：创建时间倒序
+	if sortOpts != nil && sortOpts.Field != "" {
+		direction := "ASC"
+		if sortOpts.Direction == "desc" {
+			direction = "DESC"
+		}
+
+		// 验证排序字段，防止 SQL 注入
+		allowedFields := map[string]bool{
+			"id":          true,
+			"status":      true,
+			"created_at":  true,
+			"last_used_at": true,
+		}
+
+		if allowedFields[sortOpts.Field] {
+			orderBy = sortOpts.Field + " " + direction
+		}
+	}
+
+	// 分页查询
+	err := query.
+		Offset(offset).
+		Limit(limit).
+		Order(orderBy).
+		Find(&tokens).Error
+
+	return tokens, total, err
 }
 
 // Update 更新令牌

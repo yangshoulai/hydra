@@ -43,7 +43,7 @@
       </n-space>
     </template>
 
-    <n-space vertical :size="20">
+    <n-space vertical :size="24">
       <!-- 说明信息 -->
       <n-alert type="info" :bordered="false" class="info-alert">
         <template #icon>

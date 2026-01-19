@@ -10,6 +10,7 @@ export interface Channel {
   weight: number
   status: 'active' | 'disabled'
   description: string
+  model_count?: number  // 已配置的模型数量
   created_at: string
   updated_at: string
   keys?: Key[]
@@ -61,6 +62,16 @@ export interface ChannelListResponse {
   page: number
   page_size: number
   items: Channel[]
+}
+
+export interface ChannelListParams {
+  page?: number
+  page_size?: number
+  name?: string
+  base_url?: string
+  status?: 'active' | 'disabled' | null
+  sort_by?: 'id' | 'name' | 'priority' | 'weight' | 'status'
+  sort_order?: 'asc' | 'desc'
 }
 
 export interface CreateKeyRequest {

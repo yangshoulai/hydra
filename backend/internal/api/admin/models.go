@@ -190,15 +190,33 @@ func (h *ModelHandler) DeleteModel(c *gin.Context) {
 
 // ListModels 查询统一模型列表
 // @Summary 查询统一模型列表
-// @Description 获取所有统一模型
+// @Description 分页获取统一模型列表，支持过滤和排序
 // @Tags 模型管理
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {array} models.Model
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(20)
+// @Param name query string false "模型名称（模糊查询）"
+// @Param provider_id query string false "厂商ID（精确查询）"
+// @Param sort_by query string false "排序字段" Enums(id,name)
+// @Param sort_order query string false "排序方向" Enums(asc,desc)
+// @Success 200 {object} admin.ModelListResponse
+// @Failure 400 {object} map[string]interface{}
 // @Router /admin/api/models [get]
 func (h *ModelHandler) ListModels(c *gin.Context) {
-	modelList, err := h.modelService.List(c.Request.Context())
+	var req admin.ModelListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		h.logger.Warn("invalid model list request",
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request parameters",
+		})
+		return
+	}
+
+	result, err := h.modelService.ListWithFilter(c.Request.Context(), req)
 	if err != nil {
 		h.logger.Error("failed to list models",
 			slog.String("error", err.Error()),
@@ -209,7 +227,7 @@ func (h *ModelHandler) ListModels(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, modelList)
+	c.JSON(http.StatusOK, result)
 }
 
 // GetModel 获取单个统一模型

@@ -11,17 +11,17 @@ type AccessToken struct {
 	ID           uint       `gorm:"primarykey" json:"id"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
-	Token        string     `gorm:"type:varchar(255)" json:"token,omitempty"`                                   // 明文令牌（仅创建时返回）
-	TokenHash    string     `gorm:"type:varchar(64);not null;uniqueIndex" json:"-"`                            // SHA256 哈希
-	TokenPreview string     `gorm:"type:varchar(20)" json:"token_preview"`                                     // 脱敏令牌(前8位+后4位)
-	Status       string     `gorm:"type:varchar(20);not null;default:'active'" json:"status"`                  // active, disabled
-	Name         string     `gorm:"type:varchar(20);not null;uniqueIndex" json:"name"`                         // 令牌名称
+	Token        string     `gorm:"type:varchar(255)" json:"token,omitempty"`                 // 明文令牌（仅创建时返回）
+	TokenHash    string     `gorm:"type:varchar(64);not null;uniqueIndex" json:"-"`           // SHA256 哈希
+	TokenPreview string     `gorm:"type:varchar(20)" json:"token_preview"`                    // 脱敏令牌(前8位+后4位)
+	Status       string     `gorm:"type:varchar(20);not null;default:'active'" json:"status"` // active, disabled
+	Name         string     `gorm:"type:varchar(20);not null;uniqueIndex" json:"name"`        // 令牌名称
 	LastUsedAt   *time.Time `json:"last_used_at"`
 	ExpiresAt    *time.Time `json:"expires_at"` // 过期时间，nil 表示永不过期
 }
 
 // TableName 指定表名
-func (AccessToken) TableName() string {
+func (a *AccessToken) TableName() string {
 	return "access_tokens"
 }
 
@@ -31,12 +31,7 @@ func (a *AccessToken) IsActive() bool {
 		return false
 	}
 
-	// 如果设置了过期时间，检查是否过期
-	if a.ExpiresAt != nil && time.Now().After(*a.ExpiresAt) {
-		return false
-	}
-
-	return true
+	return !a.IsExpired()
 }
 
 // IsExpired 检查令牌是否已过期

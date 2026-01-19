@@ -26,9 +26,32 @@ export interface CreateTokenResponse {
     message: string
 }
 
+export interface TokenListParams {
+    page?: number
+    page_size?: number
+    name?: string
+    status?: string | null
+    token?: string
+    sort_by?: 'id' | 'status' | 'created_at' | 'last_used_at'
+    sort_order?: 'asc' | 'desc'
+}
+
+export interface TokenListResponse {
+    total: number
+    page: number
+    page_size: number
+    items: Token[]
+}
+
 // Tokens API client
 class TokensService {
-    // 获取令牌列表
+    // 获取令牌列表（分页，支持过滤和排序）
+    async list(params?: TokenListParams): Promise<TokenListResponse> {
+        const response = await apiClient.get<TokenListResponse>('/admin/api/tokens', { params })
+        return response.data
+    }
+
+    // 获取所有令牌（不分页，已废弃）
     async getAllTokens(): Promise<Token[]> {
         const response = await apiClient.get('/admin/api/tokens')
         return response.data.data

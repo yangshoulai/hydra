@@ -38,7 +38,7 @@
         :bordered="true"
         striped
         :single-line="false"
-        :scroll-x="960"
+        :scroll-x="920"
         :loading="loading"
     />
 
@@ -407,21 +407,7 @@
 <script setup lang="ts">
 import {computed, h, nextTick, onMounted, reactive, ref, watch} from 'vue'
 import type {DataTableColumns, FormInst, FormRules} from 'naive-ui'
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NDataTable,
-  NForm,
-  NFormItem,
-  NGrid,
-  NGridItem,
-  NIcon,
-  NInput,
-  NModal,
-  NSpace,
-  NText
-} from 'naive-ui'
+import {NAlert, NButton, NCard, NDataTable, NForm, NFormItem, NGrid, NGridItem, NIcon, NInput, NModal, NSpace, NText} from 'naive-ui'
 import {
   AddOutline,
   BuildOutline,
@@ -573,7 +559,7 @@ const columns: DataTableColumns<Provider> = [
   {
     title: '操作',
     key: 'actions',
-    width: 160,
+    width: 120,
     fixed: 'right',
     align: 'center',
     render: (row) => {
@@ -585,7 +571,8 @@ const columns: DataTableColumns<Provider> = [
               h(
                   NButton,
                   {
-                    size: 'small',
+                    size: 'tiny',
+                    type: 'warning',
                     onClick: () => handleEdit(row)
                   },
                   {
@@ -596,7 +583,7 @@ const columns: DataTableColumns<Provider> = [
               h(
                   NButton,
                   {
-                    size: 'small',
+                    size: 'tiny',
                     type: 'error',
                     onClick: () => handleDelete(row)
                   },

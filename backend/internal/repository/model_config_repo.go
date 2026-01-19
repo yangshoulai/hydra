@@ -54,6 +54,16 @@ func (r *ChannelModelConfigRepository) FindByChannelID(ctx context.Context, chan
 	return configs, err
 }
 
+// CountByChannelID 统计渠道的模型配置数量
+func (r *ChannelModelConfigRepository) CountByChannelID(ctx context.Context, channelID uint) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.ChannelModelConfig{}).
+		Where("channel_id = ?", channelID).
+		Count(&count).Error
+	return int(count), err
+}
+
 // FindByUnifiedModel 根据统一模型名查询所有支持的渠道配置
 func (r *ChannelModelConfigRepository) FindByUnifiedModel(ctx context.Context, unifiedModel string) ([]*models.ChannelModelConfig, error) {
 	var configs []*models.ChannelModelConfig

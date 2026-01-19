@@ -28,73 +28,62 @@
           </div>
         </template>
         <n-text class="card-description">保护系统免受级联故障影响，自动隔离异常服务</n-text>
+        <n-form :model="formData" label-placement="left" label-width="120px" class="settings-form">
+          <div class="form-item-wrapper">
+            <n-form-item label="失败阈值" path="circuit_breaker_failure_threshold">
+              <n-input-number
+                  v-model:value="formData.circuit_breaker_failure_threshold"
+                  :min="1"
+                  :max="100"
+                  style="width: 100%"
+              >
+                <template #suffix>次</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">连续失败多少次后触发熔断</n-text>
+          </div>
 
-        <n-form :model="formData" label-placement="left" label-width="140px" class="settings-form">
-          <n-grid :cols="24" :x-gap="24">
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="失败阈值" path="circuit_breaker_failure_threshold">
-                  <n-input-number
-                      v-model:value="formData.circuit_breaker_failure_threshold"
-                      :min="1"
-                      :max="100"
-                      style="width: 100%"
-                  >
-                    <template #suffix>次</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">连续失败多少次后触发熔断</n-text>
-              </div>
-            </n-grid-item>
+          <div class="form-item-wrapper">
+            <n-form-item label="冷却时长" path="circuit_breaker_cooling_duration">
+              <n-input-number
+                  v-model:value="formData.circuit_breaker_cooling_duration"
+                  :min="10"
+                  :max="3600"
+                  style="width: 100%"
+              >
+                <template #suffix>秒</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">熔断后等待多久再尝试恢复</n-text>
+          </div>
 
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="冷却时长" path="circuit_breaker_cooling_duration">
-                  <n-input-number
-                      v-model:value="formData.circuit_breaker_cooling_duration"
-                      :min="10"
-                      :max="3600"
-                      style="width: 100%"
-                  >
-                    <template #suffix>秒</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">熔断后等待多久再尝试恢复</n-text>
-              </div>
-            </n-grid-item>
+          <div class="form-item-wrapper">
+            <n-form-item label="探测间隔" path="circuit_breaker_probe_interval">
+              <n-input-number
+                  v-model:value="formData.circuit_breaker_probe_interval"
+                  :min="10"
+                  :max="300"
+                  style="width: 100%"
+              >
+                <template #suffix>秒</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">探测半开状态 Key 的时间间隔</n-text>
+          </div>
 
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="探测间隔" path="circuit_breaker_probe_interval">
-                  <n-input-number
-                      v-model:value="formData.circuit_breaker_probe_interval"
-                      :min="10"
-                      :max="300"
-                      style="width: 100%"
-                  >
-                    <template #suffix>秒</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">探测半开状态 Key 的时间间隔</n-text>
-              </div>
-            </n-grid-item>
-
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="最大并发探测数" path="circuit_breaker_probe_max_concurrent">
-                  <n-input-number
-                      v-model:value="formData.circuit_breaker_probe_max_concurrent"
-                      :min="1"
-                      :max="50"
-                      style="width: 100%"
-                  >
-                    <template #suffix>个</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">每次探测周期最多同时探测的 Key 数量</n-text>
-              </div>
-            </n-grid-item>
-          </n-grid>
+          <div class="form-item-wrapper">
+            <n-form-item label="最大并发探测数" path="circuit_breaker_probe_max_concurrent">
+              <n-input-number
+                  v-model:value="formData.circuit_breaker_probe_max_concurrent"
+                  :min="1"
+                  :max="50"
+                  style="width: 100%"
+              >
+                <template #suffix>个</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">每次探测周期最多同时探测的 Key 数量</n-text>
+          </div>
         </n-form>
       </n-card>
 
@@ -116,73 +105,62 @@
         </template>
         <n-text class="card-description">控制请求代理行为和性能参数</n-text>
 
-        <n-form label-placement="left" label-width="140px" class="settings-form">
-          <n-grid :cols="24" :x-gap="24">
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="请求超时" path="proxy_request_timeout">
-                  <n-input-number
-                      v-model:value="formData.proxy_request_timeout"
-                      :min="10"
-                      :max="300"
-                      style="width: 100%"
-                  >
-                    <template #suffix>秒</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">上游请求的超时时间</n-text>
-              </div>
-            </n-grid-item>
+        <n-form label-placement="left" label-width="120px" class="settings-form">
 
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="最大并发数" path="proxy_max_concurrent">
-                  <n-input-number
-                      v-model:value="formData.proxy_max_concurrent"
-                      :min="10"
-                      :max="10000"
-                      style="width: 100%"
-                  >
-                    <template #suffix>个</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">系统允许的最大并发请求数</n-text>
-              </div>
-            </n-grid-item>
+          <div class="form-item-wrapper">
+            <n-form-item label="请求超时" path="proxy_request_timeout">
+              <n-input-number
+                  v-model:value="formData.proxy_request_timeout"
+                  :min="10"
+                  :max="300"
+                  style="width: 100%"
+              >
+                <template #suffix>秒</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">上游请求的超时时间</n-text>
+          </div>
+          <div class="form-item-wrapper">
+            <n-form-item label="最大并发数" path="proxy_max_concurrent">
+              <n-input-number
+                  v-model:value="formData.proxy_max_concurrent"
+                  :min="10"
+                  :max="10000"
+                  style="width: 100%"
+              >
+                <template #suffix>个</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">系统允许的最大并发请求数</n-text>
+          </div>
+          <div class="form-item-wrapper">
+            <n-form-item label="最大响应大小" path="proxy_max_response_size">
+              <n-input-number
+                  v-model:value="formData.proxy_max_response_size"
+                  :min="1"
+                  :max="100"
+                  :precision="0"
+                  style="width: 100%"
+              >
+                <template #suffix>MB</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">单个响应的最大 Body 大小</n-text>
+          </div>
 
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="最大响应大小" path="proxy_max_response_size">
-                  <n-input-number
-                      v-model:value="formData.proxy_max_response_size"
-                      :min="1"
-                      :max="100"
-                      :precision="0"
-                      style="width: 100%"
-                  >
-                    <template #suffix>MB</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">单个响应的最大 Body 大小</n-text>
-              </div>
-            </n-grid-item>
-
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="最大重试次数" path="proxy_max_retry">
-                  <n-input-number
-                      v-model:value="formData.proxy_max_retry"
-                      :min="0"
-                      :max="10"
-                      style="width: 100%"
-                  >
-                    <template #suffix>次</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">单个请求失败后的最大重试次数</n-text>
-              </div>
-            </n-grid-item>
-          </n-grid>
+          <div class="form-item-wrapper">
+            <n-form-item label="最大重试次数" path="proxy_max_retry">
+              <n-input-number
+                  v-model:value="formData.proxy_max_retry"
+                  :min="0"
+                  :max="10"
+                  style="width: 100%"
+              >
+                <template #suffix>次</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">单个请求失败后的最大重试次数</n-text>
+          </div>
         </n-form>
       </n-card>
 
@@ -202,23 +180,19 @@
         </template>
         <n-text class="card-description">配置明文错误关键词，用于识别假 200 响应</n-text>
 
-        <n-form label-placement="left" label-width="140px" class="settings-form">
-          <n-grid :cols="24" :x-gap="24">
-            <n-grid-item :span="24">
-              <div class="form-item-wrapper">
-                <n-form-item label="错误关键词" path="sniffer_plain_text_error_keywords">
-                  <n-input
-                      v-model:value="snifferKeywords"
-                      type="textarea"
-                      placeholder="每行一个关键词，不区分大小写"
-                      :autosize="{ minRows: 10, maxRows: 20 }"
-                      style="width: 100%"
-                  />
-                </n-form-item>
-                <n-text class="field-hint">响应 Body 包含这些关键词时将被识别为错误响应，每行一个关键词</n-text>
-              </div>
-            </n-grid-item>
-          </n-grid>
+        <n-form label-placement="left" label-width="120px" class="settings-form">
+          <div class="form-item-wrapper">
+            <n-form-item label="错误关键词" path="sniffer_plain_text_error_keywords">
+              <n-input
+                  v-model:value="snifferKeywords"
+                  type="textarea"
+                  placeholder="每行一个关键词，不区分大小写"
+                  :autosize="{ minRows: 10, maxRows: 20 }"
+                  style="width: 100%"
+              />
+            </n-form-item>
+            <n-text class="field-hint">响应 Body 包含这些关键词时将被识别为错误响应，每行一个关键词</n-text>
+          </div>
         </n-form>
       </n-card>
 
@@ -241,41 +215,36 @@
         </template>
         <n-text class="card-description">控制日志记录行为和存储策略</n-text>
 
-        <n-form label-placement="left" label-width="140px" class="settings-form">
-          <n-grid :cols="24" :x-gap="24">
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="日志保留天数" path="log_retention_days">
-                  <n-input-number
-                      v-model:value="formData.log_retention_days"
-                      :min="1"
-                      :max="365"
-                      style="width: 100%"
-                  >
-                    <template #suffix>天</template>
-                  </n-input-number>
-                </n-form-item>
-                <n-text class="field-hint">审计日志保留天数</n-text>
-              </div>
-            </n-grid-item>
+        <n-form label-placement="left" label-width="120px" class="settings-form">
 
-            <n-grid-item :span="24" :md="12">
-              <div class="form-item-wrapper">
-                <n-form-item label="调试模式" path="debug_mode">
-                  <div class="switch-wrapper">
-                    <n-switch v-model:value="debugModeEnabled"/>
-                    <n-tag v-if="debugModeEnabled" size="small" type="warning" :bordered="false">
-                      已启用
-                    </n-tag>
-                    <n-tag v-else size="small" type="default" :bordered="false">
-                      已关闭
-                    </n-tag>
-                  </div>
-                </n-form-item>
-                <n-text class="field-hint">记录完整请求/响应，仅用于排查问题</n-text>
+          <div class="form-item-wrapper">
+            <n-form-item label="日志保留天数" path="log_retention_days">
+              <n-input-number
+                  v-model:value="formData.log_retention_days"
+                  :min="1"
+                  :max="365"
+                  style="width: 100%"
+              >
+                <template #suffix>天</template>
+              </n-input-number>
+            </n-form-item>
+            <n-text class="field-hint">审计日志保留天数</n-text>
+          </div>
+
+          <div class="form-item-wrapper">
+            <n-form-item label="调试模式" path="debug_mode">
+              <div class="switch-wrapper">
+                <n-switch v-model:value="debugModeEnabled"/>
+                <n-tag v-if="debugModeEnabled" size="small" type="warning" :bordered="false">
+                  已启用
+                </n-tag>
+                <n-tag v-else size="small" type="default" :bordered="false">
+                  已关闭
+                </n-tag>
               </div>
-            </n-grid-item>
-          </n-grid>
+            </n-form-item>
+            <n-text class="field-hint">记录完整请求/响应，仅用于排查问题</n-text>
+          </div>
         </n-form>
       </n-card>
 
@@ -340,26 +309,7 @@
 
 <script setup lang="ts">
 import {onMounted, ref, watch} from 'vue'
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NForm,
-  NFormItem,
-  NGrid,
-  NGridItem,
-  NInput,
-  NInputNumber,
-  NLi,
-  NModal,
-  NSpace,
-  NSwitch,
-  NTag,
-  NText,
-  NUl,
-  useDialog,
-  useMessage,
-} from 'naive-ui'
+import {NAlert, NButton, NCard, NForm, NFormItem, NInput, NInputNumber, NLi, NModal, NSpace, NSwitch, NTag, NText, NUl, useDialog, useMessage,} from 'naive-ui'
 import settingsService from '@/services/settingsService'
 
 const dialog = useDialog()
@@ -678,7 +628,7 @@ onMounted(() => {
 
 .settings-form {
   margin-top: 16px;
-  max-width: 720px;
+  max-width: 480px;
 }
 
 .form-item-wrapper {
@@ -696,7 +646,7 @@ onMounted(() => {
   color: #a1a1aa;
   line-height: 1.5;
   text-align: left;
-  padding-left: 140px;
+  padding-left: 120px;
 }
 
 .switch-wrapper {

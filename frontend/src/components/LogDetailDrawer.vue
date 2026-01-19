@@ -9,20 +9,59 @@
               <n-descriptions-item label="日志ID" :span="1">
                 <n-text strong>#{{ log.id }}</n-text>
               </n-descriptions-item>
-              <n-descriptions-item label="Trace ID" :span="2">
+              <n-descriptions-item label="Trace ID" :span="1">
                 <n-space align="center">
                   <n-text code style="font-size: 13px">{{ log.trace_id }}</n-text>
                   <TraceIdCopy :trace-id="log.trace_id"/>
                 </n-space>
               </n-descriptions-item>
 
-              <n-descriptions-item label="创建时间" :span="3">
+              <n-descriptions-item label="创建时间" :span="1">
                 <n-space align="center">
                   <n-icon>
                     <TimeIcon/>
                   </n-icon>
                   <n-text>{{ formatTime(log.created_at) }}</n-text>
                 </n-space>
+              </n-descriptions-item>
+
+              <n-descriptions-item label="统一模型">
+                <n-tag v-if="log.unified_model" type="info" size="small">
+                  {{ log.unified_model }}
+                </n-tag>
+                <n-text v-else depth="3">-</n-text>
+              </n-descriptions-item>
+
+              <n-descriptions-item label="上游模型">
+                <n-tag v-if="log.upstream_model" type="success" size="small">
+                  {{ log.upstream_model }}
+                </n-tag>
+                <n-text v-else depth="3">-</n-text>
+              </n-descriptions-item>
+
+              <n-descriptions-item label="渠道">
+                <n-tag v-if="log.channel_name" type="warning" size="small">
+                  {{ log.channel_name }}
+                </n-tag>
+                <n-text v-else depth="3">-</n-text>
+              </n-descriptions-item>
+
+              <n-descriptions-item label="Key ID">
+                <n-text v-if="log.key_id" strong>{{ log.key_id }}</n-text>
+                <n-text v-else depth="3">-</n-text>
+              </n-descriptions-item>
+
+              <n-descriptions-item label="重试次数">
+                <n-tag v-if="log.retry_count > 0" type="warning" size="small" :bordered="false">
+                  {{ log.retry_count }}
+                </n-tag>
+                <n-text v-else depth="3">{{ log.retry_count }}</n-text>
+              </n-descriptions-item>
+
+              <n-descriptions-item label="流式">
+                <n-tag :type="log.is_stream ? 'info' : 'default'" size="small" :bordered="false">
+                  {{ log.is_stream ? '是' : '否' }}
+                </n-tag>
               </n-descriptions-item>
             </n-descriptions>
           </n-card>
@@ -85,50 +124,6 @@
                     <n-code :code="formatJSON(log.request_body)" language="json" :word-wrap="true" :hljs="hljs"/>
                   </div>
                 </template>
-              </n-descriptions-item>
-            </n-descriptions>
-          </n-card>
-
-          <!-- 模型与渠道卡片 -->
-          <n-card title="模型与渠道" size="small" :bordered="false" class="detail-section">
-            <n-descriptions bordered :column="3" size="small">
-              <n-descriptions-item label="统一模型">
-                <n-tag v-if="log.unified_model" type="info" size="small">
-                  {{ log.unified_model }}
-                </n-tag>
-                <n-text v-else depth="3">-</n-text>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="上游模型">
-                <n-tag v-if="log.upstream_model" type="success" size="small">
-                  {{ log.upstream_model }}
-                </n-tag>
-                <n-text v-else depth="3">-</n-text>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="渠道">
-                <n-tag v-if="log.channel_name" type="warning" size="small">
-                  {{ log.channel_name }}
-                </n-tag>
-                <n-text v-else depth="3">-</n-text>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="Key ID">
-                <n-text v-if="log.key_id" strong>{{ log.key_id }}</n-text>
-                <n-text v-else depth="3">-</n-text>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="重试次数">
-                <n-tag v-if="log.retry_count > 0" type="warning" size="small" :bordered="false">
-                  {{ log.retry_count }}
-                </n-tag>
-                <n-text v-else depth="3">{{ log.retry_count }}</n-text>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="流式">
-                <n-tag :type="log.is_stream ? 'info' : 'default'" size="small" :bordered="false">
-                  {{ log.is_stream ? '是' : '否' }}
-                </n-tag>
               </n-descriptions-item>
             </n-descriptions>
           </n-card>

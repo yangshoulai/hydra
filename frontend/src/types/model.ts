@@ -56,3 +56,19 @@ export interface UpdateModelRequest {
   provider_id?: string | null
   remark?: string
 }
+
+export interface ModelListParams {
+  page?: number
+  page_size?: number
+  name?: string
+  provider_id?: string | null
+  sort_by?: 'id' | 'name'
+  sort_order?: 'asc' | 'desc'
+}
+
+export interface ModelListResponse {
+  total: number
+  page: number
+  page_size: number
+  items: Model[]
+}

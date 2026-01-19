@@ -21,7 +21,7 @@ func InitDatabase(cfg *Config) (*gorm.DB, error) {
 	case "postgres":
 		dialector = postgres.Open(cfg.Database.PostgresDSN)
 	default:
-		return nil, fmt.Errorf("unsupported database type: %s", cfg.Database.Type)
+		return nil, fmt.Errorf("不支持的数据库类型: %s", cfg.Database.Type)
 	}
 
 	// 配置 GORM
@@ -36,13 +36,13 @@ func InitDatabase(cfg *Config) (*gorm.DB, error) {
 	// 打开连接
 	db, err := gorm.Open(dialector, gormConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("无法连接数据库: %w", err)
 	}
 
 	// 获取底层数据库连接
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get database instance: %w", err)
+		return nil, fmt.Errorf("无法获取数据库实例: %w", err)
 	}
 
 	// 配置连接池参数

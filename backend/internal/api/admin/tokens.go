@@ -42,6 +42,25 @@ type TokenListResponse struct {
 	ExpiresAt    *string `json:"expires_at,omitempty"` // 过期时间
 }
 
+// TokenListRequest 令牌列表请求
+type TokenListRequest struct {
+	Page      int    `form:"page" binding:"omitempty,min=1"`
+	PageSize  int    `form:"page_size" binding:"omitempty,min=1,max=1000"`
+	Name      string `form:"name" binding:"omitempty,max=20"`               // 名称过滤
+	Status    string `form:"status" binding:"omitempty,oneof=active disabled"` // 状态过滤
+	Token     string `form:"token" binding:"omitempty,max=255"`             // 令牌过滤
+	SortBy    string `form:"sort_by" binding:"omitempty,oneof=id status created_at last_used_at"` // 排序字段
+	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`  // 排序方向
+}
+
+// TokenListData 令牌列表数据响应
+type TokenListData struct {
+	Total    int64              `json:"total"`
+	Page     int                `json:"page"`
+	PageSize int                `json:"page_size"`
+	Items    []TokenListResponse `json:"items"`
+}
+
 // CreateTokenRequest 创建令牌请求
 type CreateTokenRequest struct {
 	Name      string `json:"name" binding:"required,max=20"`
@@ -61,7 +80,52 @@ type CreateTokenResponse struct {
 // GetTokens 获取令牌列表
 // GET /admin/api/tokens
 func (h *TokensHandler) GetTokens(c *gin.Context) {
-	tokens, err := h.tokenRepo.List(c.Request.Context())
+	var req TokenListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		h.logger.Warn("invalid token list request",
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request parameters",
+		})
+		return
+	}
+
+	// 设置默认值
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 20
+	}
+
+	// 计算偏移量
+	offset := (req.Page - 1) * req.PageSize
+
+	// 构建过滤条件
+	var filter *repository.AccessTokenFilter
+	if req.Name != "" || req.Status != "" || req.Token != "" {
+		filter = &repository.AccessTokenFilter{
+			Name:   req.Name,
+			Status: req.Status,
+			Token:  req.Token,
+		}
+	}
+
+	// 构建排序选项
+	var sortOpts *repository.AccessTokenSortOptions
+	if req.SortBy != "" {
+		sortOpts = &repository.AccessTokenSortOptions{
+			Field:     req.SortBy,
+			Direction: req.SortOrder,
+		}
+		if sortOpts.Direction == "" {
+			sortOpts.Direction = "desc" // 默认降序
+		}
+	}
+
+	// 查询令牌列表
+	tokens, total, err := h.tokenRepo.ListWithFilter(c.Request.Context(), offset, req.PageSize, filter, sortOpts)
 	if err != nil {
 		h.logger.Error("failed to get tokens", slog.String("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -71,7 +135,7 @@ func (h *TokensHandler) GetTokens(c *gin.Context) {
 	}
 
 	// 转换为响应格式
-	response := make([]TokenListResponse, 0, len(tokens))
+	items := make([]TokenListResponse, 0, len(tokens))
 	for _, token := range tokens {
 		var lastUsedAt *string
 		if token.LastUsedAt != nil {
@@ -85,7 +149,7 @@ func (h *TokensHandler) GetTokens(c *gin.Context) {
 			expiresAt = &formatted
 		}
 
-		response = append(response, TokenListResponse{
+		items = append(items, TokenListResponse{
 			ID:           token.ID,
 			Name:         token.Name,
 			Token:        token.Token,
@@ -97,8 +161,11 @@ func (h *TokensHandler) GetTokens(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": response,
+	c.JSON(http.StatusOK, TokenListData{
+		Total:    total,
+		Page:     req.Page,
+		PageSize: req.PageSize,
+		Items:    items,
 	})
 }
 
