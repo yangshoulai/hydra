@@ -70,6 +70,7 @@ type CreateChannelRequest struct {
 	BaseURL     string `json:"base_url" binding:"required,url,max=500"`
 	Priority    int    `json:"priority" binding:"omitempty,min=1,max=1000"`
 	Weight      int    `json:"weight" binding:"omitempty,min=1,max=1000"`
+	Status      string `json:"status" binding:"omitempty,oneof=active disabled"`
 	Description string `json:"description" binding:"omitempty,max=500"`
 }
 
@@ -205,7 +206,7 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 		BaseURL:     req.BaseURL,
 		Priority:    req.Priority,
 		Weight:      req.Weight,
-		Status:      "active",
+		Status:      req.Status,
 		Description: req.Description,
 	}
 
@@ -215,6 +216,9 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 	}
 	if channel.Weight == 0 {
 		channel.Weight = 100
+	}
+	if channel.Status == "" {
+		channel.Status = "active"
 	}
 
 	// 保存到数据库

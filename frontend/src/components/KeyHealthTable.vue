@@ -17,9 +17,9 @@
 <script setup lang="ts">
 import {computed, h, onMounted, ref} from 'vue'
 import {type DataTableColumns, NButton, NDataTable, NIcon, NSpace, NTag, NText} from 'naive-ui'
-import {AlertCircle, CheckmarkCircle, CloseCircle, CopyOutline, PulseOutline, RefreshOutline, TrashOutline} from '@vicons/ionicons5'
+import {AlertCircle, CheckmarkCircle, CloseCircle, ContrastOutline, CopyOutline, PulseOutline, RefreshOutline, TrashOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
-import type {Channel, ChannelHealthCheckResult, Key, SingleKeyHealthResult} from '../types/channel'
+import type {Channel, ChannelHealthCheckResult, Key} from '../types/channel'
 
 interface Props {
   channelId: number
@@ -37,7 +37,9 @@ interface KeyHealthRow {
   key_remark: string
   key_value: string
   key_preview: string
-  status: 'healthy' | 'unhealthy' | 'error' | 'testing'
+  status: 'active' | 'cooling' | 'disabled' | 'dead'
+  test_status?: 'healthy' | 'unhealthy' | 'error' | 'testing'
+  test_message?: string
   message: string
   latency: string
   key?: Key
@@ -47,7 +49,7 @@ interface KeyHealthRow {
 const loading = ref(false)
 const channel = ref<Channel | null>(null)
 const testingKeys = ref<Set<number>>(new Set())
-const keyStatusMap = ref<Map<number, SingleKeyHealthResult>>(new Map())
+const testResults = ref<Map<number, { status: 'healthy' | 'unhealthy' | 'error', message: string, latency: string }>>(new Map())
 
 // 脱敏key函数
 function maskKey(key: string): string {
@@ -57,31 +59,18 @@ function maskKey(key: string): string {
 
 // 计算显示数据
 const displayData = computed<KeyHealthRow[]>(() => {
-  if (props.healthResult) {
-    return props.healthResult.key_results.map(row => ({
-      ...row,
-      key_value: row.key_value || '',
-      key_preview: row.key_value ? maskKey(row.key_value) : '***',
-      // 如果有测试结果，使用测试结果的状态
-      status: testingKeys.value.has(row.key_id)
-          ? 'testing'
-          : keyStatusMap.value.get(row.key_id)?.status || row.status,
-      message: keyStatusMap.value.get(row.key_id)?.message || row.message,
-      latency: keyStatusMap.value.get(row.key_id)?.latency || row.latency
-    }))
-  }
   return channel.value?.keys?.map((key) => {
-    const testResult = keyStatusMap.value.get(key.id)
+    const testResult = testResults.value.get(key.id)
     return {
       key_id: key.id,
       key_remark: key.remark,
       key_value: key.key_value,
       key_preview: key.key_preview || maskKey(key.key_value),
-      status: testingKeys.value.has(key.id)
-          ? 'testing'
-          : testResult?.status || (key.status === 'active' ? 'healthy' : 'unhealthy'),
-      message: testResult?.message || (key.status === 'active' ? 'Key is active' : 'Key is not active'),
-      latency: testResult?.latency || '-',
+      status: key.status,
+      test_status: testingKeys.value.has(key.id) ? 'testing' : testResult?.status,
+      test_message: testResult?.message,
+      message: '',
+      latency: testResult?.latency || '',
       key
     }
   }) || []
@@ -101,9 +90,9 @@ const columns: DataTableColumns<KeyHealthRow> = [
     align: 'right'
   },
   {
-    title: 'Key',
+    title: '密钥',
     key: 'key_preview',
-    width: 280,
+    width: 240,
     render(row) {
       return h(
           'div',
@@ -147,6 +136,36 @@ const columns: DataTableColumns<KeyHealthRow> = [
       )
     }
   },
+
+  {
+    title: '状态',
+    key: 'status',
+    align: 'center',
+    width: 120,
+    render(row) {
+      const config = {
+        active: {type: 'success' as const, text: '正常', icon: CheckmarkCircle},
+        cooling: {type: 'warning' as const, text: '冷却中', icon: AlertCircle},
+        disabled: {type: 'error' as const, text: '禁用', icon: CloseCircle},
+        dead: {type: 'error' as const, text: '失效', icon: CloseCircle}
+      }
+      const status = config[row.status] || config.disabled
+      return h(
+          'div',
+          {style: {display: 'flex', alignItems: 'center', gap: '8px', 'justifyContent': 'center'}},
+          [
+            h(NIcon, {
+              color: status.type === 'success' ? '#18a058' :
+                  status.type === 'error' ? '#d03050' :
+                      '#f0a020'
+            }, {
+              default: () => h(status.icon)
+            }),
+            h(NTag, {type: status.type, size: 'small'}, {default: () => status.text})
+          ]
+      )
+    }
+  },
   {
     title: '备注',
     key: 'key_remark',
@@ -156,31 +175,47 @@ const columns: DataTableColumns<KeyHealthRow> = [
     }
   },
   {
-    title: '状态',
-    key: 'status',
+    title: '测试状态',
+    key: 'test_status',
     align: 'center',
     width: 120,
     render(row) {
-      const config = {
-        healthy: {type: 'success' as const, text: '健康', icon: CheckmarkCircle},
-        unhealthy: {type: 'error' as const, text: '异常', icon: CloseCircle},
-        error: {type: 'warning' as const, text: '错误', icon: AlertCircle},
-        testing: {type: 'info' as const, text: '测试中', icon: RefreshOutline}
+      if (testingKeys.value.has(row.key_id)) {
+        return h(
+            'div',
+            {style: {display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center'}},
+            [
+              h(NIcon, {
+                color: '#2080f0',
+                class: 'spin-icon'
+              }, {
+                default: () => h(RefreshOutline)
+              }),
+              h(NTag, {type: 'info', size: 'small'}, {default: () => '测试中'})
+            ]
+        )
       }
-      const status = config[row.status]
+
+      if (!row.test_status) {
+        return h(NText, {depth: 3}, {default: () => '-'})
+      }
+
+      const config = {
+        healthy: {type: 'success' as const, text: '健康', icon: CheckmarkCircle, color: '#18a058'},
+        unhealthy: {type: 'error' as const, text: '异常', icon: CloseCircle, color: '#d03050'},
+        error: {type: 'warning' as const, text: '错误', icon: AlertCircle, color: '#f0a020'},
+        testing: {type: 'info' as const, text: '测试中', icon: RefreshOutline, color: '#2080f0'},
+      }
+      const status = config[row.test_status]
+
       return h(
           'div',
-          {style: {display: 'flex', alignItems: 'center', gap: '8px', 'justifyContent': 'center'}},
+          {
+            style: {display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center'},
+            title: row.test_message || ''
+          },
           [
-            h(NIcon, {
-              color: status.type === 'success' ? '#18a058' :
-                  status.type === 'error' ? '#d03050' :
-                      status.type === 'warning' ? '#f0a020' :
-                          '#2080f0',
-              class: row.status === 'testing' ? 'spin-icon' : ''
-            }, {
-              default: () => h(status.icon)
-            }),
+            h(NIcon, {color: status.color}, {default: () => h(status.icon)}),
             h(NTag, {type: status.type, size: 'small'}, {default: () => status.text})
           ]
       )
@@ -203,7 +238,7 @@ const columns: DataTableColumns<KeyHealthRow> = [
     title: '操作',
     key: 'actions',
     align: 'center',
-    width: 200,
+    width: 240,
     fixed: 'right',
     render(row) {
       return h(
@@ -225,6 +260,30 @@ const columns: DataTableColumns<KeyHealthRow> = [
                   {
                     default: () => '测试',
                     icon: () => h(NIcon, {}, {default: () => h(PulseOutline)})
+                  }
+              ),
+              row.key && row.key.status !== 'disabled' && h(
+                  NButton,
+                  {
+                    size: 'tiny',
+                    type: 'warning',
+                    onClick: () => handleToggleKeyStatus(row.key_id, 'disabled')
+                  },
+                  {
+                    default: () => '禁用',
+                    icon: () => h(NIcon, null, {default: () => h(ContrastOutline)})
+                  }
+              ),
+              row.key && row.key.status === 'disabled' && h(
+                  NButton,
+                  {
+                    size: 'tiny',
+                    type: 'success',
+                    onClick: () => handleToggleKeyStatus(row.key_id, 'active')
+                  },
+                  {
+                    default: () => '启用',
+                    icon: () => h(NIcon, null, {default: () => h(ContrastOutline)})
                   }
               ),
               row.key && h(
@@ -296,29 +355,60 @@ async function handleDeleteKey(keyId: number) {
 
 // 测试单个Key
 async function handleTestKey(keyId: number) {
-  // 标记为测试中
   testingKeys.value.add(keyId)
 
   try {
     const result = await channelApi.testSingleKey(keyId)
+
     // 保存测试结果
-    keyStatusMap.value.set(keyId, result)
-    window.$message?.success('测试完成')
+    testResults.value.set(keyId, {
+      status: result.status,
+      message: result.message,
+      latency: result.latency
+    })
+
+    if (result.status === 'healthy') {
+      window.$message?.success(`测试成功: ${result.message}`)
+    } else {
+      window.$message?.error(`测试失败: ${result.message}`)
+    }
+    await fetchChannel()
   } catch (error: any) {
     console.error('Failed to test key:', error)
     window.$message?.error(error.response?.data?.error || '测试失败')
+
     // 保存错误结果
-    keyStatusMap.value.set(keyId, {
-      key_id: keyId,
-      key_remark: '',
+    testResults.value.set(keyId, {
       status: 'error',
       message: error.response?.data?.error || '测试失败',
       latency: '-'
     })
   } finally {
-    // 移除测试中状态
     testingKeys.value.delete(keyId)
   }
+}
+
+// 切换密钥状态（启用/禁用）
+async function handleToggleKeyStatus(keyId: number, targetStatus: 'active' | 'disabled') {
+  const action = targetStatus === 'disabled' ? '禁用' : '启用'
+
+  window.$dialog?.warning({
+    title: `确认${action}`,
+    content: `确定要${action}此密钥吗？`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await channelApi.resetKeyStatus(keyId, targetStatus)
+        window.$message?.success(`${action}成功`)
+        await fetchChannel()
+        emit('refresh')
+      } catch (error: any) {
+        console.error(`Failed to ${action} key:`, error)
+        window.$message?.error(error.response?.data?.error || `${action}失败`)
+      }
+    }
+  })
 }
 
 // 刷新列表
@@ -326,31 +416,31 @@ async function refresh() {
   await fetchChannel()
 }
 
-// 设置 Key 为测试中状态
-function setTesting(keyId: number) {
-  testingKeys.value.add(keyId)
-}
-
-// 更新测试结果
-function updateHealthResults(result: ChannelHealthCheckResult) {
-  result.key_results.forEach(keyResult => {
-    keyStatusMap.value.set(keyResult.key_id, keyResult)
+// 设置批量测试中状态
+function setTestingAll() {
+  testingKeys.value.clear()
+  displayData.value.forEach(row => {
+    testingKeys.value.add(row.key_id)
   })
-  // 清除所有测试中状态
-  testingKeys.value.clear()
 }
 
-// 清除所有测试中状态
-function clearTesting() {
+// 更新批量测试结果
+function updateTestResults(results: ChannelHealthCheckResult) {
   testingKeys.value.clear()
+  results.key_results.forEach(result => {
+    testResults.value.set(result.key_id, {
+      status: result.status,
+      message: result.message,
+      latency: result.latency
+    })
+  })
 }
 
 // 暴露刷新方法给父组件
 defineExpose({
   refresh,
-  setTesting,
-  updateHealthResults,
-  clearTesting
+  setTestingAll,
+  updateTestResults
 })
 
 // 初始化

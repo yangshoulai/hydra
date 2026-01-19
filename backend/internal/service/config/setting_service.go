@@ -252,7 +252,8 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingProxyMaxConcurrent ||
 		key == models.SettingProxyMaxRetry:
 		return "proxy"
-	case key == models.SettingSnifferPlainTextErrorRules:
+	case key == models.SettingSnifferPlainTextErrorRules ||
+		key == models.SettingSnifferStreamErrorRules:
 		return "sniffer"
 	default:
 		return "unknown"
@@ -340,8 +341,64 @@ func (s *SettingService) SetPlainTextErrorRules(ctx context.Context, keywords []
 		return err
 	}
 
-	// 通知 SnifferManager 更新规则
-	GetSnifferManager().UpdateKeywords(ctx, keywords)
+	return nil
+}
+
+// GetStreamErrorRules 获取流式响应错误规则
+func (s *SettingService) GetStreamErrorRules(ctx context.Context) []string {
+	value, err := s.get(ctx, models.SettingSnifferStreamErrorRules)
+	if err != nil || value == "" {
+		// 返回默认规则
+		return s.getDefaultStreamErrorRules()
+	}
+
+	// 解析 JSON
+	var keywords []string
+	if err := json.Unmarshal([]byte(value), &keywords); err != nil {
+		s.logger.Warn("解析流式错误规则失败",
+			slog.String("value", value),
+			slog.String("error", err.Error()),
+		)
+		return s.getDefaultStreamErrorRules()
+	}
+
+	return keywords
+}
+
+// SetStreamErrorRules 设置流式响应错误规则
+func (s *SettingService) SetStreamErrorRules(ctx context.Context, keywords []string) error {
+	// 转换为 JSON
+	jsonBytes, err := json.Marshal(keywords)
+	if err != nil {
+		s.logger.Error("序列化流式错误规则失败",
+			slog.String("error", err.Error()),
+		)
+		return fmt.Errorf("failed to marshal keywords: %w", err)
+	}
+
+	// 保存到数据库
+	if err := s.Set(ctx, models.SettingSnifferStreamErrorRules, string(jsonBytes)); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+// getDefaultStreamErrorRules 获取默认的流式错误关键词
+func (s *SettingService) getDefaultStreamErrorRules() []string {
+	return []string{
+		"\"error\"",           // JSON error 字段
+		"无可用后端",
+		"额度不足",
+		"maintenance",
+		"service unavailable",
+		"bad gateway",
+		"quota exceeded",
+		"rate limit",
+		"unauthorized",
+		"forbidden",
+		"not found",
+		"invalid api key",
+		"authentication failed",
+	}
 }

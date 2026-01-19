@@ -14,11 +14,11 @@ import (
 
 // KeyHandler Key 管理处理器
 type KeyHandler struct {
-	keyRepo           *repository.KeyRepository
-	channelRepo       *repository.ChannelRepository
-	healthCheckSvc    *admin.HealthCheckService
-	circuitManager    *circuit.Manager
-	logger            *slog.Logger
+	keyRepo        *repository.KeyRepository
+	channelRepo    *repository.ChannelRepository
+	healthCheckSvc *admin.HealthCheckService
+	circuitManager *circuit.Manager
+	logger         *slog.Logger
 }
 
 // NewKeyHandler 创建 Key 处理器
@@ -74,11 +74,11 @@ type BatchCreateKeysResponse struct {
 func (h *KeyHandler) CreateKey(c *gin.Context) {
 	var req CreateKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid create key request",
+		h.logger.Warn("报文格式不正确",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request format",
+			"error": "报文格式不正确",
 		})
 		return
 	}
@@ -86,19 +86,19 @@ func (h *KeyHandler) CreateKey(c *gin.Context) {
 	// 验证渠道是否存在
 	channel, err := h.channelRepo.FindByID(c.Request.Context(), req.ChannelID)
 	if err != nil {
-		h.logger.Error("failed to find channel",
+		h.logger.Error("查询渠道异常",
 			slog.Uint64("channel_id", uint64(req.ChannelID)),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to find channel",
+			"error": "查询渠道异常",
 		})
 		return
 	}
 
 	if channel == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "channel not found",
+			"error": "渠道不存在",
 		})
 		return
 	}
@@ -113,17 +113,17 @@ func (h *KeyHandler) CreateKey(c *gin.Context) {
 
 	// 保存到数据库
 	if err := h.keyRepo.Create(c.Request.Context(), key); err != nil {
-		h.logger.Error("failed to create key",
+		h.logger.Error("创建密钥异常",
 			slog.Uint64("channel_id", uint64(req.ChannelID)),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to create key",
+			"error": "创建密钥异常",
 		})
 		return
 	}
 
-	h.logger.Info("key created",
+	h.logger.Info("密钥已创建",
 		slog.Uint64("key_id", uint64(key.ID)),
 		slog.Uint64("channel_id", uint64(req.ChannelID)),
 	)
@@ -145,7 +145,7 @@ func (h *KeyHandler) CreateKey(c *gin.Context) {
 func (h *KeyHandler) BatchCreateKeys(c *gin.Context) {
 	var req BatchCreateKeysRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid batch create keys request",
+		h.logger.Warn("请求报文格式不正确",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -157,19 +157,19 @@ func (h *KeyHandler) BatchCreateKeys(c *gin.Context) {
 	// 验证渠道是否存在
 	channel, err := h.channelRepo.FindByID(c.Request.Context(), req.ChannelID)
 	if err != nil {
-		h.logger.Error("failed to find channel",
+		h.logger.Error("查询渠道异常",
 			slog.Uint64("channel_id", uint64(req.ChannelID)),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to find channel",
+			"error": "查询渠道异常",
 		})
 		return
 	}
 
 	if channel == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "channel not found",
+			"error": "渠道不存在",
 		})
 		return
 	}
@@ -193,7 +193,7 @@ func (h *KeyHandler) BatchCreateKeys(c *gin.Context) {
 
 		// 保存到数据库
 		if err := h.keyRepo.Create(c.Request.Context(), key); err != nil {
-			h.logger.Warn("failed to create key",
+			h.logger.Warn("创建密钥异常",
 				slog.Uint64("channel_id", uint64(req.ChannelID)),
 				slog.String("error", err.Error()),
 			)
@@ -205,7 +205,7 @@ func (h *KeyHandler) BatchCreateKeys(c *gin.Context) {
 		}
 	}
 
-	h.logger.Info("batch create keys completed",
+	h.logger.Info("批量创建密钥成功",
 		slog.Uint64("channel_id", uint64(req.ChannelID)),
 		slog.Int("total", len(req.KeyValues)),
 		slog.Int("success", response.SuccessCount),
@@ -231,41 +231,27 @@ func (h *KeyHandler) DeleteKey(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid key id",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法的密钥ID"})
 		return
 	}
 
 	// 先检查 Key 是否存在
 	key, err := h.keyRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to find key",
-			slog.Uint64("key_id", id),
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to find key",
-		})
+		h.logger.Error("查询密钥异常", slog.Uint64("key_id", id), slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询密钥异常"})
 		return
 	}
 
 	if key == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "key not found",
-		})
+		c.JSON(http.StatusNotFound, gin.H{"error": "密钥不存咋"})
 		return
 	}
 
 	// 执行删除
 	if err := h.keyRepo.Delete(c.Request.Context(), uint(id)); err != nil {
-		h.logger.Error("failed to delete key",
-			slog.Uint64("key_id", id),
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to delete key",
-		})
+		h.logger.Error("密钥删除异常", slog.Uint64("key_id", id), slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密钥删除异常"})
 		return
 	}
 
@@ -274,14 +260,9 @@ func (h *KeyHandler) DeleteKey(c *gin.Context) {
 		h.circuitManager.RemoveKeyBreaker(uint(id))
 	}
 
-	h.logger.Info("key deleted",
-		slog.Uint64("key_id", id),
-		slog.Uint64("channel_id", uint64(key.ChannelID)),
-	)
+	h.logger.Info("密钥已删除", slog.Uint64("key_id", id), slog.Uint64("channel_id", uint64(key.ChannelID)))
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "key deleted successfully",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "密钥删除成功"})
 }
 
 // ResetKeyRequest 重置 Key 请求
@@ -306,40 +287,27 @@ func (h *KeyHandler) ResetKeyStatus(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid key id",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法的密钥ID"})
 		return
 	}
 
 	var req ResetKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid reset key request",
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request format",
-		})
+		h.logger.Warn("请求报文格式不正确", slog.String("error", err.Error()))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求报文格式不正确"})
 		return
 	}
 
 	// 查询 Key
 	key, err := h.keyRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to find key",
-			slog.Uint64("key_id", id),
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to find key",
-		})
+		h.logger.Error("查询密钥异常", slog.Uint64("key_id", id), slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询密钥异常"})
 		return
 	}
 
 	if key == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "key not found",
-		})
+		c.JSON(http.StatusNotFound, gin.H{"error": "密钥不存在"})
 		return
 	}
 
@@ -354,25 +322,21 @@ func (h *KeyHandler) ResetKeyStatus(c *gin.Context) {
 	key.CoolingAt = nil // 清除冷却时间
 
 	if err := h.keyRepo.Update(c.Request.Context(), key); err != nil {
-		h.logger.Error("failed to update key status",
-			slog.Uint64("key_id", id),
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to update key status",
-		})
+		h.logger.Error("更新密钥状态异常", slog.Uint64("key_id", id), slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新密钥状态异常"})
 		return
 	}
 
-	// 同时重置熔断器状态
+	// 根据目标状态处理熔断器
 	if targetStatus == "active" {
+		// 启用时重置熔断器状态
 		h.circuitManager.ResetKey(uint(id))
+	} else if targetStatus == "disabled" {
+		// 禁用时从缓存中移除熔断器
+		h.circuitManager.RemoveKeyBreaker(uint(id))
 	}
 
-	h.logger.Info("key status reset",
-		slog.Uint64("key_id", id),
-		slog.String("status", targetStatus),
-	)
+	h.logger.Info("重置密钥状态", slog.Uint64("key_id", id), slog.String("status", targetStatus))
 
 	c.JSON(http.StatusOK, key)
 }
@@ -394,7 +358,7 @@ func (h *KeyHandler) TestChannelKeys(c *gin.Context) {
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid channel id",
+			"error": "非法的渠道ID ",
 		})
 		return
 	}
@@ -402,28 +366,19 @@ func (h *KeyHandler) TestChannelKeys(c *gin.Context) {
 	// 执行健康检查
 	result, err := h.healthCheckSvc.CheckChannelHealth(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to check channel health",
-			slog.Uint64("channel_id", id),
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to check channel health",
-		})
+		h.logger.Error("检查渠道密钥状态异常", slog.Uint64("channel_id", id), slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "检查渠道密钥状态异常"})
 		return
 	}
 
 	if result == nil {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "channel not found",
+			"error": "渠道不存在",
 		})
 		return
 	}
 
-	h.logger.Info("channel health check completed",
-		slog.Uint64("channel_id", id),
-		slog.Int("total_keys", result.TotalKeys),
-		slog.Int("healthy_keys", result.HealthyKeys),
-	)
+	h.logger.Info("渠道密钥检查完成", slog.Uint64("channel_id", id), slog.Int("total_keys", result.TotalKeys), slog.Int("healthy_keys", result.HealthyKeys))
 
 	c.JSON(http.StatusOK, result)
 }
@@ -444,59 +399,40 @@ func (h *KeyHandler) TestSingleKey(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid key id",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法的密钥"})
 		return
 	}
 
 	// 查询 Key
 	key, err := h.keyRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to find key",
-			slog.Uint64("key_id", id),
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to find key",
-		})
+		h.logger.Error("密钥不存在", slog.Uint64("key_id", id), slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "密钥不存在"})
 		return
 	}
 
 	if key == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "key not found",
-		})
+		c.JSON(http.StatusNotFound, gin.H{"error": "密钥不存在"})
 		return
 	}
 
 	// 查询渠道
 	channel, err := h.channelRepo.FindByID(c.Request.Context(), key.ChannelID)
 	if err != nil {
-		h.logger.Error("failed to find channel",
-			slog.Uint64("channel_id", uint64(key.ChannelID)),
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to find channel",
-		})
+		h.logger.Error("渠道不存在", slog.Uint64("channel_id", uint64(key.ChannelID)), slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "渠道不存在"})
 		return
 	}
 
 	if channel == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "channel not found",
-		})
+		c.JSON(http.StatusNotFound, gin.H{"error": "渠道不存在"})
 		return
 	}
 
 	// 执行健康检查
 	result := h.healthCheckSvc.CheckSingleKey(c.Request.Context(), key, channel)
 
-	h.logger.Info("single key health check completed",
-		slog.Uint64("key_id", id),
-		slog.String("status", result.Status),
-	)
+	h.logger.Info("密钥检查完成", slog.Uint64("key_id", id), slog.String("status", result.Status))
 
 	c.JSON(http.StatusOK, result)
 }

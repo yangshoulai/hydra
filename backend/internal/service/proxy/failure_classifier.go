@@ -14,6 +14,8 @@ const (
 	FailureTypeHard FailureType = "hard"
 	// FailureTypeSoft 软故障(熔断后可恢复)
 	FailureTypeSoft FailureType = "soft"
+	// FailureTypeModelNotFound 模型不存在(需要重试但不记录到熔断器)
+	FailureTypeModelNotFound FailureType = "model_not_found"
 	// FailureTypeNone 非故障
 	FailureTypeNone FailureType = "none"
 )
@@ -50,10 +52,16 @@ func (fc *FailureClassifier) ClassifyHTTPError(statusCode int, body []byte) Fail
 		return FailureTypeSoft
 	}
 
-	// 4xx 客户端错误(除了上述的),通常不应重试
-	// 但不禁用 Key,因为可能是请求参数问题
+	// 404 模型不存在，需要重试但不记录到熔断器
+	if statusCode == http.StatusNotFound {
+		return FailureTypeModelNotFound
+	}
+
+	// 4xx 客户端错误(除了上述的)
+	// 对于渠道代理来说，4xx 应该触发重试（切换到其他渠道）
+	// 但不应禁用 Key，因为这不是 Key 的问题
 	if statusCode >= 400 && statusCode < 500 {
-		return FailureTypeNone
+		return FailureTypeSoft
 	}
 
 	// 5xx 服务端错误,软故障
@@ -133,7 +141,7 @@ func (fc *FailureClassifier) isQuotaExceeded(body []byte) bool {
 // ShouldRetry 判断是否应该重试
 // 软故障应该重试,硬故障不应该重试
 func (fc *FailureClassifier) ShouldRetry(failureType FailureType) bool {
-	return failureType == FailureTypeSoft
+	return failureType == FailureTypeSoft || failureType == FailureTypeModelNotFound
 }
 
 // ClassifyResponseError 综合分类响应错误

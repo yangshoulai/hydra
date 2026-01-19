@@ -34,4 +34,5 @@ const (
 	SettingProxyMaxConcurrent             = "proxy_max_concurrent"
 	SettingProxyMaxRetry                  = "proxy_max_retry"
 	SettingSnifferPlainTextErrorRules     = "sniffer_plain_text_error_rules"
+	SettingSnifferStreamErrorRules        = "sniffer_stream_error_rules"
 )

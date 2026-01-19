@@ -33,6 +33,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_4_0_AddRequestResponseHeaders(tx)
 			},
 		},
+		// v1.5.0 添加总响应时间字段
+		{
+			ID: "v1.5.0_add_total_response_time",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_5_0_AddTotalResponseTime(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

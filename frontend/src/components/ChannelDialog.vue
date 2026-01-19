@@ -307,6 +307,7 @@ async function handleSubmit() {
           base_url: formData.base_url,
           priority: formData.priority,
           weight: formData.weight,
+          status: formData.status,
           description: formData.description
         } as CreateChannelRequest)
 

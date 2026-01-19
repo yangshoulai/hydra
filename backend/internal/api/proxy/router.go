@@ -35,12 +35,7 @@ func RegisterRoutes(
 	// 注册 ProxyService 为配置监听器
 	settingService.RegisterListener(proxySvc)
 
-	// 配置 SnifferManager 以支持热更新
-	snifferManager := configService.GetSnifferManager()
-	snifferManager.SetSettingService(settingService)
-	snifferManager.RegisterUpdater(proxySvc)
-
-	// 从系统设置加载明文错误规则
+	// 从系统设置加载明文错误规则（用于非流式响应嗅探）
 	ctx := context.Background()
 	keywords := settingService.GetPlainTextErrorRules(ctx)
 	if len(keywords) > 0 {

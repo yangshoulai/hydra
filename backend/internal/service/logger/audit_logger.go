@@ -152,6 +152,11 @@ func (b *RequestLogBuilder) ResponseTime(ms int) *RequestLogBuilder {
 	return b
 }
 
+func (b *RequestLogBuilder) TotalResponseTime(ms int) *RequestLogBuilder {
+	b.log.TotalResponseTime = &ms
+	return b
+}
+
 func (b *RequestLogBuilder) IsSuccess(success bool) *RequestLogBuilder {
 	b.log.IsSuccess = success
 	return b

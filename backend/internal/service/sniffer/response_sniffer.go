@@ -31,11 +31,11 @@ func NewResponseSnifferWithRules(rules []SniffRule, logger *slog.Logger) *Respon
 
 // SniffResult 嗅探结果
 type SniffResult struct {
-	IsFake200    bool   // 是否为假 200
-	MatchedRule  string // 匹配的规则名称
-	Body         []byte // 响应 Body
-	ContentType  string // Content-Type
-	StatusCode   int    // HTTP 状态码
+	IsFake200   bool   // 是否为假 200
+	MatchedRule string // 匹配的规则名称
+	Body        []byte // 响应 Body
+	ContentType string // Content-Type
+	StatusCode  int    // HTTP 状态码
 }
 
 // SniffResponse 嗅探 HTTP 响应

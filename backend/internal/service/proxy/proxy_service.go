@@ -22,19 +22,20 @@ import (
 
 // ProxyService 代理服务主逻辑
 type ProxyService struct {
-	logger            *slog.Logger
-	loadBalancer      *LoadBalancer
-	requestBuilder    *RequestBuilder
-	httpClient        *HTTPClient
-	responseSniffer   *sniffer.ResponseSniffer
-	sseForwarder      *SSEForwarder
-	responseForwarder *ResponseForwarder
-	failureClassifier *FailureClassifier
-	retryCoordinator  *RetryCoordinator
-	circuitManager    *circuit.Manager
-	modelRouter       *ModelRouter
-	auditLogger       *logger.AuditLogger // 审计日志记录器
-	settingService    *configService.SettingService
+	logger                  *slog.Logger
+	loadBalancer            *LoadBalancer
+	requestBuilder          *RequestBuilder
+	httpClient              *HTTPClient
+	responseSniffer         *sniffer.ResponseSniffer
+	sseForwarder            *SSEForwarder
+	responseForwarder       *ResponseForwarder
+	failureClassifier       *FailureClassifier
+	retryCoordinator        *RetryCoordinator
+	circuitManager          *circuit.Manager
+	modelRouter             *ModelRouter
+	auditLogger             *logger.AuditLogger // 审计日志记录器
+	settingService          *configService.SettingService
+	sseForwarderWithSniffer *SSEForwarderWithSniffer // 支持嗅探的SSE转发器
 }
 
 // ProxyServiceConfig 代理服务配置
@@ -70,20 +71,23 @@ func NewProxyService(
 		}
 	}
 
+	responseSniffer := sniffer.NewResponseSniffer(logger)
+
 	return &ProxyService{
-		logger:            logger,
-		loadBalancer:      loadBalancer,
-		requestBuilder:    NewRequestBuilder(),
-		httpClient:        NewHTTPClient(httpClientConfig, logger),
-		responseSniffer:   sniffer.NewResponseSniffer(logger),
-		sseForwarder:      NewSSEForwarder(logger),
-		responseForwarder: NewResponseForwarder(logger),
-		failureClassifier: NewFailureClassifier(),
-		retryCoordinator:  NewRetryCoordinator(logger, maxRetries, retryDelay),
-		circuitManager:    circuitManager,
-		modelRouter:       NewModelRouter(logger),
-		auditLogger:       auditLogger,
-		settingService:    settingService,
+		logger:                  logger,
+		loadBalancer:            loadBalancer,
+		requestBuilder:          NewRequestBuilder(),
+		httpClient:              NewHTTPClient(httpClientConfig, logger),
+		responseSniffer:         responseSniffer,
+		sseForwarder:            NewSSEForwarder(logger),
+		responseForwarder:       NewResponseForwarder(logger),
+		failureClassifier:       NewFailureClassifier(),
+		retryCoordinator:        NewRetryCoordinator(logger, maxRetries, retryDelay),
+		circuitManager:          circuitManager,
+		modelRouter:             NewModelRouter(logger),
+		auditLogger:             auditLogger,
+		settingService:          settingService,
+		sseForwarderWithSniffer: NewSSEForwarderWithSniffer(logger, settingService, 1000),
 	}
 }
 
@@ -112,7 +116,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Failed to read request body", traceID)
-		ps.logRequestError(ctx, traceID, c, "read_request_body", err, startTime, nil, "", "", nil, 0)
+		ps.logRequestError(ctx, traceID, c, "read_request_body", err, startTime, startTime, nil, "", "", nil, 0)
 		return err
 	}
 	// 重置 Body 使其可以再次读取
@@ -125,7 +129,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes)
 	if err != nil {
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Invalid request: "+err.Error(), traceID)
-		ps.logRequestError(ctx, traceID, c, "parse_model", err, startTime, nil, "", requestBodyStr, nil, 0)
+		ps.logRequestError(ctx, traceID, c, "parse_model", err, startTime, startTime, nil, "", requestBodyStr, nil, 0)
 		return err
 	}
 
@@ -146,6 +150,9 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 
 	// 3. 重试循环
 	for {
+		// 记录本次尝试的开始时间
+		attemptStartTime := time.Now()
+
 		// 路由到 Channel 和 Key
 		routeResult, err := ps.loadBalancer.RouteWithRetry(
 			ctx,
@@ -157,13 +164,9 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		)
 
 		if err != nil {
-			ps.logErrorWithTrace("请求路由失败", traceID,
-				slog.String("model", unifiedModel),
-				slog.String("error", err.Error()),
-			)
-			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable,
-				"No available channels for model: "+unifiedModel, traceID)
-			ps.logRequestError(ctx, traceID, c, "route_failed", err, startTime, nil, unifiedModel, requestBodyStr, nil, 0)
+			ps.logErrorWithTrace("请求路由失败", traceID, slog.String("model", unifiedModel), slog.String("error", err.Error()))
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable, "No available channels for model: "+unifiedModel, traceID)
+			ps.logRequestError(ctx, traceID, c, "route_failed", err, startTime, attemptStartTime, nil, unifiedModel, requestBodyStr, nil, 0)
 			return err
 		}
 
@@ -177,104 +180,108 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		// 发送请求
 		upstreamResp, err := ps.httpClient.Do(upstreamReq, traceID)
 
-		// 分类故障
+		// 分类故障（综合考虑网络错误和 HTTP 状态码）
 		failureType := ps.failureClassifier.ClassifyResponseError(upstreamResp, err)
 
-		if err != nil {
-			// 网络错误
-			ps.recordFailure(routeResult, failureType)
-			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, err, failureType)
+		// 根据故障类型处理
+		if failureType != FailureTypeNone {
+			// 404 模型不存在：不记录到熔断器，直接重试
+			if failureType != FailureTypeModelNotFound {
+				ps.recordFailure(routeResult, failureType)
+			}
+
+			// 获取错误信息
+			var errorInfo error
+			var errorType string
+			if err != nil {
+				errorInfo = err
+				errorType = "network_error"
+			} else {
+				errorInfo = errors.New("upstream http error")
+				errorType = "http_error"
+			}
+
+			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, errorInfo, failureType)
 
 			// 记录这次失败的尝试
-			ps.logRequestError(ctx, traceID, c, "upstream_request_failed", err, startTime, routeResult, unifiedModel, requestBodyStr, nil, retryCtx.AttemptCount)
+			ps.logRequestError(ctx, traceID, c, errorType, errorInfo, startTime, attemptStartTime, routeResult, unifiedModel, requestBodyStr, upstreamResp, retryCtx.AttemptCount)
 
 			if !ps.retryCoordinator.ShouldRetry(retryCtx) {
-				ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway,
-					"Upstream request failed: "+err.Error(), traceID)
-				return err
+				ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
+				return errorInfo
 			}
 
 			// 等待后重试
-			ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
+			_ = ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
 			continue
 		}
 
-		// 检查假 200 响应
-		if upstreamResp.StatusCode == http.StatusOK {
-			sniffResult, err := ps.responseSniffer.SniffResponse(upstreamResp)
-			if err != nil {
-				ps.logErrorWithTrace("嗅探响应失败", traceID,
-					slog.String("error", err.Error()),
-				)
-			} else if sniffResult.IsFake200 {
-				ps.logWarnWithTrace("检测到假 200 响应", traceID,
-					slog.String("rule", sniffResult.MatchedRule),
-				)
-
-				// 视为软故障
-				ps.recordFailure(routeResult, FailureTypeSoft)
-				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID,
-					errors.New("fake 200 response"), FailureTypeSoft)
-
-				// 记录这次失败的尝试
-				ps.logRequestError(ctx, traceID, c, "fake_200_response", errors.New("fake 200 response"), startTime, routeResult, unifiedModel, requestBodyStr, nil, retryCtx.AttemptCount)
-
-				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
-					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway,
-						"All upstream attempts failed", traceID)
-					return errors.New("fake 200 response")
-				}
-
-				ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
-				continue
-			}
+		// 无故障（包括 200-399，以及不可重试的 4xx 错误）
+		// 对于成功的响应，记录到熔断器
+		if upstreamResp != nil && upstreamResp.StatusCode < 400 {
+			ps.circuitManager.RecordKeySuccess(routeResult.Key.ID, routeResult.Channel.ID)
 		}
-
-		// 检查 HTTP 错误
-		if upstreamResp.StatusCode >= 400 {
-			ps.recordFailure(routeResult, failureType)
-
-			if ps.failureClassifier.ShouldRetry(failureType) {
-				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID,
-					errors.New("upstream error"), failureType)
-
-				// 记录这次失败的尝试
-				ps.logRequestError(ctx, traceID, c, "upstream_http_error", errors.New("upstream error"), startTime, routeResult, unifiedModel, requestBodyStr, upstreamResp, retryCtx.AttemptCount)
-
-				if ps.retryCoordinator.ShouldRetry(retryCtx) {
-					ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
-					continue
-				}
-			} else {
-				// 不可重试的错误（如 400, 401, 403 等），也需要记录审计日志
-				ps.logRequestError(ctx, traceID, c, "upstream_http_error_non_retryable",
-					errors.New("upstream error"), startTime, routeResult, unifiedModel, requestBodyStr, upstreamResp, retryCtx.AttemptCount)
-			}
-
-			// 转发错误响应
-			_, err = ps.responseForwarder.ForwardResponse(c, upstreamResp, traceID)
-			return err
-		}
-
-		// 成功响应
-		ps.circuitManager.RecordKeySuccess(routeResult.Key.ID, routeResult.Channel.ID)
 
 		// 转发响应
 		var responseBodyStr string
 		if isStream {
-			// 流式响应：记录流式内容
-			responseBodyStr, err = ps.sseForwarder.ForwardStreamWithCapture(c, upstreamResp, traceID)
+			// 流式响应：使用支持嗅探的转发器（首帧嗅探）
+			responseBodyStr, err = ps.sseForwarderWithSniffer.ForwardStreamWithDetection(c, upstreamResp, traceID)
+
+			// 检查是否检测到假200错误
+			if fake200Err, ok := err.(*Fake200Error); ok {
+				// 首帧检测到假200，视为软故障
+				ps.recordFailure(routeResult, FailureTypeSoft)
+				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, fake200Err, FailureTypeSoft)
+
+				ps.logWarnWithTrace("流式响应首帧检测到假200", traceID, slog.String("error_type", fake200Err.Message), slog.String("body_preview", truncateString(fake200Err.Body, 200)))
+
+				// 记录这次失败的尝试
+				ps.logRequestError(ctx, traceID, c, "sse_fake_200_first_frame", fake200Err, startTime, attemptStartTime, routeResult, unifiedModel, requestBodyStr, nil, retryCtx.AttemptCount)
+
+				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
+					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
+					return fake200Err
+				}
+
+				// 等待后重试
+				_ = ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
+				continue
+			}
 		} else {
-			// 非流式响应：ForwardJSONResponse 返回响应 body
+			// 非流式响应：先完整嗅探，再转发
+			sniffResult, sniffErr := ps.responseSniffer.SniffResponse(upstreamResp)
+			if sniffErr != nil {
+				ps.logErrorWithTrace("嗅探响应失败", traceID, slog.String("error", sniffErr.Error()))
+			} else if sniffResult.IsFake200 {
+				ps.logWarnWithTrace("检测到假 200 响应", traceID, slog.String("rule", sniffResult.MatchedRule))
+
+				// 视为软故障
+				ps.recordFailure(routeResult, FailureTypeSoft)
+				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, errors.New("fake 200 response"), FailureTypeSoft)
+
+				// 记录这次失败的尝试
+				ps.logRequestError(ctx, traceID, c, "fake_200_response", errors.New("fake 200 response"), startTime, attemptStartTime, routeResult, unifiedModel, requestBodyStr, nil, retryCtx.AttemptCount)
+
+				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
+					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
+					return errors.New("fake 200 response")
+				}
+
+				_ = ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
+				continue
+			}
+
+			// 转发 JSON 响应
 			responseBodyStr, err = ps.responseForwarder.ForwardJSONResponse(c, upstreamResp,
 				routeResult.UpstreamModel, routeResult.UnifiedModel, traceID)
 		}
 
 		// 记录成功的审计日志
 		if err == nil {
-			ps.logRequestSuccess(ctx, traceID, c, routeResult, upstreamResp, upstreamResp.StatusCode, startTime, isStream, requestBodyStr, responseBodyStr, retryCtx.AttemptCount)
+			ps.logRequestSuccess(ctx, traceID, c, routeResult, upstreamResp, upstreamResp.StatusCode, startTime, attemptStartTime, isStream, requestBodyStr, responseBodyStr, retryCtx.AttemptCount)
 		} else {
-			ps.logRequestError(ctx, traceID, c, "forward_response", err, startTime, routeResult, unifiedModel, requestBodyStr, upstreamResp, retryCtx.AttemptCount)
+			ps.logRequestError(ctx, traceID, c, "forward_response", err, startTime, attemptStartTime, routeResult, unifiedModel, requestBodyStr, upstreamResp, retryCtx.AttemptCount)
 		}
 
 		return err
@@ -316,12 +323,16 @@ func (ps *ProxyService) logRequestSuccess(
 	upstreamResp *http.Response,
 	statusCode int,
 	startTime time.Time,
+	attemptStartTime time.Time,
 	isStream bool,
 	requestBody string,
 	responseBody string,
 	retryCount int,
 ) {
-	responseTime := int(time.Since(startTime).Milliseconds())
+	// 计算本次尝试的实际响应时间
+	attemptResponseTime := int(time.Since(attemptStartTime).Milliseconds())
+	// 计算总响应时间（从请求开始到完成）
+	totalResponseTime := int(time.Since(startTime).Milliseconds())
 
 	builder := logger.NewRequestLogBuilder().
 		TraceID(traceID).
@@ -335,12 +346,17 @@ func (ps *ProxyService) logRequestSuccess(
 		ChannelName(routeResult.Channel.Name).
 		KeyID(routeResult.Key.ID).
 		StatusCode(statusCode).
-		ResponseTime(responseTime).
+		ResponseTime(attemptResponseTime).
 		IsSuccess(true).
 		IsStream(isStream).
 		RetryCount(retryCount).
 		ClientIP(c.ClientIP()).
 		UserAgent(c.Request.UserAgent())
+
+	// 如果有重试，记录总响应时间
+	if retryCount > 0 {
+		builder.TotalResponseTime(totalResponseTime)
+	}
 
 	// 如果调试模式启用，记录完整的请求和响应 body、请求头和响应头
 	if ps.auditLogger.IsDebugModeEnabled() {
@@ -396,13 +412,17 @@ func (ps *ProxyService) logRequestError(
 	errorType string,
 	err error,
 	startTime time.Time,
+	attemptStartTime time.Time,
 	routeResult *RouteResult,
 	unifiedModel string,
 	requestBody string,
 	upstreamResp *http.Response,
 	retryCount int,
 ) {
-	responseTime := int(time.Since(startTime).Milliseconds())
+	// 计算本次尝试的实际响应时间
+	attemptResponseTime := int(time.Since(attemptStartTime).Milliseconds())
+	// 计算总响应时间（从请求开始到完成）
+	totalResponseTime := int(time.Since(startTime).Milliseconds())
 
 	builder := logger.NewRequestLogBuilder().
 		TraceID(traceID).
@@ -410,12 +430,17 @@ func (ps *ProxyService) logRequestError(
 		RequestPath(c.Request.URL.Path).
 		RequestMethod(c.Request.Method).
 		StatusCode(500).
-		ResponseTime(responseTime).
+		ResponseTime(attemptResponseTime).
 		IsSuccess(false).
 		RetryCount(retryCount).
 		ErrorMessage(errorType + ": " + err.Error()).
 		ClientIP(c.ClientIP()).
 		UserAgent(c.Request.UserAgent())
+
+	// 如果有重试，记录总响应时间
+	if retryCount > 0 {
+		builder.TotalResponseTime(totalResponseTime)
+	}
 
 	// 如果有路由结果，记录完整的渠道和模型信息
 	if routeResult != nil {
@@ -555,22 +580,33 @@ func headersToJSON(headers http.Header) string {
 
 // OnConfigChanged 实现 ConfigListener 接口，响应配置变更
 func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
-	// 只处理 proxy 分类的配置变更
-	if category != "proxy" {
-		return
+	// 处理 proxy 分类的配置变更
+	if category == "proxy" {
+		requestTimeout, _, _, maxRetry := ps.settingService.GetProxyConfig(ctx)
+		retryDelay := 500 * time.Millisecond // 默认值
+
+		// 更新 HTTPClient 的超时时间
+		ps.httpClient.UpdateRequestTimeout(requestTimeout)
+
+		// 更新 RetryCoordinator 的配置
+		ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
+
+		ps.logger.Info("代理服务配置已更新",
+			slog.Duration("request_timeout", requestTimeout),
+			slog.Int("max_retry", maxRetry),
+			slog.Duration("retry_delay", retryDelay),
+		)
 	}
 
-	// 从配置服务获取最新的代理配置
-	_, _, _, maxRetry := ps.settingService.GetProxyConfig(ctx)
-	retryDelay := 500 * time.Millisecond // 默认值
+	// 处理 sniffer 分类的配置变更
+	if category == "sniffer" {
+		// 更新流式错误关键词
+		keywords := ps.settingService.GetStreamErrorRules(ctx)
+		ps.responseSniffer.UpdatePlainTextErrorKeywords(keywords)
+		ps.sseForwarderWithSniffer.UpdateErrorKeywords(keywords)
 
-	// 更新 RetryCoordinator 的配置
-	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
-
-	ps.logger.Info("代理服务配置已更新",
-		slog.Int("max_retry", maxRetry),
-		slog.Duration("retry_delay", retryDelay),
-	)
+		ps.logger.Info("流式错误关键词配置已更新", slog.Int("keywords_count", len(keywords)))
+	}
 }
 
 // getEndpointType 根据端点路径确定端点类型

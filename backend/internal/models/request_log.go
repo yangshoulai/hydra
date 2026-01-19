@@ -28,7 +28,8 @@ type RequestLog struct {
 
 	// 响应信息
 	StatusCode      int       `gorm:"not null;index" json:"status_code"`
-	ResponseTime    int       `gorm:"not null" json:"response_time"` // 毫秒
+	ResponseTime    int       `gorm:"not null" json:"response_time"` // 毫秒（本次尝试的响应时间）
+	TotalResponseTime *int     `gorm:"index" json:"total_response_time,omitempty"` // 毫秒（从请求开始的总时间，包括重试）
 	IsSuccess       bool      `gorm:"not null;index" json:"is_success"`
 	ErrorMessage    string    `gorm:"type:text" json:"error_message"`
 	RetryCount      int       `gorm:"not null;default:0" json:"retry_count"`

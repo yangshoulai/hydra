@@ -45,11 +45,11 @@ type KeyHealthResult struct {
 
 // ChannelHealthCheckResult 渠道健康检查结果
 type ChannelHealthCheckResult struct {
-	ChannelID   uint                `json:"channel_id"`
-	ChannelName string              `json:"channel_name"`
-	TotalKeys   int                 `json:"total_keys"`
-	HealthyKeys int                 `json:"healthy_keys"`
-	KeyResults  []KeyHealthResult   `json:"key_results"`
+	ChannelID   uint              `json:"channel_id"`
+	ChannelName string            `json:"channel_name"`
+	TotalKeys   int               `json:"total_keys"`
+	HealthyKeys int               `json:"healthy_keys"`
+	KeyResults  []KeyHealthResult `json:"key_results"`
 }
 
 // CheckChannelHealth 检查指定渠道的所有 Key 健康状态
@@ -57,10 +57,7 @@ func (s *HealthCheckService) CheckChannelHealth(ctx context.Context, channelID u
 	// 查询渠道
 	channel, err := s.channelRepo.FindByID(ctx, channelID)
 	if err != nil {
-		s.logger.Error("failed to find channel",
-			slog.Uint64("channel_id", uint64(channelID)),
-			slog.String("error", err.Error()),
-		)
+		s.logger.Error("渠道不存在", slog.Uint64("channel_id", uint64(channelID)), slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -71,9 +68,7 @@ func (s *HealthCheckService) CheckChannelHealth(ctx context.Context, channelID u
 	// 获取渠道的所有 Key
 	keys := channel.Keys
 	if len(keys) == 0 {
-		s.logger.Warn("channel has no keys",
-			slog.Uint64("channel_id", uint64(channelID)),
-		)
+		s.logger.Warn("渠道尚未设置密钥", slog.Uint64("channel_id", uint64(channelID)))
 		return &ChannelHealthCheckResult{
 			ChannelID:   channel.ID,
 			ChannelName: channel.Name,
@@ -83,11 +78,7 @@ func (s *HealthCheckService) CheckChannelHealth(ctx context.Context, channelID u
 		}, nil
 	}
 
-	s.logger.Info("starting health check for channel",
-		slog.Uint64("channel_id", uint64(channelID)),
-		slog.String("channel_name", channel.Name),
-		slog.Int("total_keys", len(keys)),
-	)
+	s.logger.Info("开始检查渠道密钥状态", slog.Uint64("channel_id", uint64(channelID)), slog.String("channel_name", channel.Name), slog.Int("total_keys", len(keys)))
 
 	// 并发检查所有 Key
 	results := s.checkKeysParallel(ctx, keys, channel)
@@ -146,10 +137,7 @@ func (s *HealthCheckService) CheckSingleKey(ctx context.Context, key *models.Key
 
 // checkSingleKey 检查单个 Key
 func (s *HealthCheckService) checkSingleKey(ctx context.Context, key *models.Key, channel *models.Channel) KeyHealthResult {
-	s.logger.Debug("checking key health",
-		slog.Uint64("key_id", uint64(key.ID)),
-		slog.Uint64("channel_id", uint64(channel.ID)),
-	)
+	s.logger.Debug("检查密钥状态", slog.Uint64("key_id", uint64(key.ID)), slog.Uint64("channel_id", uint64(channel.ID)))
 
 	start := time.Now()
 
@@ -166,29 +154,21 @@ func (s *HealthCheckService) checkSingleKey(ctx context.Context, key *models.Key
 
 	if success {
 		result.Status = "healthy"
-		result.Message = "Key is working properly"
-		s.logger.Debug("key health check passed",
-			slog.Uint64("key_id", uint64(key.ID)),
-			slog.Duration("latency", latency),
-		)
+		result.Message = "密钥正常"
+		s.logger.Debug("密钥状态正常", slog.Uint64("key_id", uint64(key.ID)), slog.Duration("latency", latency))
 	} else {
 		if isHardFailure {
 			result.Status = "unhealthy"
-			result.Message = "Authentication failed (hard failure)"
+			result.Message = "密钥异常"
 		} else {
 			result.Status = "error"
 			if err != nil {
 				result.Message = err.Error()
 			} else {
-				result.Message = "Temporary error (soft failure)"
+				result.Message = "密钥异常"
 			}
 		}
-
-		s.logger.Warn("key health check failed",
-			slog.Uint64("key_id", uint64(key.ID)),
-			slog.String("status", result.Status),
-			slog.String("message", result.Message),
-		)
+		s.logger.Warn("密钥检查异常", slog.Uint64("key_id", uint64(key.ID)), slog.String("status", result.Status), slog.String("message", result.Message))
 	}
 
 	return result
@@ -210,10 +190,7 @@ func (s *HealthCheckService) CheckAllChannels(ctx context.Context) ([]ChannelHea
 	for _, channel := range channels {
 		result, err := s.CheckChannelHealth(ctx, channel.ID)
 		if err != nil {
-			s.logger.Error("failed to check channel health",
-				slog.Uint64("channel_id", uint64(channel.ID)),
-				slog.String("error", err.Error()),
-			)
+			s.logger.Error("检查渠道密钥状态异常", slog.Uint64("channel_id", uint64(channel.ID)), slog.String("error", err.Error()))
 			continue
 		}
 

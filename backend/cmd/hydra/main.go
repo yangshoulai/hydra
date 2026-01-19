@@ -92,8 +92,7 @@ func main() {
 	// 注册配置监听器以支持热更新
 	configService.RegisterConfigListeners(settingService, []configService.ConfigListener{
 		circuitManager,
-		configService.GetSnifferManager(), // 注册 SnifferManager 作为配置监听器
-		debugModeManager,                  // 注册 DebugModeManager 作为配置监听器
+		debugModeManager, // 注册 DebugModeManager 作为配置监听器
 	})
 
 	// 启动熔断器探测调度器

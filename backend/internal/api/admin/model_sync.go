@@ -317,8 +317,12 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 
 	// 为 Anthropic 添加特定的头部
 	if endpointType == "anthropic" {
-		req.Header.Set("anthropic-version", "2023-06-01")
-		req.Header.Set("x-api-key", apiKey)
+		req.Header.Set("Anthropic-Version", "2023-06-01")
+		req.Header.Set("X-Api-Key", apiKey)
+		req.Header.Set("X-App", "cli")
+		req.Header.Set("User-Agent", "claude-cli/2.1.12 (external, cli)")
+		req.Header.Set("Anthropic-Beta", "claude-code-20250219,interleaved-thinking-2025-05-14")
+		req.Header.Set("Anthropic-Dangerous-Direct-Browser-Access", "true")
 	}
 
 	// 记录开始时间

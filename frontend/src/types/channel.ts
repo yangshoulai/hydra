@@ -45,6 +45,7 @@ export interface CreateChannelRequest {
   base_url: string
   priority?: number
   weight?: number
+  status?: 'active' | 'disabled'
   description?: string
 }
 

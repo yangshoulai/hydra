@@ -323,11 +323,13 @@ import {
   NPagination,
   NSelect,
   NSpace,
-  NText
+  NText,
+  NTooltip
 } from 'naive-ui'
 import {
   AddOutline,
   BuildOutline,
+  ClipboardOutline,
   CodeOutline,
   CreateOutline,
   InformationCircleOutline,
@@ -462,7 +464,30 @@ const columns = computed<DataTableColumns<Model>>(() => {
       key: 'name',
       width: 280,
       render: (row) => {
-        return h(NText, {code: true}, {default: () => row.name})
+        return h(
+          NTooltip,
+          {},
+          {
+            trigger: () =>
+              h(
+                NButton,
+                {
+                  text: true,
+                  type: 'primary',
+                  onClick: (e: MouseEvent) => handleCopyModelName(row, e)
+                },
+                {
+                  default: () => [
+                    h(NText, {code: true, style: {cursor: 'pointer'}}, {default: () => row.name}),
+                    h(NIcon, {style: {marginLeft: '8px', fontSize: '14px'}}, {
+                      default: () => h(ClipboardOutline)
+                    })
+                  ]
+                }
+              ),
+            default: () => '点击复制模型名称'
+          }
+        )
       },
       sortable: true,
       sorter: 'default',
@@ -730,6 +755,16 @@ function handleViewChannels(model: Model) {
   selectedModelId.value = model.id
   selectedModelName.value = model.name
   showChannelsDrawer.value = true
+}
+
+// 复制模型名称
+function handleCopyModelName(model: Model, event: MouseEvent) {
+  event.stopPropagation()
+  navigator.clipboard.writeText(model.name).then(() => {
+    window.$message?.success(`已复制: ${model.name}`)
+  }).catch(() => {
+    window.$message?.error('复制失败')
+  })
 }
 
 // 初始化

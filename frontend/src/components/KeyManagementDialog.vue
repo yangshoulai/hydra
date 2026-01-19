@@ -255,15 +255,15 @@ function handleRefresh() {
 async function handleTestKeys() {
   testing.value = true
   try {
-    // 先设置所有 Key 为测试中状态
-    keyHealthTableRef.value?.setTesting(0)
+    // 设置所有 Key 为测试中状态
+    keyHealthTableRef.value?.setTestingAll()
 
     // 执行测试
     const result = await channelApi.testKeys(props.channelId)
     healthResult.value = result
 
-    // 将测试结果传递给 KeyHealthTable
-    keyHealthTableRef.value?.updateHealthResults(result)
+    // 更新测试结果
+    keyHealthTableRef.value?.updateTestResults(result)
 
     // 刷新列表
     await keyHealthTableRef.value?.refresh()
@@ -271,12 +271,10 @@ async function handleTestKeys() {
     // 通知父组件刷新
     emit('refresh')
 
-    window.$message?.success('测活完成')
+    window.$message?.success(`测活完成: 健康 ${result.healthy_keys}/${result.total_keys}`)
   } catch (error: any) {
     console.error('Failed to test keys:', error)
     window.$message?.error(error.response?.data?.error || '测试Keys失败')
-    // 测试失败，清除测试中状态
-    keyHealthTableRef.value?.clearTesting()
   } finally {
     testing.value = false
   }

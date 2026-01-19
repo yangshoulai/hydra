@@ -99,6 +99,14 @@ export const channelApi = {
   },
 
   /**
+   * 重置Key状态（启用/禁用）
+   */
+  async resetKeyStatus(id: number, status: 'active' | 'cooling' | 'disabled'): Promise<Key> {
+    const response = await apiClient.patch<Key>(`/admin/api/keys/${id}`, { status })
+    return response.data
+  },
+
+  /**
    * 测试渠道所有Key的健康状态
    */
   async testKeys(channelId: number): Promise<ChannelHealthCheckResult> {
