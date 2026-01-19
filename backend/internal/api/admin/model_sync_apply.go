@@ -21,17 +21,19 @@ type ApplySyncRequest struct {
 
 // ModelConfigItem 模型配置项
 type ModelConfigItem struct {
-	UnifiedModel  string `json:"unified_model"`
-	UpstreamModel string `json:"upstream_model" binding:"required"`
-	Remark        string `json:"remark"`
+	UnifiedModel  string   `json:"unified_model"`
+	UpstreamModel string   `json:"upstream_model" binding:"required"`
+	EndpointTypes []string `json:"endpoint_types"`
+	Remark        string   `json:"remark"`
 }
 
 // ModelConfigUpdateItem 模型配置更新项
 type ModelConfigUpdateItem struct {
-	ID            uint   `json:"id" binding:"required"`
-	UnifiedModel  string `json:"unified_model"`
-	UpstreamModel string `json:"upstream_model" binding:"required"`
-	Remark        string `json:"remark"`
+	ID            uint     `json:"id" binding:"required"`
+	UnifiedModel  string   `json:"unified_model"`
+	UpstreamModel string   `json:"upstream_model" binding:"required"`
+	EndpointTypes []string `json:"endpoint_types"`
+	Remark        string   `json:"remark"`
 }
 
 // ApplySyncResponse 应用同步响应
@@ -90,10 +92,17 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 			unifiedModel = item.UpstreamModel
 		}
 
+		// 处理端点类型，如果为空则使用默认值
+		endpointTypes := item.EndpointTypes
+		if len(endpointTypes) == 0 {
+			endpointTypes = []string{"openai"}
+		}
+
 		config := &models.ChannelModelConfig{
 			ChannelID:     channelID,
 			UnifiedModel:  unifiedModel,
 			UpstreamModel: item.UpstreamModel,
+			EndpointTypes: models.EndpointTypes(endpointTypes),
 			Status:        "active",
 			Remark:        item.Remark,
 		}
@@ -150,6 +159,11 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		config.UnifiedModel = unifiedModel
 		config.UpstreamModel = item.UpstreamModel
 		config.Remark = item.Remark
+
+		// 更新端点类型，如果提供了的话
+		if len(item.EndpointTypes) > 0 {
+			config.EndpointTypes = models.EndpointTypes(item.EndpointTypes)
+		}
 
 		if err := h.modelConfigRepo.Update(c.Request.Context(), config); err != nil {
 			h.logger.Error("failed to update model config",

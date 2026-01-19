@@ -116,9 +116,9 @@ func (rb *RequestBuilder) BuildProxyRequest(
 // copyHeaders 复制必要的请求头
 func (rb *RequestBuilder) copyHeaders(src *http.Request, dst *http.Request) {
 	// 需要复制的 Headers 白名单
+	// 注意：不复制 Accept-Encoding，让 Go 的 HTTP 客户端自动处理 gzip 解压
 	headersToCopy := []string{
 		"Accept",
-		"Accept-Encoding",
 		"Accept-Language",
 		"User-Agent",
 		"X-Request-Id",

@@ -8,7 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/repository"
@@ -359,21 +361,23 @@ func (ps *ProxyService) logRequestSuccess(
 			}
 		}
 
-		// 记录请求体
+		// 记录请求体（清洗非 UTF-8 字符）
 		if len(requestBody) > 0 {
-			if len(requestBody) > maxBodyLength {
-				builder.RequestBody(requestBody[:maxBodyLength] + "...(truncated)")
+			cleanBody := sanitizeUTF8(requestBody)
+			if len(cleanBody) > maxBodyLength {
+				builder.RequestBody(cleanBody[:maxBodyLength] + "...(truncated)")
 			} else {
-				builder.RequestBody(requestBody)
+				builder.RequestBody(cleanBody)
 			}
 		}
 
-		// 记录响应体
+		// 记录响应体（清洗非 UTF-8 字符）
 		if len(responseBody) > 0 {
-			if len(responseBody) > maxBodyLength {
-				builder.ResponseBody(responseBody[:maxBodyLength] + "...(truncated)")
+			cleanBody := sanitizeUTF8(responseBody)
+			if len(cleanBody) > maxBodyLength {
+				builder.ResponseBody(cleanBody[:maxBodyLength] + "...(truncated)")
 			} else {
-				builder.ResponseBody(responseBody)
+				builder.ResponseBody(cleanBody)
 			}
 		}
 	}
@@ -448,13 +452,14 @@ func (ps *ProxyService) logRequestError(
 			}
 		}
 
-		// 记录请求体
+		// 记录请求体（清洗非 UTF-8 字符）
 		const maxBodyLength = 10 * 1024 * 1024 // 10MB
 		if len(requestBody) > 0 {
-			if len(requestBody) > maxBodyLength {
-				builder.RequestBody(requestBody[:maxBodyLength] + "...(truncated)")
+			cleanBody := sanitizeUTF8(requestBody)
+			if len(cleanBody) > maxBodyLength {
+				builder.RequestBody(cleanBody[:maxBodyLength] + "...(truncated)")
 			} else {
-				builder.RequestBody(requestBody)
+				builder.RequestBody(cleanBody)
 			}
 		}
 	}
@@ -580,4 +585,33 @@ func (ps *ProxyService) getEndpointType(endpoint string) string {
 	default:
 		return "openai" // 默认为 openai
 	}
+}
+
+// sanitizeUTF8 清洗字符串中的非 UTF-8 字符
+// 将非法的 UTF-8 字节序列替换为替换字符，避免数据库写入失败
+func sanitizeUTF8(data string) string {
+	if utf8.ValidString(data) {
+		return data // 数据是有效的 UTF-8，直接返回
+	}
+
+	// 包含无效的 UTF-8 序列，需要清洗
+	var buf strings.Builder
+	buf.Grow(len(data))
+
+	for i, r := range data {
+		if r == utf8.RuneError {
+			// 检查是否真的是非法字符
+			_, size := utf8.DecodeRuneInString(data[i:])
+			if size == 1 {
+				// 非法的 UTF-8 字节，替换为 �
+				buf.WriteRune(utf8.RuneError)
+			} else {
+				buf.WriteRune(r)
+			}
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+
+	return buf.String()
 }

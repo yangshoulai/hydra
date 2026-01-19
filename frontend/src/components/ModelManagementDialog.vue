@@ -472,9 +472,13 @@ const displayModels = computed<ModelDisplayType[]>(() => {
   const models: ModelDisplayType[] = []
   const diff = syncResult.value.diff
 
-  // 初始化编辑状态和选中状态
-  if (!editMap.value || Object.keys(editMap.value).length === 0) {
-    initEditMap()
+  // ❌ 不要在计算属性中调用 initEditMap()，会导致无限循环
+  // initEditMap() 应该在数据变化时主动调用
+
+  // 安全检查：防止 diff 为 null
+  if (!diff || !diff.diffs) {
+    console.warn('[displayModels] diff or diff.diffs is null/undefined')
+    return []
   }
 
   diff.diffs.forEach((d) => {
@@ -715,22 +719,34 @@ async function handleSyncModels() {
 
   try {
     const result = await channelApi.syncModels(props.channelId)
+
+    console.log('[ModelManagementDialog] Sync result received:', result)
+
     syncResult.value = result
     hasSynced.value = true
 
     // 清空之前的编辑状态，重新初始化
     editMap.value = {}
-    initEditMap()
+
+    // 用 try-catch 包裹初始化逻辑，防止错误导致 loading 无法重置
+    try {
+      initEditMap()
+    } catch (initError) {
+      console.error('[ModelManagementDialog] Init edit map failed:', initError)
+      // 初始化失败不影响同步成功状态
+    }
 
     window.$message?.success('同步成功')
   } catch (error: any) {
-    console.error('Failed to sync models:', error)
+    console.error('[ModelManagementDialog] Sync failed:', error)
     syncFailed.value = true
     hasSynced.value = true
     syncResult.value = null
     window.$message?.error(error.response?.data?.error || '同步失败，仅显示本地配置')
   } finally {
+    // 确保无论发生什么都要重置 loading 状态
     syncing.value = false
+    console.log('[ModelManagementDialog] Sync completed, syncing set to false')
   }
 }
 
