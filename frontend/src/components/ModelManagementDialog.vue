@@ -703,7 +703,8 @@ async function loadLocalConfigs() {
 async function loadUnifiedModels() {
   loadingModels.value = true
   try {
-    unifiedModels.value = await modelApi.list()
+    const result = await modelApi.list({page: 1, page_size: 1000})
+    unifiedModels.value = result.items
   } catch (error: any) {
     console.error('Failed to load unified models:', error)
     window.$message?.error('加载统一模型列表失败')
