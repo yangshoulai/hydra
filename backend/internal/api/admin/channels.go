@@ -335,6 +335,7 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 	}
 
 	// 更新字段
+	oldStatus := channel.Status
 	if req.Name != "" {
 		channel.Name = req.Name
 	}
@@ -364,6 +365,17 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 			"error": "failed to update channel",
 		})
 		return
+	}
+
+	// 如果渠道被禁用，清理所有相关熔断器
+	if oldStatus == "active" && channel.Status == "disabled" {
+		if h.circuitManager != nil {
+			h.circuitManager.RemoveChannelBreakersAndKeys(uint(id))
+			h.logger.Info("渠道已禁用，已清理熔断器",
+				slog.Uint64("channel_id", id),
+				slog.String("name", channel.Name),
+			)
+		}
 	}
 
 	h.logger.Info("渠道已更新",

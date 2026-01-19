@@ -254,7 +254,7 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 			"messages": []map[string]string{
 				{
 					"role":    "user",
-					"content": "Hi",
+					"content": "麻烦告诉我一下你的知识的截止日期是多少？",
 				},
 			},
 			"max_tokens": 5,
@@ -268,7 +268,7 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 				{
 					"role": "user",
 					"content": []map[string]string{
-						{"type": "input_text", "text": "Hi"},
+						{"type": "input_text", "text": "麻烦告诉我一下你的知识的截止日期是多少？"},
 					},
 				},
 			},
@@ -292,7 +292,7 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 			"messages": []map[string]interface{}{
 				{
 					"role":    "user",
-					"content": "Hi",
+					"content": "麻烦告诉我一下你的知识的截止日期是多少",
 				},
 			},
 			"stream": false,
