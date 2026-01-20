@@ -113,3 +113,32 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
 }
+
+// RefreshToken 刷新访问令牌
+// @Summary 刷新访问令牌
+// @Description 使用刷新令牌获取新的访问令牌和刷新令牌
+// @Tags 认证
+// @Accept json
+// @Produce json
+// @Param request body admin.RefreshTokenRequest true "刷新令牌请求"
+// @Success 200 {object} admin.RefreshTokenResponse
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Router /admin/api/auth/refresh [post]
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	var req admin.RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Warn("无效的刷新令牌请求", slog.String("error", err.Error()))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
+		return
+	}
+
+	resp, err := h.authService.RefreshToken(c.Request.Context(), &req)
+	if err != nil {
+		h.logger.Warn("刷新令牌失败", slog.String("error", err.Error()))
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "failed to refresh token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}

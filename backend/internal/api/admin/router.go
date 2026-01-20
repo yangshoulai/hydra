@@ -69,6 +69,7 @@ func RegisterRoutes(
 		auth := adminAPI.Group("/auth")
 		{
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/refresh", authHandler.RefreshToken)
 		}
 
 		// 需要认证的路由

@@ -54,8 +54,9 @@ type LoginRequest struct {
 
 // LoginResponse 登录响应
 type LoginResponse struct {
-	Token string           `json:"token"`
-	User  *AdminUserDetail `json:"user"`
+	AccessToken  string           `json:"access_token"`
+	RefreshToken string           `json:"refresh_token"`
+	User         *AdminUserDetail `json:"user"`
 }
 
 // AdminUserDetail 管理员用户详情
@@ -98,11 +99,17 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 		return nil, ErrInvalidCredentials
 	}
 
-	// 生成 JWT 令牌
-	token, err := s.jwtService.GenerateToken(user.ID, user.Username)
+	// 生成访问令牌和刷新令牌
+	accessToken, err := s.jwtService.GenerateAccessToken(user.ID, user.Username)
 	if err != nil {
-		s.logger.Error("生成 JWT 失败", slog.Uint64("user_id", uint64(user.ID)), slog.String("error", err.Error()))
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		s.logger.Error("生成访问令牌失败", slog.Uint64("user_id", uint64(user.ID)), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	refreshToken, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username)
+	if err != nil {
+		s.logger.Error("生成刷新令牌失败", slog.Uint64("user_id", uint64(user.ID)), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
 	// 更新最后登录时间
@@ -116,7 +123,8 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 	s.logger.Info("用户登录成功", slog.Uint64("user_id", uint64(user.ID)), slog.String("username", user.Username))
 
 	return &LoginResponse{
-		Token: token,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
 		User: &AdminUserDetail{
 			ID:          user.ID,
 			Username:    user.Username,
@@ -223,4 +231,70 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uint, req *Chan
 	)
 
 	return nil
+}
+
+// RefreshTokenRequest 刷新令牌请求
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// RefreshTokenResponse 刷新令牌响应
+type RefreshTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// RefreshToken 刷新访问令牌
+func (s *AuthService) RefreshToken(ctx context.Context, req *RefreshTokenRequest) (*RefreshTokenResponse, error) {
+	// 验证刷新令牌
+	claims, err := s.jwtService.ValidateToken(req.RefreshToken)
+	if err != nil {
+		s.logger.Warn("刷新令牌验证失败", slog.String("error", err.Error()))
+		return nil, errors.New("invalid refresh token")
+	}
+
+	// 检查是否为刷新令牌
+	if claims.Type != "refresh" {
+		s.logger.Warn("令牌类型错误", slog.String("type", claims.Type))
+		return nil, errors.New("invalid token type")
+	}
+
+	// 查询用户
+	user, err := s.adminUserRepo.FindByID(ctx, claims.UserID)
+	if err != nil {
+		s.logger.Error("未找到用户", slog.Uint64("user_id", uint64(claims.UserID)), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("failed to find user: %w", err)
+	}
+
+	// 防御性检查：确保 user 不为 nil
+	if user == nil {
+		s.logger.Warn("用户不存在", slog.Uint64("user_id", uint64(claims.UserID)))
+		return nil, errors.New("user not found")
+	}
+
+	// 检查用户状态
+	if !user.IsActive() {
+		s.logger.Warn("用户被禁用", slog.Uint64("user_id", uint64(claims.UserID)))
+		return nil, ErrUserDisabled
+	}
+
+	// 生成新的访问令牌和刷新令牌
+	accessToken, err := s.jwtService.GenerateAccessToken(user.ID, user.Username)
+	if err != nil {
+		s.logger.Error("生成访问令牌失败", slog.Uint64("user_id", uint64(user.ID)), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	newRefreshToken, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username)
+	if err != nil {
+		s.logger.Error("生成刷新令牌失败", slog.Uint64("user_id", uint64(user.ID)), slog.String("error", err.Error()))
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	s.logger.Info("令牌刷新成功", slog.Uint64("user_id", uint64(user.ID)), slog.String("username", user.Username))
+
+	return &RefreshTokenResponse{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+	}, nil
 }

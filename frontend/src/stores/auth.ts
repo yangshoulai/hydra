@@ -30,9 +30,10 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const response = await authApi.login(credentials)
 
-            // 保存token
-            token.value = response.token
-            localStorage.setItem('access_token', response.token)
+            // 保存 access_token 和 refresh_token
+            token.value = response.access_token
+            localStorage.setItem('access_token', response.access_token)
+            localStorage.setItem('refresh_token', response.refresh_token)
 
             // 保存用户信息
             user.value = response.user

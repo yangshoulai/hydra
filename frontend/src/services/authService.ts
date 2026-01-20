@@ -3,7 +3,7 @@
  */
 
 import {apiClient} from './api'
-import type {LoginRequest, LoginResponse} from '../types/auth'
+import type {LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse} from '../types/auth'
 
 
 export const authApi = {
@@ -13,6 +13,17 @@ export const authApi = {
     async login(data: LoginRequest): Promise<LoginResponse> {
         const response = await apiClient.post<LoginResponse>(
             `/admin/api/auth/login`,
+            data
+        )
+        return response.data
+    },
+
+    /**
+     * 刷新访问令牌
+     */
+    async refreshToken(data: RefreshTokenRequest): Promise<RefreshTokenResponse> {
+        const response = await apiClient.post<RefreshTokenResponse>(
+            `/admin/api/auth/refresh`,
             data
         )
         return response.data
