@@ -9,20 +9,18 @@ import (
 
 // RetryCoordinator 重试协调器,控制最大重试次数
 type RetryCoordinator struct {
-	logger            *slog.Logger
-	maxRetries        int           // 最大重试次数
-	retryDelay        time.Duration // 重试延迟
-	failureClassifier *FailureClassifier
-	mu                sync.RWMutex  // 保护配置更新的锁
+	logger     *slog.Logger
+	maxRetries int           // 最大重试次数
+	retryDelay time.Duration // 重试延迟
+	mu         sync.RWMutex  // 保护配置更新的锁
 }
 
 // NewRetryCoordinator 创建重试协调器
 func NewRetryCoordinator(logger *slog.Logger, maxRetries int, retryDelay time.Duration) *RetryCoordinator {
 	return &RetryCoordinator{
-		logger:            logger,
-		maxRetries:        maxRetries,
-		retryDelay:        retryDelay,
-		failureClassifier: NewFailureClassifier(),
+		logger:     logger,
+		maxRetries: maxRetries,
+		retryDelay: retryDelay,
 	}
 }
 
@@ -45,6 +43,7 @@ func NewRetryContext() *RetryContext {
 }
 
 // ShouldRetry 判断是否应该继续重试
+// 只要没超过最大重试次数就应该继续尝试下一个渠道
 func (rc *RetryCoordinator) ShouldRetry(retryCtx *RetryContext) bool {
 	if retryCtx == nil {
 		return false
@@ -54,19 +53,12 @@ func (rc *RetryCoordinator) ShouldRetry(retryCtx *RetryContext) bool {
 	maxRetries := rc.maxRetries
 	rc.mu.RUnlock()
 
-	// 检查是否超过最大重试次数
+	// 只检查是否超过最大重试次数
+	// 故障类型（hard/soft）只用于熔断器记录，不影响重试决策
 	if retryCtx.AttemptCount >= maxRetries {
 		rc.logger.Warn("max retries exceeded",
 			slog.Int("attempt_count", retryCtx.AttemptCount),
 			slog.Int("max_retries", maxRetries),
-		)
-		return false
-	}
-
-	// 检查故障类型
-	if !rc.failureClassifier.ShouldRetry(retryCtx.LastFailureType) {
-		rc.logger.Warn("failure type does not allow retry",
-			slog.String("failure_type", string(retryCtx.LastFailureType)),
 		)
 		return false
 	}
