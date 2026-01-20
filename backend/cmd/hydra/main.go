@@ -18,6 +18,7 @@ import (
 	"github.com/yangshoulai/hydra/internal/api/admin"
 	"github.com/yangshoulai/hydra/internal/api/proxy"
 	"github.com/yangshoulai/hydra/internal/config"
+	_ "github.com/yangshoulai/hydra/internal/endpoint" // 导入端点包以触发 init 函数
 	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/migration"
 	"github.com/yangshoulai/hydra/internal/repository"

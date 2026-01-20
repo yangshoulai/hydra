@@ -3,8 +3,10 @@ package proxy
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
@@ -45,10 +47,7 @@ func RegisterRoutes(
 		)
 	}
 
-	// 创建 handlers
-	chatCompletionsHandler := NewChatCompletionsHandler(logger, proxySvc)
-	responsesHandler := NewResponsesHandler(logger, proxySvc)
-	messagesHandler := NewMessagesHandler(logger, proxySvc)
+	// 创建通用 handlers
 	modelsHandler := NewModelsHandler(logger, modelRepo)
 
 	// 创建 v1 路由组
@@ -59,10 +58,25 @@ func RegisterRoutes(
 		v1.Use(middleware.RequestLogger(logger))
 		v1.Use(middleware.Auth(accessTokenRepo, logger)) // 访问令牌认证
 
-		// 注册路由
-		v1.POST("/chat/completions", chatCompletionsHandler.Handle)
-		v1.POST("/responses", responsesHandler.Handle)
-		v1.POST("/messages", messagesHandler.Handle)
+		// 从端点注册中心动态注册路由
+		registry := endpoint.GetGlobalRegistry()
+		for _, ep := range registry.GetAll() {
+			epPath := ep.GetPath()
+			// 去掉 /v1 前缀，因为已经在路由组中
+			routePath := strings.TrimPrefix(epPath, "/v1")
+
+			// 创建通用 handler
+			handler := NewGenericHandler(logger, proxySvc, epPath, ep.GetName())
+			v1.POST(routePath, handler.Handle)
+
+			logger.Info("注册端点路由",
+				slog.String("name", ep.GetName()),
+				slog.String("type", ep.GetType()),
+				slog.String("path", routePath),
+			)
+		}
+
+		// 注册 /models 端点
 		v1.GET("/models", modelsHandler.Handle)
 	}
 

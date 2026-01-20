@@ -11,8 +11,8 @@ import (
 
 // ModelsHandler Models 列表处理器
 type ModelsHandler struct {
-	logger       *slog.Logger
-	modelRepo    *repository.ModelRepository
+	logger    *slog.Logger
+	modelRepo *repository.ModelRepository
 }
 
 // NewModelsHandler 创建 Models 处理器
@@ -43,9 +43,7 @@ func (h *ModelsHandler) Handle(c *gin.Context) {
 	traceID := middleware.GetTraceID(c)
 	ctx := c.Request.Context()
 
-	h.logger.Debug("收到模型列表请求",
-		slog.String("trace_id", traceID),
-	)
+	h.logger.Debug("收到模型列表请求", slog.String("trace_id", traceID))
 
 	// 查询所有有激活渠道配置的统一模型
 	models, err := h.modelRepo.ListWithActiveChannelConfigs(ctx)
@@ -56,8 +54,8 @@ func (h *ModelsHandler) Handle(c *gin.Context) {
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
-				"message": "Failed to retrieve models",
-				"type":    "internal_error",
+				"message":  "Failed to retrieve models",
+				"type":     "internal_error",
 				"trace_id": traceID,
 			},
 		})

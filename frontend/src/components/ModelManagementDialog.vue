@@ -340,8 +340,10 @@ import {
 } from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import {modelApi} from '../services/modelService'
+import {endpointApi} from '../services/endpointService'
 import type {SyncResult} from '../types/channel'
 import type {Model} from '../types/model'
+import type {EndpointInfo} from '../types/endpoint'
 
 interface Props {
   channelId: number
@@ -370,6 +372,7 @@ const showAddModelDialog = ref(false)
 const syncResult = ref<SyncResult | null>(null)
 const localConfigs = ref<any[]>([])
 const unifiedModels = ref<Model[]>([])
+const endpoints = ref<EndpointInfo[]>([])
 const loadingModels = ref(false)
 const testStatus = ref<Record<string, Record<string, 'idle' | 'testing' | 'success' | 'error'>>>({})
 
@@ -407,12 +410,23 @@ const modelRules = {
   }
 }
 
+// 加载端点列表
+async function loadEndpoints() {
+  try {
+    endpoints.value = await endpointApi.list()
+  } catch (error: any) {
+    console.error('Failed to load endpoints:', error)
+    window.$message?.error('加载端点列表失败')
+  }
+}
+
 // 端点类型选项
-const endpointTypeOptions = [
-  {label: 'OpenAI (/v1/chat/completions)', value: 'openai'},
-  {label: 'OpenAI Response (/v1/responses)', value: 'openai-response'},
-  {label: 'Anthropic Messages (/v1/messages)', value: 'anthropic'}
-]
+const endpointTypeOptions = computed(() => {
+  return endpoints.value.map(ep => ({
+    label: `${ep.name} (${ep.path})`,
+    value: ep.type
+  }))
+})
 
 // 统一模型下拉选项
 const modelOptions = computed(() => {
@@ -577,7 +591,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
       const value = endpointTypesEditMap.value[row.key] || row.endpoint_types
       return h(NSelect, {
         value: value,
-        options: endpointTypeOptions,
+        options: endpointTypeOptions.value,
         placeholder: '请选择端点类型',
         multiple: true,
         size: 'small',
@@ -988,6 +1002,7 @@ watch(() => props.modelValue, async (newVal) => {
     checkedKeys.value = []
     localConfigs.value = []
     unifiedModels.value = []
+    endpoints.value = []
     testStatus.value = {}
 
     // 重置分页为第一页
@@ -999,7 +1014,8 @@ watch(() => props.modelValue, async (newVal) => {
       // 先加载数据
       await Promise.all([
         loadLocalConfigs(),
-        loadUnifiedModels()
+        loadUnifiedModels(),
+        loadEndpoints()
       ])
 
       console.log('[ModelManagementDialog] Data loaded:', {

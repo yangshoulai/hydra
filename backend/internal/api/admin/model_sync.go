@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/modelsync"
@@ -242,174 +243,66 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 
 // testModelViaUpstream 通过上游API测试模型
 func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey, upstreamModel, endpointType string) (bool, string, string, error) {
-	// 根据端点类型确定测试端点
-	var endpoint string
-	var requestBody map[string]interface{}
-
-	switch endpointType {
-	case "openai":
-		endpoint = "/v1/chat/completions"
-		requestBody = map[string]interface{}{
-			"model": upstreamModel,
-			"messages": []map[string]string{
-				{
-					"role":    "user",
-					"content": "麻烦告诉我一下你的知识的截止日期是多少？",
-				},
-			},
-			"max_tokens": 5,
-			"stream":     false,
-		}
-	case "openai-response":
-		endpoint = "/v1/responses"
-		requestBody = map[string]interface{}{
-			"model": upstreamModel,
-			"input": []map[string]interface{}{
-				{
-					"role": "user",
-					"content": []map[string]string{
-						{"type": "input_text", "text": "麻烦告诉我一下你的知识的截止日期是多少？"},
-					},
-				},
-			},
-		}
-	case "anthropic":
-		endpoint = "/v1/messages"
-		requestBody = map[string]interface{}{
-			"model": upstreamModel,
-			"messages": []map[string]interface{}{
-				{
-					"role":    "user",
-					"content": "Hi",
-				},
-			},
-			"max_tokens": 5,
-		}
-	default:
-		endpoint = "/v1/chat/completions"
-		requestBody = map[string]interface{}{
-			"model": upstreamModel,
-			"messages": []map[string]interface{}{
-				{
-					"role":    "user",
-					"content": "麻烦告诉我一下你的知识的截止日期是多少",
-				},
-			},
-			"stream": false,
-		}
+	// 从端点注册中心获取端点
+	ep, err := endpoint.Get(endpointType)
+	if err != nil {
+		return false, fmt.Sprintf("不支持的端点类型: %s", endpointType), "", err
 	}
 
-	url := fmt.Sprintf("%s%s", channel.BaseURL, endpoint)
+	// 使用端点的测试报文生成方法
+	requestBody := ep.GetTestPayload(upstreamModel)
+
+	// 构造请求URL
+	url := fmt.Sprintf("%s%s", channel.BaseURL, ep.GetPath())
 
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
-		return false, "failed to marshal request", "", err
+		return false, "序列化测试请求报文异常", "", err
 	}
 
 	// 创建HTTP请求
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return false, "failed to create request", "", err
+		return false, "无法创建测试请求", "", err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	// 为 Anthropic 添加特定的头部
-	if endpointType == "anthropic" {
-		req.Header.Set("Anthropic-Version", "2023-06-01")
-		req.Header.Set("X-Api-Key", apiKey)
-		req.Header.Set("X-App", "cli")
-		req.Header.Set("User-Agent", "claude-cli/2.1.12 (external, cli)")
-		req.Header.Set("Anthropic-Beta", "claude-code-20250219,interleaved-thinking-2025-05-14")
-		req.Header.Set("Anthropic-Dangerous-Direct-Browser-Access", "true")
-	}
+	// 使用端点的配置方法设置请求头
+	ep.ConfigureRequest(req, apiKey)
 
 	// 记录开始时间
 	startTime := time.Now()
 
 	// 发送请求
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, fmt.Sprintf("request failed: %v", err), "", err
+		return false, fmt.Sprintf("请求失败: %v", err), "", err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	// 计算延迟
-	latency := fmt.Sprintf("%dms", time.Now().Sub(startTime).Milliseconds())
+	latency := fmt.Sprintf("%dms", time.Since(startTime).Milliseconds())
 
-	// 检查响应状态
+	// 读取响应体
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Sprintf("无法读取响应内容: %v", err), latency, err
+	}
+
+	// 使用端点的验证方法验证响应
+	valid, errMsg := ep.ValidateResponse(resp.StatusCode, body)
+	if valid {
+		return true, "模型测试成功", latency, nil
+	}
+
+	// 验证失败，返回详细错误信息
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return false, fmt.Sprintf("upstream returned status %d: %s", resp.StatusCode, string(body)), latency, nil
+		return false, fmt.Sprintf("渠道 http status %d: %s", resp.StatusCode, string(body)), latency, nil
 	}
 
-	// 检查 Content-Type，警告非 JSON 响应（可能是流式）
-	contentType := resp.Header.Get("Content-Type")
-	if contentType != "" && contentType != "application/json" && !bytes.Contains([]byte(contentType), []byte("application/json")) {
-		h.logger.Warn("unexpected content type from upstream",
-			slog.String("content_type", contentType),
-			slog.String("model", upstreamModel),
-		)
-	}
-
-	// 解析响应
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return false, fmt.Sprintf("failed to decode response: %v", err), latency, err
-	}
-
-	// 根据端点类型验证响应格式
-	switch endpointType {
-	case "openai":
-		// OpenAI Chat Completions: 检查 choices 字段
-		choices, ok := result["choices"].([]interface{})
-		if !ok || len(choices) == 0 {
-			if errMsg, ok := result["error"]; ok {
-				errBytes, _ := json.Marshal(errMsg)
-				return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
-			}
-			responseBody, _ := json.Marshal(result)
-			return false, fmt.Sprintf("invalid response: no choices (response: %s)", string(responseBody)), latency, nil
-		}
-
-	case "openai-response":
-		// OpenAI Response: 检查 output 字段
-		if output, ok := result["output"].([]interface{}); !ok || len(output) <= 0 {
-			// 有 output 字段
-			if errMsg, ok := result["error"]; ok {
-				errBytes, _ := json.Marshal(errMsg)
-				return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
-			}
-			responseBody, _ := json.Marshal(result)
-			return false, fmt.Sprintf("invalid response: no choices or output (response: %s)", string(responseBody)), latency, nil
-		}
-
-	case "anthropic":
-		// Anthropic Messages: 检查 content 字段
-		content, ok := result["content"].([]interface{})
-		if !ok || len(content) == 0 {
-			if errMsg, ok := result["error"]; ok {
-				errBytes, _ := json.Marshal(errMsg)
-				return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
-			}
-			responseBody, _ := json.Marshal(result)
-			return false, fmt.Sprintf("invalid response: no content (response: %s)", string(responseBody)), latency, nil
-		}
-
-	default:
-		// 默认检查 choices
-		choices, ok := result["choices"].([]interface{})
-		if !ok || len(choices) == 0 {
-			if errMsg, ok := result["error"]; ok {
-				errBytes, _ := json.Marshal(errMsg)
-				return false, fmt.Sprintf("upstream error: %s", string(errBytes)), latency, nil
-			}
-			responseBody, _ := json.Marshal(result)
-			return false, fmt.Sprintf("invalid response: no choices (response: %s)", string(responseBody)), latency, nil
-		}
-	}
-
-	return true, "模型测试成功", latency, nil
+	return false, fmt.Sprintf("模型测试失败: %s (response: %s)", errMsg, string(body)), latency, nil
 }

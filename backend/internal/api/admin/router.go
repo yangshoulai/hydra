@@ -61,6 +61,7 @@ func RegisterRoutes(
 	tokensHandler := NewTokensHandler(logger, accessTokenRepo)
 	modelHandler := NewModelHandler(modelService, logger)
 	providerHandler := NewProviderHandler(providerService, logger)
+	endpointHandler := NewEndpointHandler()
 
 	// 注册路由
 	adminAPI := router.Group("/admin/api")
@@ -81,6 +82,9 @@ func RegisterRoutes(
 			{
 				protectedAuth.POST("/change-password", authHandler.ChangePassword)
 			}
+
+			// 端点管理
+			protected.GET("/endpoints", endpointHandler.GetEndpoints)
 
 			channelHandler.RegisterRoutes(protected)
 			keyHandler.RegisterRoutes(protected)

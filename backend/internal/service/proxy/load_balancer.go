@@ -131,7 +131,7 @@ func (lb *LoadBalancer) RouteWithRetry(
 
 		// 检查是否已在排除列表中
 		if excludeMap[result.Channel.ID] {
-			lb.logger.Debug("channel is in exclude list, retrying", slog.String("trace_id", traceID), slog.Uint64("channel_id", uint64(result.Channel.ID)), slog.Int("retry_count", i))
+			lb.logger.Debug("渠道已经尝试过, 再试一次", slog.String("trace_id", traceID), slog.Uint64("channel_id", uint64(result.Channel.ID)), slog.Int("retry_count", i))
 			continue
 		}
 

@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
 	configService "github.com/yangshoulai/hydra/internal/service/config"
@@ -91,19 +92,9 @@ func NewProxyService(
 	}
 }
 
-// ProxyChatCompletions 代理 Chat Completions 请求
-func (ps *ProxyService) ProxyChatCompletions(c *gin.Context) error {
-	return ps.proxyRequest(c, "/v1/chat/completions")
-}
-
-// ProxyResponses 代理 Responses 请求
-func (ps *ProxyService) ProxyResponses(c *gin.Context) error {
-	return ps.proxyRequest(c, "/v1/responses")
-}
-
-// ProxyMessages 代理 Anthropic Messages 请求
-func (ps *ProxyService) ProxyMessages(c *gin.Context) error {
-	return ps.proxyRequest(c, "/v1/messages")
+// ProxyRequest 通用代理请求入口
+func (ps *ProxyService) ProxyRequest(c *gin.Context, endpointPath string) error {
+	return ps.proxyRequest(c, endpointPath)
 }
 
 // proxyRequest 通用代理请求处理
@@ -138,7 +129,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	// 根据端点确定端点类型
 	endpointType := ps.getEndpointType(endpoint)
 
-	ps.logWithTrace("处理代理请求", traceID,
+	ps.logWithTrace("处理请求", traceID,
 		slog.String("endpoint", endpoint),
 		slog.String("endpoint_type", endpointType),
 		slog.String("model", unifiedModel),
@@ -295,17 +286,6 @@ func (ps *ProxyService) recordFailure(routeResult *RouteResult, failureType Fail
 	} else if failureType == FailureTypeSoft {
 		ps.circuitManager.RecordKeySoftFailure(routeResult.Key.ID, routeResult.Channel.ID)
 	}
-}
-
-// GetSupportedModels 获取支持的模型列表
-func (ps *ProxyService) GetSupportedModels(ctx context.Context) ([]string, error) {
-	// TODO: 实现从数据库查询所有激活的统一模型名
-	return []string{}, nil
-}
-
-// Close 关闭服务
-func (ps *ProxyService) Close() {
-	ps.httpClient.Close()
 }
 
 // UpdateSnifferKeywords 更新嗅探器的明文错误关键词
@@ -610,17 +590,20 @@ func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
 }
 
 // getEndpointType 根据端点路径确定端点类型
-func (ps *ProxyService) getEndpointType(endpoint string) string {
-	switch endpoint {
-	case "/v1/chat/completions":
-		return "openai"
-	case "/v1/responses":
-		return "openai-response"
-	case "/v1/messages":
-		return "anthropic"
-	default:
-		return "openai" // 默认为 openai
+func (ps *ProxyService) getEndpointType(endpointPath string) string {
+	// 从端点注册中心查找匹配的端点
+	for _, ep := range endpoint.GetAll() {
+		if ep.GetPath() == endpointPath {
+			return ep.GetType()
+		}
 	}
+
+	// 如果找不到，返回默认的 openai
+	ps.logger.Warn("未找到端点类型，使用默认值",
+		slog.String("endpoint_path", endpointPath),
+		slog.String("default_type", "openai"),
+	)
+	return "openai"
 }
 
 // sanitizeUTF8 清洗字符串中的非 UTF-8 字符

@@ -39,7 +39,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 	}
 
 	if len(channel.ModelConfigs) == 0 {
-		mr.logger.Warn("channel has no model configurations",
+		mr.logger.Warn("渠道没有配置模型",
 			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
@@ -56,7 +56,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 	}
 
 	if len(matchedConfigs) == 0 {
-		mr.logger.Debug("no matching model configuration found",
+		mr.logger.Debug("渠道没有匹配的模型",
 			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
@@ -68,7 +68,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 	// 如果有多个配置,随机选择一个实现负载均衡
 	selectedConfig := matchedConfigs[rand.IntN(len(matchedConfigs))]
 	if len(matchedConfigs) > 1 {
-		mr.logger.Debug("multiple model configurations found, randomly selected one",
+		mr.logger.Debug("渠道有多个模型匹配, 随机选择一个",
 			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("unified_model", unifiedModel),
@@ -76,7 +76,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 		)
 	}
 
-	mr.logger.Debug("model routed",
+	mr.logger.Debug("模型已路由",
 		slog.String("trace_id", traceID),
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),

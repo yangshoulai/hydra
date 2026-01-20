@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 )
 
 // RequestBuilder 代理请求构建器
@@ -93,16 +94,6 @@ func (rb *RequestBuilder) BuildProxyRequest(
 	// 复制必要的 Headers
 	rb.copyHeaders(c.Request, req)
 
-	// 根据端点类型设置认证头
-	if endpoint == "/v1/messages" {
-		// Anthropic API 使用 x-api-key
-		req.Header.Set("x-api-key", routeResult.Key.KeyValue)
-		req.Header.Set("Authorization", "Bearer "+routeResult.Key.KeyValue)
-	} else {
-		// OpenAI API 使用 Authorization Bearer
-		req.Header.Set("Authorization", "Bearer "+routeResult.Key.KeyValue)
-	}
-
 	// 设置 Content-Type
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
@@ -110,7 +101,27 @@ func (rb *RequestBuilder) BuildProxyRequest(
 		req.Header.Set("Content-Type", "application/json")
 	}
 
+	// 使用端点的配置方法设置请求头
+	ep, err := rb.getEndpointByPath(endpoint)
+	if err == nil {
+		ep.ConfigureRequest(req, routeResult.Key.KeyValue)
+	} else {
+		// 如果无法获取端点，使用默认配置
+		req.Header.Set("Authorization", "Bearer "+routeResult.Key.KeyValue)
+	}
+
 	return req, originalBody, nil
+}
+
+// getEndpointByPath 根据路径获取端点
+func (rb *RequestBuilder) getEndpointByPath(path string) (endpoint.Endpoint, error) {
+	// 遍历所有端点，找到匹配的路径
+	for _, ep := range endpoint.GetAll() {
+		if ep.GetPath() == path {
+			return ep, nil
+		}
+	}
+	return nil, errors.New("endpoint not found")
 }
 
 // copyHeaders 复制必要的请求头

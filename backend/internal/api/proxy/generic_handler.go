@@ -10,40 +10,46 @@ import (
 	"github.com/yangshoulai/hydra/internal/service/proxy"
 )
 
-// MessagesHandler Messages API 请求处理器
-type MessagesHandler struct {
+// GenericHandler 通用端点处理器
+type GenericHandler struct {
 	logger       *slog.Logger
 	proxyService *proxy.ProxyService
+	endpointPath string
+	endpointName string
 }
 
-// NewMessagesHandler 创建 Messages 处理器
-func NewMessagesHandler(logger *slog.Logger, proxyService *proxy.ProxyService) *MessagesHandler {
-	return &MessagesHandler{
+// NewGenericHandler 创建通用端点处理器
+func NewGenericHandler(logger *slog.Logger, proxyService *proxy.ProxyService, endpointPath string, endpointName string) *GenericHandler {
+	return &GenericHandler{
 		logger:       logger,
 		proxyService: proxyService,
+		endpointPath: endpointPath,
+		endpointName: endpointName,
 	}
 }
 
-// Handle 处理 POST /v1/messages 请求
-func (h *MessagesHandler) Handle(c *gin.Context) {
+// Handle 处理请求
+func (h *GenericHandler) Handle(c *gin.Context) {
 	startTime := time.Now()
 	traceID := middleware.GetTraceID(c)
 
-	h.logger.Info("messages request received",
+	h.logger.Info("收到请求",
 		slog.String("trace_id", traceID),
+		slog.String("endpoint", h.endpointName),
 		slog.String("method", c.Request.Method),
 		slog.String("path", c.Request.URL.Path),
 		slog.String("client_ip", c.ClientIP()),
 	)
 
 	// 调用代理服务处理请求
-	err := h.proxyService.ProxyMessages(c)
+	err := h.proxyService.ProxyRequest(c, h.endpointPath)
 
 	duration := time.Since(startTime)
 
 	if err != nil {
-		h.logger.Error("messages request failed",
+		h.logger.Error("request failed",
 			slog.String("trace_id", traceID),
+			slog.String("endpoint", h.endpointName),
 			slog.Duration("duration", duration),
 			slog.String("error", err.Error()),
 		)
@@ -61,8 +67,9 @@ func (h *MessagesHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("messages request completed",
+	h.logger.Info("request completed",
 		slog.String("trace_id", traceID),
+		slog.String("endpoint", h.endpointName),
 		slog.Duration("duration", duration),
 		slog.Int("status_code", c.Writer.Status()),
 	)

@@ -40,7 +40,7 @@ func (ks *KeySelector) SelectKey(channel *models.Channel, traceID string) (*mode
 	}
 
 	if len(channel.Keys) == 0 {
-		ks.logger.Warn("channel has no keys",
+		ks.logger.Warn("渠道没有配置密钥",
 			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
@@ -52,7 +52,7 @@ func (ks *KeySelector) SelectKey(channel *models.Channel, traceID string) (*mode
 	availableKeys := ks.getAvailableKeys(channel, traceID)
 
 	if len(availableKeys) == 0 {
-		ks.logger.Warn("no available keys in channel",
+		ks.logger.Warn("渠道当前没有可用密钥",
 			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
@@ -64,7 +64,7 @@ func (ks *KeySelector) SelectKey(channel *models.Channel, traceID string) (*mode
 	// 使用轮询策略选择 Key
 	selectedKey := ks.selectByRoundRobin(channel.ID, availableKeys)
 
-	ks.logger.Debug("key selected",
+	ks.logger.Debug("密钥已选择",
 		slog.String("trace_id", traceID),
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
