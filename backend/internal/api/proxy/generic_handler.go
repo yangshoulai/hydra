@@ -47,7 +47,7 @@ func (h *GenericHandler) Handle(c *gin.Context) {
 	duration := time.Since(startTime)
 
 	if err != nil {
-		h.logger.Error("request failed",
+		h.logger.Error("请求处理失败",
 			slog.String("trace_id", traceID),
 			slog.String("endpoint", h.endpointName),
 			slog.Duration("duration", duration),

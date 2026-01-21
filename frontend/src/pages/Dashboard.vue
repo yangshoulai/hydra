@@ -43,7 +43,7 @@
             </div>
           </div>
           <div class="metric-card__value">
-            {{ formatNumber(metrics?.total_requests_today || 0) }}
+            {{ formatNumber(metrics?.total_requests || 0) }}
           </div>
           <div class="metric-card__label">今日请求总数</div>
         </div>
@@ -60,16 +60,16 @@
             </div>
             <n-tag
                 :bordered="false"
-                :type="(metrics?.today_success_rate?.success_rate || 0) >= 95 ? 'success' : 'warning'"
+                :type="(metrics?.success_rate || 0) >= 90 ? 'success' : 'warning'"
                 size="small"
             >
-              {{ (metrics?.today_success_rate?.success_rate || 0).toFixed(1) }}%
+              {{ (metrics?.success_rate || 0).toFixed(1) }}%
             </n-tag>
           </div>
           <div class="metric-card__value">
             <n-number-animation
                 :from="0"
-                :to="metrics?.today_success_rate?.success_rate || 0"
+                :to="metrics?.success_rate || 0"
                 :precision="1"
                 :active="true"
             />
@@ -110,7 +110,7 @@
           近 1 小时
         </n-tag>
       </template>
-      <QpsChart :data="metrics?.qps_time_series || []"/>
+      <QpsChart :data="metrics?.qps_trend || []"/>
     </n-card>
 
     <!-- 渠道统计概览 -->

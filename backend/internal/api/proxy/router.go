@@ -23,6 +23,7 @@ func RegisterRoutes(
 	logger *slog.Logger,
 	circuitManager *circuit.Manager,
 	auditLogger *logger.AuditLogger,
+	debugModeManager *logger.DebugModeManager,
 	proxyServiceConfig *proxy.ProxyServiceConfig,
 	settingService *configService.SettingService,
 ) {

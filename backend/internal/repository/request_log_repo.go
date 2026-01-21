@@ -23,15 +23,21 @@ func (r *RequestLogRepository) GetDB() *gorm.DB {
 	return r.db
 }
 
-// Create 创建请求日志
-func (r *RequestLogRepository) Create(ctx context.Context, log *models.RequestLog) error {
+// CreateMain 创建主日志记录
+func (r *RequestLogRepository) CreateMain(ctx context.Context, log *models.RequestLogMain) error {
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
-// FindByTraceID 根据 TraceID 查询请求日志
-func (r *RequestLogRepository) FindByTraceID(ctx context.Context, traceID string) (*models.RequestLog, error) {
-	var log models.RequestLog
+// CreateDetail 创建明细日志记录
+func (r *RequestLogRepository) CreateDetail(ctx context.Context, detail *models.RequestLogDetail) error {
+	return r.db.WithContext(ctx).Create(detail).Error
+}
+
+// FindMainByTraceID 根据 TraceID 查询主日志记录
+func (r *RequestLogRepository) FindMainByTraceID(ctx context.Context, traceID string) (*models.RequestLogMain, error) {
+	var log models.RequestLogMain
 	err := r.db.WithContext(ctx).
+		Preload("Details").
 		Where("trace_id = ?", traceID).
 		First(&log).Error
 	if err != nil {
@@ -40,34 +46,47 @@ func (r *RequestLogRepository) FindByTraceID(ctx context.Context, traceID string
 	return &log, nil
 }
 
-// ListFilter 分页查询请求日志(支持筛选)
-type RequestLogFilter struct {
-	StartTime       *time.Time
-	EndTime         *time.Time
-	TraceID         string
-	AccessToken     string
-	StatusCode      *int
-	ChannelID       *uint
-	AccessTokenID   *uint
-	RequestedModel  string
-	IsSuccess       *bool
-	IsFakeSuccess   *bool
-	Offset          int
-	Limit           int
+// FindDetailsByMainLogID 根据主日志 ID 查询明细记录
+func (r *RequestLogRepository) FindDetailsByMainLogID(ctx context.Context, mainLogID uint) ([]models.RequestLogDetail, error) {
+	var details []models.RequestLogDetail
+	err := r.db.WithContext(ctx).
+		Where("main_log_id = ?", mainLogID).
+		Order("retry_index ASC").
+		Find(&details).Error
+	if err != nil {
+		return nil, err
+	}
+	return details, nil
 }
 
-func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilter) ([]*models.RequestLog, int64, error) {
-	var logs []*models.RequestLog
+// ListMainFilter 主日志分页查询过滤器
+type ListMainFilter struct {
+	StartTime      *time.Time
+	EndTime        *time.Time
+	TraceID        string
+	AccessToken    string
+	StatusCode     *int
+	IsSuccess      *bool
+	EndpointType   string
+	RequestedModel string
+	UnifiedModel   string
+	Offset         int
+	Limit          int
+}
+
+// ListMain 分页查询主日志记录
+func (r *RequestLogRepository) ListMain(ctx context.Context, filter *ListMainFilter) ([]*models.RequestLogMain, int64, error) {
+	var logs []*models.RequestLogMain
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&models.RequestLog{})
+	query := r.db.WithContext(ctx).Model(&models.RequestLogMain{})
 
 	// 应用筛选条件
 	if filter.StartTime != nil {
-		query = query.Where("created_at >= ?", filter.StartTime)
+		query = query.Where("start_time >= ?", filter.StartTime)
 	}
 	if filter.EndTime != nil {
-		query = query.Where("created_at <= ?", filter.EndTime)
+		query = query.Where("end_time <= ?", filter.EndTime)
 	}
 	if filter.TraceID != "" {
 		query = query.Where("trace_id = ?", filter.TraceID)
@@ -78,20 +97,17 @@ func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilte
 	if filter.StatusCode != nil {
 		query = query.Where("status_code = ?", *filter.StatusCode)
 	}
-	if filter.ChannelID != nil {
-		query = query.Where("channel_id = ?", *filter.ChannelID)
+	if filter.IsSuccess != nil {
+		query = query.Where("is_success = ?", *filter.IsSuccess)
 	}
-	if filter.AccessTokenID != nil {
-		query = query.Where("access_token_id = ?", *filter.AccessTokenID)
+	if filter.EndpointType != "" {
+		query = query.Where("endpoint_type = ?", filter.EndpointType)
 	}
 	if filter.RequestedModel != "" {
 		query = query.Where("requested_model = ?", filter.RequestedModel)
 	}
-	if filter.IsSuccess != nil {
-		query = query.Where("is_success = ?", *filter.IsSuccess)
-	}
-	if filter.IsFakeSuccess != nil {
-		query = query.Where("is_fake_success = ?", *filter.IsFakeSuccess)
+	if filter.UnifiedModel != "" {
+		query = query.Where("unified_model = ?", filter.UnifiedModel)
 	}
 
 	// 查询总数
@@ -100,8 +116,7 @@ func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilte
 	}
 
 	// 分页查询
-	db := query.Order("created_at DESC")
-	// 只有当 Limit > 0 时才应用分页限制
+	db := query.Order("start_time DESC")
 	if filter.Limit > 0 {
 		db = db.Offset(filter.Offset).Limit(filter.Limit)
 	}
@@ -110,11 +125,39 @@ func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilte
 	return logs, total, err
 }
 
-// DeleteBefore 删除指定时间之前的日志
-func (r *RequestLogRepository) DeleteBefore(ctx context.Context, before time.Time) (int64, error) {
+// GetByTimeRange 根据时间范围获取主日志记录
+func (r *RequestLogRepository) GetByTimeRange(ctx context.Context, startTime, endTime time.Time) ([]*models.RequestLogMain, error) {
+	var logs []*models.RequestLogMain
+	err := r.db.WithContext(ctx).
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
+		Order("start_time ASC").
+		Find(&logs).Error
+	return logs, err
+}
+
+// GetByChannelIDAndTimeRange 根据渠道 ID 和时间范围获取主日志记录
+func (r *RequestLogRepository) GetByChannelIDAndTimeRange(ctx context.Context, channelID uint, startTime, endTime time.Time) ([]*models.RequestLogMain, error) {
+	var logs []*models.RequestLogMain
+	err := r.db.WithContext(ctx).
+		Where("last_channel_id = ? AND start_time >= ? AND start_time <= ?", channelID, startTime, endTime).
+		Order("start_time ASC").
+		Find(&logs).Error
+	return logs, err
+}
+
+// DeleteMainBefore 删除指定时间之前的主日志记录
+func (r *RequestLogRepository) DeleteMainBefore(ctx context.Context, before time.Time) (int64, error) {
 	result := r.db.WithContext(ctx).
 		Where("created_at < ?", before).
-		Delete(&models.RequestLog{})
+		Delete(&models.RequestLogMain{})
+	return result.RowsAffected, result.Error
+}
+
+// DeleteDetailsBefore 删除指定时间之前的明细日志记录
+func (r *RequestLogRepository) DeleteDetailsBefore(ctx context.Context, before time.Time) (int64, error) {
+	result := r.db.WithContext(ctx).
+		Where("created_at < ?", before).
+		Delete(&models.RequestLogDetail{})
 	return result.RowsAffected, result.Error
 }
 
@@ -131,15 +174,15 @@ func (r *RequestLogRepository) GetStatistics(ctx context.Context, startTime, end
 	var stats RequestLogStatistics
 
 	// 总请求数
-	if err := r.db.WithContext(ctx).Model(&models.RequestLog{}).
-		Where("created_at BETWEEN ? AND ?", startTime, endTime).
+	if err := r.db.WithContext(ctx).Model(&models.RequestLogMain{}).
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
 		Count(&stats.TotalRequests).Error; err != nil {
 		return nil, err
 	}
 
-	// 成功请求数(状态码 200)
-	if err := r.db.WithContext(ctx).Model(&models.RequestLog{}).
-		Where("created_at BETWEEN ? AND ? AND status_code = ?", startTime, endTime, 200).
+	// 成功请求数
+	if err := r.db.WithContext(ctx).Model(&models.RequestLogMain{}).
+		Where("start_time >= ? AND start_time <= ? AND is_success = ?", startTime, endTime, true).
 		Count(&stats.SuccessRequests).Error; err != nil {
 		return nil, err
 	}
@@ -153,33 +196,13 @@ func (r *RequestLogRepository) GetStatistics(ctx context.Context, startTime, end
 
 	// 平均响应时间
 	var avgDuration float64
-	if err := r.db.WithContext(ctx).Model(&models.RequestLog{}).
-		Where("created_at BETWEEN ? AND ?", startTime, endTime).
-		Select("AVG(response_time)").
+	if err := r.db.WithContext(ctx).Model(&models.RequestLogMain{}).
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
+		Select("AVG(duration)").
 		Scan(&avgDuration).Error; err != nil {
 		return nil, err
 	}
 	stats.AvgDuration = avgDuration
 
 	return &stats, nil
-}
-
-// GetByTimeRange 根据时间范围获取请求日志
-func (r *RequestLogRepository) GetByTimeRange(ctx context.Context, startTime, endTime time.Time) ([]*models.RequestLog, error) {
-	var logs []*models.RequestLog
-	err := r.db.WithContext(ctx).
-		Where("created_at BETWEEN ? AND ?", startTime, endTime).
-		Order("created_at ASC").
-		Find(&logs).Error
-	return logs, err
-}
-
-// GetByChannelIDAndTimeRange 根据渠道ID和时间范围获取请求日志
-func (r *RequestLogRepository) GetByChannelIDAndTimeRange(ctx context.Context, channelID uint, startTime, endTime time.Time) ([]*models.RequestLog, error) {
-	var logs []*models.RequestLog
-	err := r.db.WithContext(ctx).
-		Where("channel_id = ? AND created_at BETWEEN ? AND ?", channelID, startTime, endTime).
-		Order("created_at ASC").
-		Find(&logs).Error
-	return logs, err
 }

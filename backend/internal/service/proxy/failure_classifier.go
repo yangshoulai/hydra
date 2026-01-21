@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 )
@@ -30,54 +29,54 @@ func NewFailureClassifier() *FailureClassifier {
 
 // ClassifyHTTPError 分类 HTTP 错误
 // 根据状态码和响应内容判断是硬故障还是软故障
-func (fc *FailureClassifier) ClassifyHTTPError(statusCode int, body []byte) FailureType {
+func (fc *FailureClassifier) ClassifyHTTPError(statusCode int, body []byte) (FailureType, string) {
 	// 2xx 成功响应
 	if statusCode >= 200 && statusCode < 300 {
-		return FailureTypeNone
+		return FailureTypeNone, ""
 	}
 
 	// 硬故障: 认证和授权问题
 	if statusCode == http.StatusUnauthorized || // 401
 		statusCode == http.StatusPaymentRequired || // 402
 		statusCode == http.StatusForbidden { // 403
-		return FailureTypeHard
+		return FailureTypeHard, "认证和授权问题"
 	}
 
 	// 429 需要检查是否为 quota exceeded
 	if statusCode == http.StatusTooManyRequests { // 429
 		if fc.isQuotaExceeded(body) {
-			return FailureTypeHard
+			return FailureTypeHard, "密钥额度问题"
 		}
 		// 普通的 rate limit,可能恢复
-		return FailureTypeSoft
+		return FailureTypeSoft, "请求速率限制"
 	}
 
 	// 404 模型不存在，需要重试但不记录到熔断器
 	if statusCode == http.StatusNotFound {
-		return FailureTypeModelNotFound
+		return FailureTypeModelNotFound, "上游渠道 404"
 	}
 
 	// 4xx 客户端错误(除了上述的)
 	// 对于渠道代理来说，4xx 应该触发重试（切换到其他渠道）
 	// 但不应禁用 Key，因为这不是 Key 的问题
 	if statusCode >= 400 && statusCode < 500 {
-		return FailureTypeSoft
+		return FailureTypeSoft, "代理客户端故障"
 	}
 
 	// 5xx 服务端错误,软故障
 	if statusCode >= 500 && statusCode < 600 {
-		return FailureTypeSoft
+		return FailureTypeSoft, "渠道接口故障"
 	}
 
 	// 其他情况
-	return FailureTypeNone
+	return FailureTypeNone, ""
 }
 
 // ClassifyNetworkError 分类网络错误
 // timeout, connection refused, DNS 等错误归类为软故障
-func (fc *FailureClassifier) ClassifyNetworkError(err error) FailureType {
+func (fc *FailureClassifier) ClassifyNetworkError(err error) (FailureType, string) {
 	if err == nil {
-		return FailureTypeNone
+		return FailureTypeNone, ""
 	}
 
 	errMsg := strings.ToLower(err.Error())
@@ -85,7 +84,7 @@ func (fc *FailureClassifier) ClassifyNetworkError(err error) FailureType {
 	// 超时错误
 	if strings.Contains(errMsg, "timeout") ||
 		strings.Contains(errMsg, "deadline exceeded") {
-		return FailureTypeSoft
+		return FailureTypeSoft, errMsg
 	}
 
 	// 连接错误
@@ -94,22 +93,22 @@ func (fc *FailureClassifier) ClassifyNetworkError(err error) FailureType {
 		strings.Contains(errMsg, "broken pipe") ||
 		strings.Contains(errMsg, "no such host") ||
 		strings.Contains(errMsg, "network is unreachable") {
-		return FailureTypeSoft
+		return FailureTypeSoft, errMsg
 	}
 
 	// TLS 错误
 	if strings.Contains(errMsg, "tls") ||
 		strings.Contains(errMsg, "certificate") {
-		return FailureTypeSoft
+		return FailureTypeSoft, errMsg
 	}
 
 	// EOF 错误
 	if strings.Contains(errMsg, "eof") {
-		return FailureTypeSoft
+		return FailureTypeSoft, errMsg
 	}
 
 	// 默认为软故障
-	return FailureTypeSoft
+	return FailureTypeSoft, errMsg
 }
 
 // isQuotaExceeded 检查是否为额度耗尽错误
@@ -146,7 +145,7 @@ func (fc *FailureClassifier) ShouldRetry(failureType FailureType) bool {
 
 // ClassifyResponseError 综合分类响应错误
 // 同时考虑 HTTP 状态码和网络错误
-func (fc *FailureClassifier) ClassifyResponseError(resp *http.Response, networkErr error) FailureType {
+func (fc *FailureClassifier) ClassifyResponseError(resp *http.Response, networkErr error) (FailureType, string) {
 	// 优先处理网络错误
 	if networkErr != nil {
 		return fc.ClassifyNetworkError(networkErr)
@@ -157,7 +156,7 @@ func (fc *FailureClassifier) ClassifyResponseError(resp *http.Response, networkE
 		return fc.ClassifyHTTPError(resp.StatusCode, nil)
 	}
 
-	return FailureTypeNone
+	return FailureTypeNone, ""
 }
 
 // GetFailureMessage 获取故障类型的描述信息
@@ -182,26 +181,4 @@ func (fc *FailureClassifier) IsHardFailure(failureType FailureType) bool {
 // IsSoftFailure 判断是否为软故障
 func (fc *FailureClassifier) IsSoftFailure(failureType FailureType) bool {
 	return failureType == FailureTypeSoft
-}
-
-// ClassifyError 统一的错误分类入口
-// 接受任何错误并返回分类结果
-func (fc *FailureClassifier) ClassifyError(err error, resp *http.Response, body []byte) FailureType {
-	// 如果没有错误
-	if err == nil && (resp == nil || (resp.StatusCode >= 200 && resp.StatusCode < 300)) {
-		return FailureTypeNone
-	}
-
-	// 如果有网络错误
-	if err != nil && (resp == nil || errors.Is(err, errors.New("network error"))) {
-		return fc.ClassifyNetworkError(err)
-	}
-
-	// 如果有 HTTP 响应
-	if resp != nil {
-		return fc.ClassifyHTTPError(resp.StatusCode, body)
-	}
-
-	// 默认为软故障
-	return FailureTypeSoft
 }

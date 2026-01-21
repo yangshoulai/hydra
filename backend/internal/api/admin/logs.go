@@ -1,112 +1,89 @@
 package admin
 
 import (
-	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
-	"github.com/yangshoulai/hydra/internal/service/admin"
+	"github.com/yangshoulai/hydra/internal/repository"
 )
 
 // LogHandler 日志处理器
 type LogHandler struct {
-	logQueryService *admin.LogQueryService
-	logger          *slog.Logger
+	logger         *slog.Logger
+	requestLogRepo *repository.RequestLogRepository
 }
 
 // NewLogHandler 创建日志处理器
 func NewLogHandler(
-	logQueryService *admin.LogQueryService,
 	logger *slog.Logger,
+	requestLogRepo *repository.RequestLogRepository,
 ) *LogHandler {
 	return &LogHandler{
-		logQueryService: logQueryService,
-		logger:          logger,
+		logger:         logger,
+		requestLogRepo: requestLogRepo,
 	}
 }
 
-// QueryLogs 查询日志列表
-// @Summary 查询日志列表
-// @Description 支持多条件筛选和分页查询
-// @Tags 日志管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param trace_id query string false "Trace ID"
-// @Param access_token query string false "访问令牌"
-// @Param requested_model query string false "请求的模型"
-// @Param channel_id query int false "渠道ID"
-// @Param status_code query int false "状态码"
-// @Param is_success query bool false "是否成功"
-// @Param start_time query string false "开始时间" format(datetime)
-// @Param end_time query string false "结束时间" format(datetime)
-// @Param page query int false "页码" default(1)
-// @Param page_size query int false "每页大小" default(20)
-// @Param order_by query string false "排序字段" default(created_at)
-// @Param order query string false "排序方向" default(desc)
-// @Success 200 {object} admin.LogQueryResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
-// @Router /admin/api/logs [get]
-func (h *LogHandler) QueryLogs(c *gin.Context) {
-	var req admin.LogQueryRequest
+// ListLogs 查询日志列表
+// GET /admin/api/logs
+func (h *LogHandler) ListLogs(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	// 绑定查询参数
-	if err := c.ShouldBindQuery(&req); err != nil {
-		h.logger.Warn("invalid log query request",
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request format",
-		})
-		return
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
 	}
 
-	// 解析时间参数
+	filter := &repository.ListMainFilter{
+		TraceID:     c.Query("trace_id"),
+		AccessToken: c.Query("access_token"),
+		Offset:      (page - 1) * pageSize,
+		Limit:       pageSize,
+	}
+
+	// 解析时间范围
 	if startTimeStr := c.Query("start_time"); startTimeStr != "" {
-		startTime, err := time.Parse(time.RFC3339, startTimeStr)
-		if err == nil {
-			req.StartTime = &startTime
+		if startTime, err := time.Parse(time.RFC3339, startTimeStr); err == nil {
+			filter.StartTime = &startTime
 		}
 	}
 	if endTimeStr := c.Query("end_time"); endTimeStr != "" {
-		endTime, err := time.Parse(time.RFC3339, endTimeStr)
-		if err == nil {
-			req.EndTime = &endTime
+		if endTime, err := time.Parse(time.RFC3339, endTimeStr); err == nil {
+			filter.EndTime = &endTime
 		}
 	}
 
-	// 执行查询
-	result, err := h.logQueryService.Query(c.Request.Context(), &req)
+	// 查询日志
+	logs, total, err := h.requestLogRepo.ListMain(c.Request.Context(), filter)
 	if err != nil {
-		h.logger.Error("failed to query logs",
-			slog.String("error", err.Error()),
-		)
+		h.logger.Error("查询日志失败", slog.String("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to query logs",
+			"error": "Failed to query logs",
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"items":     logs,
+			"total":     total,
+			"page":      page,
+			"page_size": pageSize,
+		},
+	})
 }
 
-// GetLogByTraceID 根据TraceID获取日志详情
-// @Summary 获取日志详情
-// @Description 根据TraceID获取单条日志的详细信息
-// @Tags 日志管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param traceId path string true "Trace ID"
-// @Success 200 {object} models.RequestLog
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
-// @Router /admin/api/logs/{traceId} [get]
-func (h *LogHandler) GetLogByTraceID(c *gin.Context) {
-	traceID := c.Param("traceId")
+// GetLogDetail 获取日志详情
+// GET /admin/api/logs/:trace_id
+func (h *LogHandler) GetLogDetail(c *gin.Context) {
+	traceID := c.Param("trace_id")
 	if traceID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "trace_id is required",
@@ -114,123 +91,32 @@ func (h *LogHandler) GetLogByTraceID(c *gin.Context) {
 		return
 	}
 
-	log, err := h.logQueryService.GetByTraceID(c.Request.Context(), traceID)
+	log, err := h.requestLogRepo.FindMainByTraceID(c.Request.Context(), traceID)
 	if err != nil {
-		h.logger.Error("failed to get log by trace_id",
-			slog.String("trace_id", traceID),
-			slog.String("error", err.Error()),
-		)
+		h.logger.Error("查询日志详情失败", slog.String("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to get log",
+			"error": "Failed to query log detail",
 		})
 		return
 	}
 
 	if log == nil {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "log not found",
+			"error": "Log not found",
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, log)
+	c.JSON(http.StatusOK, gin.H{
+		"data": log,
+	})
 }
 
-// GetLogsByTraceID 根据TraceID获取所有相关日志（包括重试记录）
-// @Summary 获取调用过程日志列表
-// @Description 根据TraceID获取所有相关的日志记录，包括重试记录，按时间倒序排列
-// @Tags 日志管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param traceId path string true "Trace ID"
-// @Success 200 {array} models.RequestLog
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
-// @Router /admin/api/logs/{traceId}/timeline [get]
-func (h *LogHandler) GetLogsByTraceID(c *gin.Context) {
-	traceID := c.Param("traceId")
-	if traceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "trace_id is required",
-		})
-		return
-	}
-
-	logs, err := h.logQueryService.GetLogsByTraceID(c.Request.Context(), traceID)
-	if err != nil {
-		h.logger.Error("failed to get logs by trace_id",
-			slog.String("trace_id", traceID),
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to get logs",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, logs)
-}
-
-// GetStatistics 获取日志统计信息
-// @Summary 获取统计信息
-// @Description 获取指定时间范围内的日志统计信息
-// @Tags 日志管理
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param start_time query string false "开始时间" format(datetime)
-// @Param end_time query string false "结束时间" format(datetime)
-// @Success 200 {object} admin.LogStatistics
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
-// @Router /admin/api/logs/statistics [get]
-func (h *LogHandler) GetStatistics(c *gin.Context) {
-	var startTime, endTime *time.Time
-
-	// 解析时间参数
-	if startTimeStr := c.Query("start_time"); startTimeStr != "" {
-		parsedTime, err := time.Parse(time.RFC3339, startTimeStr)
-		if err == nil {
-			startTime = &parsedTime
-		}
-	}
-	if endTimeStr := c.Query("end_time"); endTimeStr != "" {
-		parsedTime, err := time.Parse(time.RFC3339, endTimeStr)
-		if err == nil {
-			endTime = &parsedTime
-		}
-	}
-
-	// 默认查询最近24小时
-	if startTime == nil && endTime == nil {
-		now := time.Now()
-		dayAgo := now.Add(-24 * time.Hour)
-		startTime = &dayAgo
-		endTime = &now
-	}
-
-	stats, err := h.logQueryService.GetStatistics(c.Request.Context(), startTime, endTime)
-	if err != nil {
-		h.logger.Error("failed to get statistics",
-			slog.String("error", err.Error()),
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to get statistics",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, stats)
-}
-
-// RegisterRoutes 注册日志路由
-func (h *LogHandler) RegisterRoutes(r *gin.RouterGroup) {
-	logs := r.Group("/logs")
+// RegisterRoutes 注册路由
+func (h *LogHandler) RegisterRoutes(router *gin.RouterGroup) {
+	logs := router.Group("/logs")
 	{
-		logs.GET("", h.QueryLogs)
-		logs.GET("/statistics", h.GetStatistics)
-		logs.GET("/:traceId", h.GetLogByTraceID)
-		logs.GET("/:traceId/timeline", h.GetLogsByTraceID)
+		logs.GET("", h.ListLogs)
+		logs.GET("/:trace_id", h.GetLogDetail)
 	}
 }

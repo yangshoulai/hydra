@@ -6,18 +6,19 @@ import (
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/repository"
+	"github.com/yangshoulai/hydra/internal/service/circuit"
 )
 
-// DashboardService 仪表盘指标计算服务
+// DashboardService 仪表盘服务
 type DashboardService struct {
-	logger                  *slog.Logger
-	requestLogRepo          *repository.RequestLogRepository
-	channelRepo             *repository.ChannelRepository
-	keyRepo                 *repository.KeyRepository
-	qpsAggregator           *QPSAggregator
-	successRateCalculator   *SuccessRateCalculator
-	channelHealthAggregator *ChannelHealthAggregator
-	modelStatsAggregator    *ModelStatsAggregator
+	logger                *slog.Logger
+	qpsAggregator         *QPSAggregator
+	successRateCalculator *SuccessRateCalculator
+	modelStatsAggregator  *ModelStatsAggregator
+	requestLogRepo        *repository.RequestLogRepository
+	channelRepo           *repository.ChannelRepository
+	keyRepo               *repository.KeyRepository
+	circuitManager        *circuit.Manager
 }
 
 // NewDashboardService 创建仪表盘服务
@@ -26,188 +27,185 @@ func NewDashboardService(
 	requestLogRepo *repository.RequestLogRepository,
 	channelRepo *repository.ChannelRepository,
 	keyRepo *repository.KeyRepository,
+	circuitManager *circuit.Manager,
 ) *DashboardService {
-	qpsAggregator := NewQPSAggregator(logger, requestLogRepo)
-	successRateCalculator := NewSuccessRateCalculator(logger, requestLogRepo)
-	channelHealthAggregator := NewChannelHealthAggregator(logger, channelRepo, keyRepo, requestLogRepo)
-	modelStatsAggregator := NewModelStatsAggregator(logger, requestLogRepo)
-
 	return &DashboardService{
-		logger:                  logger,
-		requestLogRepo:          requestLogRepo,
-		channelRepo:             channelRepo,
-		keyRepo:                 keyRepo,
-		qpsAggregator:           qpsAggregator,
-		successRateCalculator:   successRateCalculator,
-		channelHealthAggregator: channelHealthAggregator,
-		modelStatsAggregator:    modelStatsAggregator,
+		logger:                logger,
+		qpsAggregator:         NewQPSAggregator(logger, requestLogRepo),
+		successRateCalculator: NewSuccessRateCalculator(logger, requestLogRepo),
+		modelStatsAggregator:  NewModelStatsAggregator(logger, requestLogRepo),
+		requestLogRepo:        requestLogRepo,
+		channelRepo:           channelRepo,
+		keyRepo:               keyRepo,
+		circuitManager:        circuitManager,
 	}
 }
 
 // DashboardMetrics 仪表盘指标
 type DashboardMetrics struct {
-	// QPS 相关
-	CurrentQPS    float64        `json:"current_qps"`
-	QPSTimeSeries []QPSDataPoint `json:"qps_time_series"`
-
-	// 成功率相关
-	TodaySuccessRate *SuccessRateStats `json:"today_success_rate"`
-
-	// 渠道健康相关
-	OverallHealth     *OverallHealthStatus `json:"overall_health"`
-	ChannelHealthList []ChannelHealthInfo  `json:"channel_health_list"`
-
-	// 模型统计
-	ModelStats *ModelStats `json:"model_stats"`
-
-	// 系统概览
-	TotalRequestsToday int       `json:"total_requests_today"`
-	TotalChannels      int       `json:"total_channels"`
-	TotalKeys          int       `json:"total_keys"`
-	ActiveChannels     int       `json:"active_channels"`
-	GeneratedAt        time.Time `json:"generated_at"`
+	CurrentQPS         float64                 `json:"current_qps"`
+	SuccessRate        float64                 `json:"success_rate"`
+	TotalRequests      int                     `json:"total_requests"`
+	ActiveModels       int                     `json:"active_models"`
+	ActiveChannels     int                     `json:"active_channels"`
+	TotalChannels      int                     `json:"total_channels"`
+	ModelStats         *ModelStats             `json:"model_stats"`
+	QPSTrend           []QPSDataPoint          `json:"qps_trend"`
+	ChannelHealthList  []ChannelHealthMetrics  `json:"channel_health_list"`
 }
 
 // GetMetrics 获取仪表盘指标
-func (ds *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, error) {
-	ds.logger.Debug("生成仪表板指标")
-
-	startTime := time.Now()
-	metrics := &DashboardMetrics{
-		GeneratedAt: startTime,
-	}
-
-	// 1. 获取当前 QPS
-	currentQPS, err := ds.qpsAggregator.GetCurrentQPS(ctx)
+func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, error) {
+	qps, err := s.qpsAggregator.GetCurrentQPS(ctx)
 	if err != nil {
-		ds.logger.Warn("failed to get current QPS", slog.String("error", err.Error()))
-	} else {
-		metrics.CurrentQPS = currentQPS
-	}
-
-	// 2. 获取过去 1 小时的 QPS 时间序列
-	qpsTimeSeries, err := ds.qpsAggregator.AggregateLastHour(ctx)
-	if err != nil {
-		ds.logger.Warn("failed to get QPS time series", slog.String("error", err.Error()))
-	} else {
-		metrics.QPSTimeSeries = qpsTimeSeries
-	}
-
-	// 3. 获取今日成功率
-	todaySuccessRate, err := ds.successRateCalculator.CalculateTodaySuccessRate(ctx)
-	if err != nil {
-		ds.logger.Warn("failed to get today success rate", slog.String("error", err.Error()))
-	} else {
-		metrics.TodaySuccessRate = todaySuccessRate
-		metrics.TotalRequestsToday = todaySuccessRate.TotalRequests
-	}
-
-	// 4. 获取渠道健康状态
-	overallHealth, err := ds.channelHealthAggregator.GetOverallHealthStatus(ctx)
-	if err != nil {
-		ds.logger.Warn("failed to get overall health status", slog.String("error", err.Error()))
-	} else {
-		metrics.OverallHealth = overallHealth
-		metrics.TotalChannels = overallHealth.TotalChannels
-		metrics.TotalKeys = overallHealth.TotalKeys
-		metrics.ActiveChannels = overallHealth.TotalChannels
-	}
-
-	// 5. 获取所有渠道的详细健康信息
-	channelHealthList, err := ds.channelHealthAggregator.AggregateAllChannels(ctx)
-	if err != nil {
-		ds.logger.Warn("failed to get channel health list", slog.String("error", err.Error()))
-	} else {
-		metrics.ChannelHealthList = channelHealthList
-	}
-
-	// 6. 获取模型统计
-	modelStats, err := ds.modelStatsAggregator.GetTodayModelStats(ctx)
-	if err != nil {
-		ds.logger.Warn("failed to get model stats", slog.String("error", err.Error()))
-	} else {
-		metrics.ModelStats = modelStats
-	}
-
-	duration := time.Since(startTime)
-	ds.logger.Debug("仪表板指标生成完成",
-		slog.Duration("generation_time", duration),
-	)
-
-	return metrics, nil
-}
-
-// GetQPSMetrics 获取 QPS 相关指标
-func (ds *DashboardService) GetQPSMetrics(ctx context.Context) (*QPSMetrics, error) {
-	currentQPS, err := ds.qpsAggregator.GetCurrentQPS(ctx)
-	if err != nil {
+		s.logger.Error("failed to get current QPS", slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	qpsTimeSeries, err := ds.qpsAggregator.AggregateLastHour(ctx)
+	successRateStats, err := s.successRateCalculator.CalculateTodaySuccessRate(ctx)
 	if err != nil {
+		s.logger.Error("failed to calculate success rate", slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	return &QPSMetrics{
-		CurrentQPS:    currentQPS,
-		QPSTimeSeries: qpsTimeSeries,
+	modelStats, err := s.modelStatsAggregator.GetTodayModelStats(ctx)
+	if err != nil {
+		s.logger.Error("failed to get model stats", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	activeChannels, err := s.channelRepo.FindActive(ctx)
+	if err != nil {
+		s.logger.Error("failed to get active channels", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	allChannels, err := s.channelRepo.FindAll(ctx)
+	if err != nil {
+		s.logger.Error("failed to get all channels", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	qpsTrend, err := s.qpsAggregator.AggregateLastHour(ctx)
+	if err != nil {
+		s.logger.Error("failed to get QPS trend", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	channelStats, err := s.GetChannelHealthMetrics(ctx)
+	if err != nil {
+		s.logger.Error("failed to get channel stats", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	return &DashboardMetrics{
+		CurrentQPS:        qps,
+		SuccessRate:       successRateStats.SuccessRate,
+		TotalRequests:     successRateStats.TotalRequests,
+		ActiveModels:      modelStats.ActiveModels,
+		ActiveChannels:    len(activeChannels),
+		TotalChannels:     len(allChannels),
+		ModelStats:        modelStats,
+		QPSTrend:          qpsTrend,
+		ChannelHealthList: channelStats,
 	}, nil
 }
 
-// QPSMetrics QPS 指标
-type QPSMetrics struct {
-	CurrentQPS    float64        `json:"current_qps"`
-	QPSTimeSeries []QPSDataPoint `json:"qps_time_series"`
+// GetQPSMetrics 获取 QPS 指标
+func (s *DashboardService) GetQPSMetrics(ctx context.Context) ([]QPSDataPoint, error) {
+	return s.qpsAggregator.AggregateLastHour(ctx)
 }
 
-// GetSuccessRateMetrics 获取成功率相关指标
-func (ds *DashboardService) GetSuccessRateMetrics(ctx context.Context) (*SuccessRateMetrics, error) {
-	todaySuccessRate, err := ds.successRateCalculator.CalculateTodaySuccessRate(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// 按渠道统计成功率
-	now := time.Now()
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	channelSuccessRates, err := ds.successRateCalculator.CalculateSuccessRateByChannel(ctx, startOfDay, now)
-	if err != nil {
-		ds.logger.Warn("failed to calculate success rate by channel", slog.String("error", err.Error()))
-	}
-
-	return &SuccessRateMetrics{
-		TodaySuccessRate:    todaySuccessRate,
-		ChannelSuccessRates: channelSuccessRates,
-	}, nil
-}
-
-// SuccessRateMetrics 成功率指标
-type SuccessRateMetrics struct {
-	TodaySuccessRate    *SuccessRateStats          `json:"today_success_rate"`
-	ChannelSuccessRates map[uint]*SuccessRateStats `json:"channel_success_rates,omitempty"`
-}
-
-// GetChannelHealthMetrics 获取渠道健康相关指标
-func (ds *DashboardService) GetChannelHealthMetrics(ctx context.Context) (*ChannelHealthMetrics, error) {
-	overallHealth, err := ds.channelHealthAggregator.GetOverallHealthStatus(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	channelHealthList, err := ds.channelHealthAggregator.AggregateAllChannels(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ChannelHealthMetrics{
-		OverallHealth:     overallHealth,
-		ChannelHealthList: channelHealthList,
-	}, nil
+// GetSuccessRateMetrics 获取成功率指标
+func (s *DashboardService) GetSuccessRateMetrics(ctx context.Context) (*SuccessRateStats, error) {
+	return s.successRateCalculator.CalculateTodaySuccessRate(ctx)
 }
 
 // ChannelHealthMetrics 渠道健康指标
 type ChannelHealthMetrics struct {
-	OverallHealth     *OverallHealthStatus `json:"overall_health"`
-	ChannelHealthList []ChannelHealthInfo  `json:"channel_health_list"`
+	ChannelID        uint    `json:"channel_id"`
+	ChannelName      string  `json:"channel_name"`
+	Status           string  `json:"status"`
+	TotalRequests    int     `json:"total_requests"`
+	SuccessRequests  int     `json:"success_requests"`
+	FailedRequests   int     `json:"failed_requests"`
+	SuccessRate      float64 `json:"success_rate"`
+	HealthyKeys      int     `json:"healthy_keys"`
+	TotalKeys        int     `json:"total_keys"`
+	HealthPercentage float64 `json:"health_percentage"`
+	Priority         int     `json:"priority"`
+	Weight           int     `json:"weight"`
+}
+
+// GetChannelHealthMetrics 获取渠道健康指标
+func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]ChannelHealthMetrics, error) {
+	channels, err := s.channelRepo.FindAll(ctx)
+	if err != nil {
+		s.logger.Error("failed to get channels", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	channelStatsMap, err := s.successRateCalculator.CalculateSuccessRateByChannel(ctx,
+		s.getTodayStartTime(), s.getCurrentTime())
+	if err != nil {
+		s.logger.Error("failed to calculate channel success rate", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	metrics := make([]ChannelHealthMetrics, 0, len(channels))
+	for _, channel := range channels {
+		stats := channelStatsMap[channel.ID]
+		if stats == nil {
+			stats = &SuccessRateStats{}
+		}
+
+		// 获取渠道的所有密钥
+		keys, err := s.keyRepo.FindByChannelID(ctx, channel.ID)
+		if err != nil {
+			s.logger.Error("failed to get keys for channel",
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("error", err.Error()))
+			continue
+		}
+
+		// 统计健康密钥数（active 状态）
+		healthyKeys := 0
+		for _, key := range keys {
+			if key.Status == "active" {
+				healthyKeys++
+			}
+		}
+
+		// 计算健康度百分比
+		healthPercentage := 0.0
+		if len(keys) > 0 {
+			healthPercentage = float64(healthyKeys) / float64(len(keys)) * 100
+		}
+
+		metrics = append(metrics, ChannelHealthMetrics{
+			ChannelID:        channel.ID,
+			ChannelName:      channel.Name,
+			Status:           channel.Status,
+			TotalRequests:    stats.TotalRequests,
+			SuccessRequests:  stats.SuccessRequests,
+			FailedRequests:   stats.FailedRequests,
+			SuccessRate:      stats.SuccessRate,
+			HealthyKeys:      healthyKeys,
+			TotalKeys:        len(keys),
+			HealthPercentage: healthPercentage,
+			Priority:         channel.Priority,
+			Weight:           channel.Weight,
+		})
+	}
+
+	return metrics, nil
+}
+
+func (s *DashboardService) getTodayStartTime() time.Time {
+	now := time.Now().UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func (s *DashboardService) getCurrentTime() time.Time {
+	return time.Now().UTC()
 }

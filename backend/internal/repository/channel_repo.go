@@ -56,7 +56,7 @@ func (r *ChannelRepository) FindActive(ctx context.Context) ([]*models.Channel, 
 	err := r.db.WithContext(ctx).
 		Where("status = ?", "active").
 		Preload("Keys", "status = ?", "active").
-		Preload("ModelConfigs", "enabled = ?", true).
+		Preload("ModelConfigs", "status = ?", "active").
 		Order("priority ASC, weight DESC").
 		Find(&channels).Error
 	return channels, err

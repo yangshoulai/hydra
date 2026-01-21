@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/service/config"
@@ -172,7 +173,9 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 	c *gin.Context,
 	upstreamResp *http.Response,
 	traceID string,
-) (string, error) {
+) (string, int, int, error) {
+	startTime := time.Now()
+
 	// 设置响应头
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -184,15 +187,18 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
 		sf.logger.Error("response writer does not support flushing")
-		return "", io.ErrUnexpectedEOF
+		return "", 0, 0, io.ErrUnexpectedEOF
 	}
 
 	// 1. 检测首帧
 	firstFrame, err := sf.DetectFirstFrame(upstreamResp)
 	if err != nil {
 		sf.logger.Error("检测SSE首帧失败", slog.String("trace_id", traceID), slog.String("error", err.Error()))
-		return "", err
+		return "", 0, 0, err
 	}
+
+	// 计算首帧响应时间（毫秒）
+	firstChunkTime := int(time.Since(startTime).Milliseconds())
 
 	// 2. 如果首帧包含错误，返回错误
 	if firstFrame.ContainsError {
@@ -201,7 +207,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 			slog.String("error_type", firstFrame.ErrorType),
 			slog.Int("first_frame_size", len(firstFrame.FirstChunk)),
 		)
-		return string(firstFrame.FirstChunk), &Fake200Error{
+		return string(firstFrame.FirstChunk), 0, firstChunkTime, &Fake200Error{
 			TraceID: traceID,
 			Message: "fake 200 in SSE first frame",
 			Body:    string(firstFrame.FirstChunk),
@@ -219,7 +225,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 				slog.String("trace_id", traceID),
 				slog.String("error", err.Error()),
 			)
-			return string(firstFrame.FirstChunk), err
+			return string(firstFrame.FirstChunk), 0, firstChunkTime, err
 		}
 		flusher.Flush()
 	}
@@ -228,7 +234,8 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 	var captureBuffer bytes.Buffer
 	const maxCaptureLength = 10 * 1024 * 1024
 	bytesSent := len(firstFrame.FirstChunk)
-	eventCount := 0
+	chunkCount := 0
+	var lineBuffer bytes.Buffer
 
 	buf := make([]byte, 1)
 	for firstFrame.HasMoreData {
@@ -238,11 +245,11 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 				sf.logger.Info("SSE流正常完成",
 					slog.String("trace_id", traceID),
 					slog.Int("bytes_sent", bytesSent),
-					slog.Int("event_count", eventCount),
+					slog.Int("chunk_count", chunkCount),
 				)
 				break
 			}
-			return captureBuffer.String(), err
+			return captureBuffer.String(), chunkCount, firstChunkTime, err
 		}
 
 		if n == 0 {
@@ -258,12 +265,22 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 				slog.String("trace_id", traceID),
 				slog.String("error", err.Error()),
 			)
-			return captureBuffer.String(), err
+			return captureBuffer.String(), chunkCount, firstChunkTime, err
 		}
 
 		// 捕获内容
 		if captureBuffer.Len() < maxCaptureLength {
 			captureBuffer.WriteByte(ch)
+		}
+
+		// 统计 chunk 数量（遇到 data: 行就计数）
+		lineBuffer.WriteByte(ch)
+		if ch == '\n' {
+			line := strings.TrimSpace(lineBuffer.String())
+			if strings.HasPrefix(line, "data:") {
+				chunkCount++
+			}
+			lineBuffer.Reset()
 		}
 
 		// 立即刷新
@@ -276,7 +293,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 				slog.String("trace_id", traceID),
 				slog.Int("bytes_sent", bytesSent),
 			)
-			return captureBuffer.String(), c.Request.Context().Err()
+			return captureBuffer.String(), chunkCount, firstChunkTime, c.Request.Context().Err()
 		default:
 		}
 	}
@@ -286,7 +303,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 		capturedContent += "...(truncated)"
 	}
 
-	return capturedContent, nil
+	return capturedContent, chunkCount, firstChunkTime, nil
 }
 
 // truncateString 截断字符串（使用 sse_forwarder.go 中的实现）

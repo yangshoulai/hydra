@@ -57,8 +57,8 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 
 	// 统计活跃模型数（今日有请求的不同模型数）
 	var activeModels int64
-	if err := db.Model(&models.RequestLog{}).
-		Where("created_at >= ?", startOfDayUTC).
+	if err := db.Model(&models.RequestLogMain{}).
+		Where("start_time >= ?", startOfDayUTC).
 		Where("unified_model != ''").
 		Distinct("unified_model").
 		Count(&activeModels).Error; err != nil {
@@ -69,8 +69,8 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 
 	// 统计今日模型请求总数
 	var totalRequests int64
-	if err := db.Model(&models.RequestLog{}).
-		Where("created_at >= ?", startOfDayUTC).
+	if err := db.Model(&models.RequestLogMain{}).
+		Where("start_time >= ?", startOfDayUTC).
 		Where("unified_model != ''").
 		Count(&totalRequests).Error; err != nil {
 		m.logger.Error("failed to count total requests", slog.String("error", err.Error()))
@@ -80,8 +80,8 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 
 	// 统计成功请求数
 	var successRequests int64
-	if err := db.Model(&models.RequestLog{}).
-		Where("created_at >= ?", startOfDayUTC).
+	if err := db.Model(&models.RequestLogMain{}).
+		Where("start_time >= ?", startOfDayUTC).
 		Where("unified_model != ''").
 		Where("is_success = ?", true).
 		Count(&successRequests).Error; err != nil {
@@ -100,9 +100,9 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 		SuccessRequests int64
 	}
 	var modelStats []modelStat
-	if err := db.Model(&models.RequestLog{}).
+	if err := db.Model(&models.RequestLogMain{}).
 		Select("unified_model as model_name, COUNT(*) as total_requests, SUM(CASE WHEN is_success = true THEN 1 ELSE 0 END) as success_requests").
-		Where("created_at >= ?", startOfDayUTC).
+		Where("start_time >= ?", startOfDayUTC).
 		Where("unified_model != ''").
 		Group("unified_model").
 		Order("total_requests DESC").

@@ -9,9 +9,9 @@
         :data="logs"
         :loading="loading"
         :pagination="false"
-        :row-key="(row: RequestLog) => row.id"
+        :row-key="(row: RequestLogMain) => row.id"
         :row-props="rowProps"
-        :scroll-x="1680"
+        :scroll-x="1720"
         :single-line="false"
         striped
     />
@@ -28,26 +28,25 @@
     </div>
   </div>
 
-  <!-- 日志详情抽屉 -->
+  <!-- 日志详情抽屉（新版，带 Timeline） -->
   <LogDetailDrawer
-      v-model:show="showDetailDrawer"
-      :log="selectedLog"
+      v-model="showDetailDrawer"
+      :trace-id="selectedTraceId"
   />
 </template>
 
 <script setup lang="ts">
 import {h, onMounted, reactive, ref} from 'vue'
-import {type DataTableColumns, NButton, NDataTable, NPagination, NTag, NText, NTime} from 'naive-ui'
-import {EyeOutline} from '@vicons/ionicons5'
+import {type DataTableColumns, NDataTable, NPagination, NTag, NText, NTime} from 'naive-ui'
 import {logApi} from '../services/logService'
-import type {LogQueryRequest, RequestLog} from '../types/log'
+import type {LogQueryRequest, RequestLogMain} from '../types/log'
 import LogFilter from '../components/LogFilter.vue'
 import LogDetailDrawer from '../components/LogDetailDrawer.vue'
 
 // State
-const logs = ref<RequestLog[]>([])
+const logs = ref<RequestLogMain[]>([])
 const loading = ref(false)
-const selectedLog = ref<RequestLog | null>(null)
+const selectedTraceId = ref<string>('')
 const showDetailDrawer = ref(false)
 
 // 当前筛选条件
@@ -72,7 +71,7 @@ const pagination = reactive({
 })
 
 // 表格行属性（支持点击行查看详情）
-const rowProps = (row: RequestLog) => {
+const rowProps = (row: RequestLogMain) => {
   return {
     style: 'cursor: pointer;',
     onClick: () => {
@@ -82,11 +81,11 @@ const rowProps = (row: RequestLog) => {
 }
 
 // 表格列定义
-const columns: DataTableColumns<RequestLog> = [
+const columns: DataTableColumns<RequestLogMain> = [
   {
     title: 'ID',
     key: 'id',
-    width: 120,
+    width: 80,
     align: 'left',
     render(row) {
       return h(NText, {depth: 3}, {default: () => `#${row.id}`})
@@ -98,22 +97,31 @@ const columns: DataTableColumns<RequestLog> = [
     width: 160,
     align: 'center',
     render(row) {
-      return h(NText, {code: true}, {default: () => row.trace_id.substring(0, 16)})
+      return h(NText, {code: true}, {default: () => row.trace_id.substring(0, 13)})
     }
   },
   {
-    title: '请求时间',
-    key: 'created_at',
+    title: '开始时间',
+    key: 'start_time',
     width: 200,
     align: 'center',
     render(row) {
-      return h(NTime, {time: new Date(row.created_at), format: 'yyyy-MM-dd HH:mm:ss'})
+      return h(NTime, {time: new Date(row.start_time), format: 'yyyy-MM-dd HH:mm:ss'})
+    }
+  },
+  {
+    title: '结束时间',
+    key: 'end_time',
+    width: 200,
+    align: 'center',
+    render(row) {
+      return h(NTime, {time: new Date(row.end_time), format: 'yyyy-MM-dd HH:mm:ss'})
     }
   },
   {
     title: '状态',
     key: 'is_success',
-    width: 120,
+    width: 80,
     align: 'center',
     render(row) {
       return h(NTag, {
@@ -125,98 +133,89 @@ const columns: DataTableColumns<RequestLog> = [
     }
   },
   {
-    title: '响应时间（秒）',
-    key: 'response_time',
-    width: 160,
+    title: '端点类型',
+    key: 'endpoint_type',
+    width: 120,
+    align: 'center',
+    ellipsis: {
+      tooltip: true
+    },
+    render(row) {
+      return h(NText, {depth: 3}, {default: () => row.endpoint_type || '-'})
+    }
+  },
+  {
+    title: '流式',
+    key: 'is_stream',
+    width: 120,
+    align: 'center',
+    render(row) {
+      return h(NTag, {
+        type: row.is_stream ? 'info' : 'default',
+        size: 'small'
+      }, {
+        default: () => row.is_stream ? '流式' : '非流式'
+      })
+    }
+  },
+  {
+    title: '耗时',
+    key: 'duration',
+    width: 80,
     align: 'right',
     render(row) {
-      const seconds = (row.response_time / 1000).toFixed(2)
-      const color = row.response_time < 5000 ? 'success' : row.response_time < 10000 ? 'warning' : 'error'
+      const seconds = (row.duration / 1000).toFixed(2)
+      const color = row.duration < 5000 ? 'success' : row.duration < 10000 ? 'warning' : 'error'
       return h(NTag, {type: color, size: 'small'}, {default: () => `${seconds}s`})
     }
   },
   {
-    title: '方法',
-    key: 'request_method',
-    width: 120,
+    title: '重试',
+    key: 'retry_count',
+    width: 80,
     align: 'center',
     render(row) {
-      const types: Record<string, any> = {
-        GET: 'info',
-        POST: 'success',
-        PUT: 'warning',
-        DELETE: 'error'
+      if (row.retry_count === 0) {
+        return h(NText, {depth: 3}, {default: () => '0'})
       }
-      return h(NTag, {type: types[row.request_method] || 'default', size: 'small'}, {
-        default: () => row.request_method
-      })
+      return h(NTag, {type: 'warning', size: 'small'}, {default: () => row.retry_count})
     }
   },
   {
     title: '请求模型',
     key: 'requested_model',
+    width: 160,
+    ellipsis: {
+      tooltip: true
+    }
+  },
+  {
+    title: '最后渠道',
+    key: 'last_channel_name',
+    width: 160,
+    ellipsis: {
+      tooltip: true
+    },
+    render(row) {
+      return h(NText, {}, {default: () => row.last_channel_name || '-'})
+    }
+  },
+  {
+    title: '最后模型',
+    key: 'last_model',
     width: 200,
     ellipsis: {
       tooltip: true
     }
   },
   {
-    title: '上游模型',
-    key: 'upstream_model',
-    width: 240,
-    ellipsis: {
-      tooltip: true
-    },
-    render(row) {
-      return h(NText, {}, {default: () => row.upstream_model || '-'})
-    }
-  },
-  {
-    title: '渠道',
-    key: 'channel_name',
-    width: 160,
-    ellipsis: {
-      tooltip: true
-    },
-    render(row) {
-      return h(NText, {}, {default: () => row.channel_name || '-'})
-    }
-  },
-  {
     title: '状态码',
     key: 'status_code',
-    width: 120,
+    width: 80,
     align: 'center',
     render(row) {
       const type = row.status_code >= 200 && row.status_code < 300 ? 'success' : 'error'
       return h(NTag, {type, size: 'small'}, {default: () => row.status_code})
-    }
-  },
-
-
-  {
-    title: '操作',
-    key: 'actions',
-    width: 80,
-    align: 'center',
-    fixed: 'right',
-    render(row) {
-      return h(
-          NButton,
-          {
-            size: 'small',
-            text: true,
-            type: 'primary',
-            onClick: (e: Event) => {
-              e.stopPropagation()
-              handleViewDetail(row)
-            }
-          },
-          {
-            icon: () => h(EyeOutline),
-            default: () => '查看'
-          }
-      )
     }
   }
 ]
@@ -230,8 +229,8 @@ async function fetchLogs() {
       page_size: pagination.pageSize,
       ...currentFilters.value
     }
-    const result = await logApi.query(params)
-    logs.value = result.logs
+    const result = await logApi.list(params)
+    logs.value = result.items
     pagination.itemCount = result.total
   } catch (error: any) {
     console.error('Failed to fetch logs:', error)
@@ -242,15 +241,15 @@ async function fetchLogs() {
 }
 
 // 处理筛选条件变化
-function handleFilter(filters: LogQueryRequest) {
+function handleFilter(filters: any) {
   currentFilters.value = {...filters}
   pagination.page = 1
   fetchLogs()
 }
 
 // 查看详情
-function handleViewDetail(log: RequestLog) {
-  selectedLog.value = log
+function handleViewDetail(log: RequestLogMain) {
+  selectedTraceId.value = log.trace_id
   showDetailDrawer.value = true
 }
 
@@ -261,6 +260,4 @@ onMounted(() => {
 </script>
 
 <style scoped>
-
-
 </style>

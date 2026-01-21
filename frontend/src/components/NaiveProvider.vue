@@ -1,6 +1,9 @@
 <template>
-  <n-config-provider :theme-overrides="themeOverrides" :inline-theme-disabled="false" :locale="zhCN"
-                     :date-locale="dateZhCN">
+  <n-config-provider
+      :theme-overrides="themeOverrides"
+      :inline-theme-disabled="false"
+      :locale="zhCN"
+      :date-locale="dateZhCN">
     <n-message-provider>
       <n-dialog-provider>
         <n-notification-provider>
@@ -45,9 +48,7 @@ const GlobalHooks = defineComponent({
 
 // Naive UI 主题覆盖配置 - 清新简约、高端大气
 const themeOverrides: GlobalThemeOverrides = {
-  common: {
-
-  },
+  common: {},
 
   // 布局
   Layout: {

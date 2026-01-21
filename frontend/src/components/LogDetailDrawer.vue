@@ -1,404 +1,490 @@
 <template>
-  <n-drawer v-model:show="visible" :width="1200" placement="right" class="log-detail-drawer">
-    <n-drawer-content :title="title" closable>
-      <template v-if="log">
-        <n-space vertical :size="24">
-          <!-- 基本信息卡片 -->
-          <n-card title="基本信息" size="small" :bordered="false" class="detail-section">
-            <n-descriptions bordered :column="3" size="small">
-              <n-descriptions-item label="日志ID" :span="1">
-                <n-text strong>#{{ log.id }}</n-text>
-              </n-descriptions-item>
-              <n-descriptions-item label="Trace ID" :span="1">
-                <n-space align="center">
-                  <n-text code style="font-size: 13px">{{ log.trace_id }}</n-text>
-                  <TraceIdCopy :trace-id="log.trace_id"/>
-                </n-space>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="创建时间" :span="1">
-                <n-space align="center">
-                  <n-icon>
+  <n-drawer v-model:show="show" :width="1000" placement="right">
+    <n-drawer-content :title="`日志详情 - ${log?.trace_id || ''}`" closable>
+      <n-spin :show="loading">
+        <n-space vertical :size="20" v-if="log">
+          <!-- 统计卡片 -->
+          <n-grid :cols="5" :x-gap="12" responsive="screen">
+            <n-gi>
+              <n-statistic label="总耗时" :value="(log.duration / 1000).toFixed(2) + 's'">
+                <template #prefix>
+                  <n-icon color="#60a5fa">
                     <TimeIcon/>
                   </n-icon>
-                  <n-text>{{ formatTime(log.created_at) }}</n-text>
-                </n-space>
+                </template>
+              </n-statistic>
+            </n-gi>
+            <n-gi>
+              <n-statistic label="重试次数" :value="log.retry_count">
+                <template #prefix>
+                  <n-icon :color="log.retry_count > 0 ? '#f59e0b' : '#10b981'">
+                    <RefreshIcon/>
+                  </n-icon>
+                </template>
+              </n-statistic>
+            </n-gi>
+            <n-gi>
+              <n-statistic label="请求大小" :value="formatBytes(totalRequestSize)">
+                <template #prefix>
+                  <n-icon color="#8b5cf6">
+                    <UploadIcon/>
+                  </n-icon>
+                </template>
+              </n-statistic>
+            </n-gi>
+            <n-gi>
+              <n-statistic label="响应大小" :value="formatBytes(totalResponseSize)">
+                <template #prefix>
+                  <n-icon color="#10b981">
+                    <DownloadIcon/>
+                  </n-icon>
+                </template>
+              </n-statistic>
+            </n-gi>
+            <n-gi>
+              <n-statistic label="状态">
+                <template #prefix>
+                  <n-icon color="#10b981">
+                    <GlobeOutline/>
+                  </n-icon>
+                </template>
+
+                <template #default>
+                  {{ log.is_success ? '成功' : '失败' }}
+                </template>
+              </n-statistic>
+            </n-gi>
+          </n-grid>
+
+          <!-- 请求概览表格 -->
+          <n-card title="请求概览" size="small" :bordered="false">
+            <n-descriptions :column="2" label-placement="left" bordered size="small">
+              <n-descriptions-item label="Trace ID" :span="2">
+                <n-text>
+                  <n-text code>
+                    <span>{{ log.trace_id }}</span>
+                  </n-text>
+                  <n-button text size="tiny" @click="copyToClipboard(log.trace_id)">
+                    <template #icon>
+                      <n-icon>
+                        <CopyIcon/>
+                      </n-icon>
+                    </template>
+                  </n-button>
+                </n-text>
               </n-descriptions-item>
 
-              <n-descriptions-item label="统一模型">
-                <n-tag v-if="log.unified_model" type="info" size="small">
-                  {{ log.unified_model }}
-                </n-tag>
-                <n-text v-else depth="3">-</n-text>
+              <n-descriptions-item label="请求模型">
+                <n-tag type="info" size="small">{{ log.requested_model }}</n-tag>
               </n-descriptions-item>
 
-              <n-descriptions-item label="上游模型">
-                <n-tag v-if="log.upstream_model" type="success" size="small">
-                  {{ log.upstream_model }}
-                </n-tag>
-                <n-text v-else depth="3">-</n-text>
+              <n-descriptions-item label="端点类型">
+                <n-tag type="info" size="small">{{ log.endpoint_type }}</n-tag>
               </n-descriptions-item>
 
-              <n-descriptions-item label="渠道">
-                <n-tag v-if="log.channel_name" type="warning" size="small">
-                  {{ log.channel_name }}
-                </n-tag>
-                <n-text v-else depth="3">-</n-text>
+              <!--              <n-descriptions-item label="统一模型">{{ log.unified_model }}</n-descriptions-item>-->
+              <n-descriptions-item label="请求路径">
+                <n-tag type="info" size="small">{{ log.request_path }}</n-tag>
               </n-descriptions-item>
-
-              <n-descriptions-item label="Key ID">
-                <n-text v-if="log.key_id" strong>{{ log.key_id }}</n-text>
-                <n-text v-else depth="3">-</n-text>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="重试次数">
-                <n-tag v-if="log.retry_count > 0" type="warning" size="small" :bordered="false">
-                  {{ log.retry_count }}
-                </n-tag>
-                <n-text v-else depth="3">{{ log.retry_count }}</n-text>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="流式">
-                <n-tag :type="log.is_stream ? 'info' : 'default'" size="small" :bordered="false">
-                  {{ log.is_stream ? '是' : '否' }}
-                </n-tag>
-              </n-descriptions-item>
-            </n-descriptions>
-          </n-card>
-
-          <!-- 请求信息卡片 -->
-          <n-card title="请求信息" size="small" :bordered="false" class="detail-section">
-            <n-descriptions bordered :column="2" size="small">
               <n-descriptions-item label="请求方法">
-                <n-tag :type="getMethodType(log.request_method)" size="medium" :bordered="false">
+                <n-tag :type="getMethodTagType(log.request_method)" size="small">
                   {{ log.request_method }}
                 </n-tag>
               </n-descriptions-item>
-
-              <n-descriptions-item label="请求路径">
-                <n-text code style="font-size: 12px">{{ log.request_path }}</n-text>
-              </n-descriptions-item>
-
-              <n-descriptions-item label="访问令牌" :span="2">
+              <n-descriptions-item label="开始时间">
                 <n-space align="center">
-                  <n-icon size="16" color="#10b981">
-                    <KeyIcon/>
-                  </n-icon>
-                  <n-text code style="font-size: 13px">{{ log.access_token }}</n-text>
+                  <n-text>{{ formatTime(log.start_time) }}</n-text>
                 </n-space>
               </n-descriptions-item>
-
-              <n-descriptions-item v-if="log.request_headers" label="请求头" :span="2">
-                <template #default>
-                  <div class="code-block-wrapper">
-                    <n-button
-                        size="tiny"
-                        quaternary
-                        circle
-                        class="copy-button"
-                        @click="copyToClipboard(formatHeaders(log.request_headers), '请求头')"
-                    >
-                      <template #icon>
-                        <n-icon><CopyIcon/></n-icon>
-                      </template>
-                    </n-button>
-                    <n-code :code="formatHeaders(log.request_headers)" language="json" :word-wrap="true" :hljs="hljs"/>
-                  </div>
-                </template>
+              <n-descriptions-item label="结束时间">
+                <n-text>{{ formatTime(log.end_time) }}</n-text>
               </n-descriptions-item>
-
-              <n-descriptions-item v-if="log.request_body" label="请求体" :span="2">
-                <template #default>
-                  <div class="code-block-wrapper">
-                    <n-button
-                        size="tiny"
-                        quaternary
-                        circle
-                        class="copy-button"
-                        @click="copyToClipboard(formatJSON(log.request_body), '请求体')"
-                    >
-                      <template #icon>
-                        <n-icon><CopyIcon/></n-icon>
-                      </template>
-                    </n-button>
-                    <n-code :code="formatJSON(log.request_body)" language="json" :word-wrap="true" :hljs="hljs"/>
-                  </div>
-                </template>
-              </n-descriptions-item>
-            </n-descriptions>
-          </n-card>
-
-          <!-- 响应信息卡片 -->
-          <n-card title="响应信息" size="small" :bordered="false" class="detail-section">
-            <n-descriptions bordered :column="3" size="small">
               <n-descriptions-item label="状态码">
-                <n-tag :type="getStatusCodeType(log.status_code)" size="medium" :bordered="false">
+                <n-tag :type="getStatusCodeType(log.status_code)" size="small">
                   {{ log.status_code }}
                 </n-tag>
               </n-descriptions-item>
-
-              <n-descriptions-item label="请求状态">
-                <n-tag :type="log.is_success ? 'success' : 'error'" size="medium" :bordered="false">
-                  {{ log.is_success ? '成功' : '失败' }}
+              <n-descriptions-item label="耗时">
+                {{ (log.duration / 1000).toFixed(2) }} 秒
+              </n-descriptions-item>
+              <n-descriptions-item label="流式">
+                <n-tag :type="log.is_stream ? 'info' : 'default'" size="small">
+                  {{ log.is_stream ? '是' : '否' }}
                 </n-tag>
               </n-descriptions-item>
-
-              <n-descriptions-item label="响应时间">
-                <n-tag
-                    :type="getResponseType(log.response_time)"
-                    size="medium"
-                    :bordered="false"
-                >
-                  {{ log.response_time }} ms
-                </n-tag>
-              </n-descriptions-item>
-
-              <n-descriptions-item v-if="log.error_message" label="错误信息" :span="3">
-                <n-alert type="error" :show-icon="true">
-                  {{ log.error_message }}
-                </n-alert>
-              </n-descriptions-item>
-
-              <n-descriptions-item v-if="log.response_headers" label="响应头" :span="3">
-                <template #default>
-                  <div class="code-block-wrapper">
-                    <n-button
-                        size="tiny"
-                        quaternary
-                        circle
-                        class="copy-button"
-                        @click="copyToClipboard(formatHeaders(log.response_headers), '响应头')"
-                    >
-                      <template #icon>
-                        <n-icon><CopyIcon/></n-icon>
-                      </template>
-                    </n-button>
-                    <n-code :code="formatHeaders(log.response_headers)" language="json" :word-wrap="true" :hljs="hljs"/>
-                  </div>
-                </template>
-              </n-descriptions-item>
-
-              <n-descriptions-item v-if="log.response_body" label="响应体" :span="3">
-                <template #default>
-                  <div class="code-block-wrapper">
-                    <n-button
-                        size="tiny"
-                        quaternary
-                        circle
-                        class="copy-button"
-                        @click="copyToClipboard(getFormattedResponseBody(), '响应体')"
-                    >
-                      <template #icon>
-                        <n-icon><CopyIcon/></n-icon>
-                      </template>
-                    </n-button>
-                    <n-code
-                        :code="getFormattedResponseBody()"
-                        :language="getResponseLanguage()"
-                        :word-wrap="true"
-                        :hljs="hljs"
-                    />
-                  </div>
-                </template>
+              <n-descriptions-item label="客户端 IP" :span="2">{{ log.client_ip }}</n-descriptions-item>
+              <n-descriptions-item label="User Agent" :span="2">
+                <n-text depth="3" style="font-size: 12px">{{ log.user_agent }}</n-text>
               </n-descriptions-item>
             </n-descriptions>
           </n-card>
 
-          <!-- 调用过程卡片 -->
-          <n-card title="调用过程" size="small" :bordered="false" class="detail-section">
-            <n-data-table
-                :columns="timelineColumns"
-                :data="timelineData"
-                :pagination="false"
-                :bordered="true"
-                size="small"
-                :row-key="(row: RequestLog) => row.id"
-                :row-props="getRowProps"
-            />
-          </n-card>
-
-          <!-- 客户端信息卡片 -->
-          <n-card title="客户端信息" size="small" :bordered="false" class="detail-section">
-            <n-descriptions bordered :column="2" size="small">
-              <n-descriptions-item label="客户端IP">
-                <n-space align="center">
-                  <n-icon size="16" color="#60a5fa">
-                    <GlobeIcon/>
+          <!-- Timeline 展示重试记录 -->
+          <n-card title="请求流程" size="small" :bordered="false">
+            <n-timeline>
+              <n-timeline-item
+                  v-for="(detail, _) in log.details"
+                  :key="detail.id"
+                  :type="detail.is_success ? 'success' : 'error'"
+                  :title="`${detail.retry_index === 0 ? '首次尝试' : `第 ${detail.retry_index} 次重试`}`"
+                  :time="formatTime(detail.start_time)"
+              >
+                <template #icon>
+                  <n-icon :color="detail.is_success ? '#18a058' : '#d03050'">
+                    <component :is="detail.is_success ? CheckmarkCircleIcon : CloseCircleIcon"/>
                   </n-icon>
-                  <n-text code style="font-size: 13px">{{ log.client_ip || '-' }}</n-text>
-                </n-space>
-              </n-descriptions-item>
+                </template>
 
-              <n-descriptions-item label="User Agent">
-                <n-text depth="2" style="font-size: 12px; word-break: break-all">
-                  {{ log.user_agent || '-' }}
-                </n-text>
-              </n-descriptions-item>
-            </n-descriptions>
+                <n-space vertical :size="16">
+                  <!-- 渠道和模型信息 -->
+                  <n-space align="center" :size="8">
+                    <n-tag type="info" size="small" :bordered="false">
+                      <template #icon>
+                        <n-icon>
+                          <ServerIcon/>
+                        </n-icon>
+                      </template>
+                      {{ detail.channel_name }}
+                    </n-tag>
+                    <n-tag type="primary" size="small" :bordered="false">
+                      <template #icon>
+                        <n-icon>
+                          <CubeIcon/>
+                        </n-icon>
+                      </template>
+                      {{ detail.model }}
+                    </n-tag>
+                    <n-tag :type="detail.is_success ? 'success' : 'error'" size="small" :bordered="false">
+                      <template #icon>
+                        <n-icon>
+                          <GlobeOutline/>
+                        </n-icon>
+                      </template>
+                      {{ detail.status_code }}
+                    </n-tag>
+                    <n-divider vertical/>
+                    <n-text depth="3">
+                      <n-icon>
+                        <TimeIcon/>
+                      </n-icon>
+                      {{ detail.duration }} ms
+                    </n-text>
+                    <n-text depth="3">
+                      <n-icon>
+                        <UploadIcon/>
+                      </n-icon>
+                      {{ formatBytes(detail.request_body_size) }}
+                    </n-text>
+                    <n-text depth="3">
+                      <n-icon>
+                        <DownloadIcon/>
+                      </n-icon>
+                      {{ formatBytes(detail.response_body_size) }}
+                    </n-text>
+                  </n-space>
+
+                  <!-- 错误信息 -->
+                  <n-alert v-if="detail.error_message" type="error" :bordered="false" size="small">
+                    {{ detail.error_message }}
+                  </n-alert>
+
+                  <!-- 详细信息折叠面板 -->
+                  <n-collapse v-if="detail.request_headers || detail.request_body || detail.response_headers || detail.response_body">
+                    <n-collapse-item v-if="detail.request_headers" name="request_headers">
+                      <template #header>
+                        <n-space align="center">
+                          <n-text>
+                            <n-icon color="#60a5fa">
+                              <DocumentTextIcon/>
+                            </n-icon>
+                            <span>请求头</span>
+                          </n-text>
+                        </n-space>
+                      </template>
+                      <div class="code-block-wrapper">
+                        <n-button
+                            size="tiny"
+                            text
+                            class="copy-button"
+                            @click="copyToClipboard(formatHeaders(detail.request_headers))">
+                          <template #icon>
+                            <n-icon>
+                              <CopyIcon/>
+                            </n-icon>
+                          </template>
+                        </n-button>
+                        <n-code
+                            :code="formatHeaders(detail.request_headers)"
+                            language="json"
+                            :show-line-numbers="true"
+                            :word-wrap="true"
+                            :hljs="hljs"
+                        />
+                      </div>
+                    </n-collapse-item>
+
+                    <n-collapse-item v-if="detail.request_body" name="request_body">
+                      <template #header>
+                        <n-space align="center">
+                          <n-text>
+                            <n-icon color="#10b981">
+                              <UploadIcon/>
+                            </n-icon>
+                            <span>请求体</span>
+                            <n-tag size="tiny" type="info" :bordered="false">{{ formatBytes(detail.request_body_size) }}</n-tag>
+                          </n-text>
+                        </n-space>
+                      </template>
+                      <div class="code-block-wrapper">
+                        <n-button
+                            size="tiny"
+                            text
+                            class="copy-button"
+                            @click="copyToClipboard(formatJSON(detail.request_body))"
+                        >
+                          <template #icon>
+                            <n-icon>
+                              <CopyIcon/>
+                            </n-icon>
+                          </template>
+                        </n-button>
+                        <n-code
+                            :code="formatJSON(detail.request_body)"
+                            language="json"
+                            :word-wrap="true"
+                            :hljs="hljs"
+                        />
+                      </div>
+                    </n-collapse-item>
+
+                    <n-collapse-item v-if="detail.response_headers" name="response_headers">
+                      <template #header>
+                        <n-space align="center">
+                          <n-text>
+                            <n-icon color="#f59e0b">
+                              <DocumentTextIcon/>
+                            </n-icon>
+                            <span>响应头</span>
+                          </n-text>
+                        </n-space>
+                      </template>
+                      <div class="code-block-wrapper">
+                        <n-button
+                            size="tiny"
+                            text
+                            class="copy-button"
+                            @click="copyToClipboard(formatHeaders(detail.response_headers))"
+                        >
+                          <template #icon>
+                            <n-icon>
+                              <CopyIcon/>
+                            </n-icon>
+                          </template>
+                        </n-button>
+                        <n-code
+                            :code="formatHeaders(detail.response_headers)"
+                            language="json"
+                            :word-wrap="true"
+                            :hljs="hljs"
+                        />
+                      </div>
+                    </n-collapse-item>
+
+                    <n-collapse-item v-if="detail.response_body" name="response_body">
+                      <template #header>
+                        <n-space align="center">
+                          <n-text>
+                            <n-icon color="#8b5cf6">
+                              <DownloadIcon/>
+                            </n-icon>
+                            <span>响应体</span>
+                            <n-tag size="tiny" type="info" :bordered="false">{{ formatBytes(detail.response_body_size) }}</n-tag>
+                          </n-text>
+                        </n-space>
+                      </template>
+                      <div class="code-block-wrapper">
+                        <n-button
+                            size="tiny"
+                            text
+                            class="copy-button"
+                            @click="copyToClipboard(formatJSON(detail.response_body))"
+                        >
+                          <template #icon>
+                            <n-icon>
+                              <CopyIcon/>
+                            </n-icon>
+                          </template>
+                        </n-button>
+                        <n-code
+                            :code="formatJSON(detail.response_body)"
+                            language="json"
+                            :word-wrap="true"
+                            :hljs="hljs"
+                        />
+                      </div>
+                    </n-collapse-item>
+                  </n-collapse>
+                </n-space>
+              </n-timeline-item>
+            </n-timeline>
           </n-card>
         </n-space>
-      </template>
-
-      <n-empty v-else description="加载中..."/>
+      </n-spin>
     </n-drawer-content>
   </n-drawer>
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, ref, watch, h} from 'vue'
-import {useMessage, type DataTableColumns} from 'naive-ui'
-import {NAlert, NButton, NCard, NCode, NDataTable, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NIcon, NSpace, NTag, NText} from 'naive-ui'
-import {CopyOutline, GlobeOutline, KeyOutline, TimeOutline} from '@vicons/ionicons5'
-import type {RequestLog} from '../types/log'
-import TraceIdCopy from './TraceIdCopy.vue'
+import {computed, ref, watch} from 'vue'
+import {
+  NAlert,
+  NButton,
+  NCard,
+  NCode,
+  NCollapse,
+  NCollapseItem,
+  NDescriptions,
+  NDescriptionsItem,
+  NDivider,
+  NDrawer,
+  NDrawerContent,
+  NGi,
+  NGrid,
+  NIcon,
+  NSpace,
+  NSpin,
+  NStatistic,
+  NTag,
+  NText,
+  NTimeline,
+  NTimelineItem
+} from 'naive-ui'
+import {
+  CheckmarkCircle as CheckmarkCircleIcon,
+  CloseCircle as CloseCircleIcon,
+  CloudDownloadOutline as DownloadIcon,
+  CloudUploadOutline as UploadIcon,
+  Copy as CopyIcon,
+  CubeOutline as CubeIcon,
+  DocumentTextOutline as DocumentTextIcon,
+  GlobeOutline,
+  RefreshOutline as RefreshIcon,
+  ServerOutline as ServerIcon,
+  TimeOutline as TimeIcon,
+} from '@vicons/ionicons5'
 import {logApi} from '../services/logService'
+import type {LogDetailResponse} from '../types/log'
+
+// highlight.js 配置
 import hljs from 'highlight.js/lib/core'
+import javascript from 'highlight.js/lib/languages/javascript'
 import json from 'highlight.js/lib/languages/json'
+import sql from 'highlight.js/lib/languages/sql'
+import xml from 'highlight.js/lib/languages/xml'
+import 'highlight.js/styles/atom-one-dark.css'
 
-// 注册 JSON 语言
+// 注册语言
+hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('json', json)
-
-const message = useMessage()
+hljs.registerLanguage('sql', sql)
+hljs.registerLanguage('xml', xml)
 
 interface Props {
-  log: RequestLog | null
-  show: boolean
-}
-
-interface Emits {
-  (e: 'update:show', value: boolean): void
+  traceId?: string
+  modelValue: boolean
 }
 
 const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+}>()
 
-const TimeIcon = TimeOutline
-const KeyIcon = KeyOutline
-const GlobeIcon = GlobeOutline
-const CopyIcon = CopyOutline
-
-// 调用过程数据
-const timelineData = ref<RequestLog[]>([])
-
-// 控制显示状态
-const visible = computed({
-  get: () => props.show,
-  set: (value) => emit('update:show', value)
+const show = computed({
+  get: () => props.modelValue,
+  set: (value: boolean) => emit('update:modelValue', value)
 })
 
-// 标题
-const title = computed(() => {
-  return props.log ? `日志详情 - #${props.log.id}` : '日志详情'
+const loading = ref(false)
+const log = ref<LogDetailResponse | null>(null)
+
+// 计算总请求大小
+const totalRequestSize = computed(() => {
+  return log.value?.details.reduce((sum, d) => sum + d.request_body_size, 0) || 0
 })
 
-// 调用过程表格列定义
-const timelineColumns = computed<DataTableColumns<RequestLog>>(() => [
-  {
-    title: '时间',
-    key: 'created_at',
-    width: 160,
-    render: (row) => formatTime(row.created_at)
-  },
-  {
-    title: '渠道',
-    key: 'channel_name',
-    width: 160,
-    render: (row) => row.channel_name || '-'
-  },
-  {
-    title: '渠道模型',
-    key: 'upstream_model',
-    width: 240,
-    render: (row) => row.upstream_model || '-'
-  },
-  {
-    title: '状态',
-    key: 'status',
-    width: 80,
-    align:'center',
-    render: (row) => {
-      const type = row.is_success ? 'success' : 'error'
-      const label = row.is_success ? '成功' : '失败'
-      return h(NTag, {type, size: 'small', bordered: false}, {default: () => label})
-    }
-  },
-  {
-    title: '状态码',
-    key: 'status_code',
-    width: 80,
-    align:'center',
-    render: (row) => {
-      const type = getStatusCodeType(row.status_code)
-      return h(NTag, {type, size: 'small', bordered: false}, {default: () => row.status_code})
-    }
-  },
-  {
-    title: '响应时间',
-    key: 'response_time',
-    width: 80,
-    align:'right',
-    render: (row) => {
-      const seconds = (row.response_time / 1000).toFixed(2)
-      const timeType = getResponseTimeStatusType(row.response_time)
-      return h('div', {class: 'flex items-center gap-2 justify-end'}, [
-        h(NTag, {type: timeType, size: 'small', bordered: false}, {default: () => `${seconds}s`})
-      ])
-    }
-  }
-])
+// 计算总响应大小
+const totalResponseSize = computed(() => {
+  return log.value?.details.reduce((sum, d) => sum + d.response_body_size, 0) || 0
+})
 
-// 获取响应时间状态类型（用于 timeline）
-function getResponseTimeStatusType(time: number): 'success' | 'warning' | 'error' {
-  const seconds = time / 1000
-  if (seconds < 5) return 'success'
-  if (seconds < 10) return 'warning'
-  return 'error'
+// 格式化时间
+function formatTime(time: string) {
+  return new Date(time).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
 }
 
-// 获取行属性，用于高亮当前日志
-function getRowProps(row: RequestLog) {
-  if (props.log && row.id === props.log.id) {
-    return {
-      style: 'background-color: #e6f7ff; font-weight: 500;'
-    }
-  }
-  return {}
+// 格式化字节大小
+function formatBytes(bytes: number) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i]
 }
 
-// 加载调用过程数据
-async function loadTimelineData() {
-  if (!props.log?.trace_id) {
-    timelineData.value = []
-    return
-  }
-
+// 格式化 JSON
+function formatJSON(json: string) {
   try {
-    const data = await logApi.getTimelineByTraceID(props.log.trace_id)
-    timelineData.value = data
-  } catch (error) {
-    console.error('Failed to load timeline data:', error)
-    message.error('加载调用过程失败')
+    const parsed = JSON.parse(json)
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return json
   }
 }
 
-// 监听 log 变化，重新加载调用过程
-watch(() => props.log, () => {
-  loadTimelineData()
-}, {immediate: true})
+// 格式化请求头
+function formatHeaders(headers: string) {
+  try {
+    const parsed = JSON.parse(headers)
+    const formatted: Record<string, string> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'object') {
+        formatted[key] = JSON.stringify(value)
+      } else {
+        formatted[key] = String(value)
+      }
+    }
+    return JSON.stringify(formatted, null, 2)
+  } catch {
+    return headers
+  }
+}
 
-// 组件挂载时加载数据
-onMounted(() => {
-  loadTimelineData()
-})
+// 复制到剪贴板
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    window.$message?.success('已复制到剪贴板')
+  } catch {
+    window.$message?.error('复制失败')
+  }
+}
 
-// 获取HTTP方法类型
-function getMethodType(method: string) {
-  const types: Record<string, any> = {
-    GET: 'info',
-    POST: 'success',
-    PUT: 'warning',
-    DELETE: 'error',
-    PATCH: 'default'
+// 获取请求方法标签类型
+function getMethodTagType(method: string): "default" | "info" | "warning" | "error" | "success" | "primary" {
+  const types: Record<string, "default" | "info" | "warning" | "error" | "success" | "primary"> = {
+    'GET': 'info',
+    'POST': 'success',
+    'PUT': 'warning',
+    'DELETE': 'error',
+    'PATCH': 'default'
   }
   return types[method] || 'default'
 }
@@ -412,148 +498,118 @@ function getStatusCodeType(code: number) {
   return 'default'
 }
 
-// 获取响应时间类型
-function getResponseType(time: number) {
-  if (time < 500) return 'success'
-  if (time < 1000) return 'info'
-  if (time < 3000) return 'warning'
-  return 'error'
-}
+// 加载日志详情
+async function loadLogDetail() {
+  if (!props.traceId) return
 
-// 格式化时间
-function formatTime(timeStr: string) {
-  const date = new Date(timeStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
-
-// 格式化请求头/响应头
-function formatHeaders(headersStr: string): string {
+  loading.value = true
   try {
-    const headers = JSON.parse(headersStr)
-    return JSON.stringify(headers, null, 2)
-  } catch {
-    return headersStr
+    log.value = await logApi.getByTraceId(props.traceId)
+  } catch (error: any) {
+    console.error('Failed to load log detail:', error)
+    window.$message?.error('加载日志详情失败')
+  } finally {
+    loading.value = false
   }
 }
 
-// 格式化 JSON
-function formatJSON(jsonStr: string): string {
-  try {
-    const obj = JSON.parse(jsonStr)
-    return JSON.stringify(obj, null, 2)
-  } catch {
-    return jsonStr
+// 监听 traceId 变化
+watch(() => props.traceId, () => {
+  if (props.traceId && props.modelValue) {
+    loadLogDetail()
   }
-}
+}, {immediate: true})
 
-// 获取格式化后的响应体
-function getFormattedResponseBody(): string {
-  if (!props.log?.response_body) return ''
-  // 如果是流式响应，直接返回原始内容（可能是 SSE 格式）
-  if (props.log.is_stream) {
-    return props.log.response_body
+// 监听抽屉打开
+watch(() => props.modelValue, (newVal) => {
+  if (newVal && props.traceId) {
+    loadLogDetail()
   }
-  // 非流式响应尝试格式化 JSON
-  return formatJSON(props.log.response_body)
-}
-
-// 获取响应体的语言类型
-function getResponseLanguage(): string {
-  if (!props.log?.response_body) return 'text'
-  // 如果是流式响应，使用文本模式
-  if (props.log.is_stream) {
-    return 'text'
-  }
-  // 非流式响应尝试检测是否为 JSON
-  try {
-    JSON.parse(props.log.response_body)
-    return 'json'
-  } catch {
-    return 'text'
-  }
-}
-
-// 复制到剪贴板
-function copyToClipboard(text: string, label: string) {
-  navigator.clipboard.writeText(text).then(() => {
-    message.success(`${label}已复制到剪贴板`)
-  }).catch(() => {
-    message.error('复制失败')
-  })
-}
+})
 </script>
 
 <style scoped>
-.log-detail-drawer :deep(.n-drawer-content) {
-  padding: 0;
+:deep(.n-timeline-item-content) {
+  padding-bottom: 24px;
 }
 
-.log-detail-drawer :deep(.n-drawer-header__main) {
-  padding: 20px 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.detail-section {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.detail-section:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-:deep(.n-card__header) {
+:deep(.n-statistic .n-statistic-value) {
+  font-size: 20px;
   font-weight: 600;
-  font-size: 14px;
-  color: #1e293b;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 12px 16px;
-  background: #f1f5f9;
 }
 
-:deep(.n-card__content) {
-  padding: 16px;
+:deep(.n-statistic .n-statistic-label) {
+  font-size: 12px;
+  color: #64748b;
+}
+
+:deep(.n-collapse-item__header) {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+:deep(.n-code) {
+  font-size: 12px;
+  border-radius: 6px;
 }
 
 :deep(.n-descriptions) {
   font-size: 13px;
 }
 
-:deep(.n-descriptions-table-content__label) {
+:deep(.n-descriptions .n-descriptions-th) {
   font-weight: 500;
-  color: #64748b;
   background: #f8fafc;
 }
 
-:deep(.n-descriptions-table-content__content) {
-  background: #ffffff;
+:deep(.n-card) {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
 }
 
+:deep(.n-card .n-card__header) {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+:deep(.n-text) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 代码块包装器样式 */
 .code-block-wrapper {
   position: relative;
-  width: 100%;
+  background: #ececec;
+  border-radius: 8px;
+  padding: 16px;
+  overflow: hidden;
+  margin-left: 24px;
 }
 
+/* 复制按钮样式 */
 .copy-button {
   position: absolute;
   top: 8px;
   right: 8px;
   z-index: 10;
-  opacity: 0;
-  transition: opacity 0.2s;
+  opacity: 0.8;
 }
 
-.code-block-wrapper:hover .copy-button {
+.copy-button:hover {
   opacity: 1;
+}
+
+/* 代码块样式 */
+:deep(.code-block-wrapper .n-code) {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+:deep(.code-block-wrapper pre) {
+  margin: 0 !important;
+  background: transparent !important;
 }
 </style>

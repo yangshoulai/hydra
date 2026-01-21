@@ -335,7 +335,7 @@ func (m *Manager) probeKey(keyID uint) {
 	probeHandler := NewProbeHandler(m, m.logger)
 
 	// 执行探测(带重试)
-	success, isHardFailure, err := probeHandler.ProbeKeyWithRetry(ctx, key, channel, 2)
+	success, isHardFailure, err := probeHandler.ProbeKeyWithRetry(ctx, key, channel, 0)
 
 	// 处理探测结果
 	probeHandler.HandleProbeResult(keyID, key.ChannelID, success, isHardFailure)

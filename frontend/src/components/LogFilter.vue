@@ -121,12 +121,12 @@
 import {onMounted, reactive, ref} from 'vue'
 import {NButton, NCard, NDatePicker, NForm, NFormItemGi, NGrid, NIcon, NInput, NSelect, NSpace, type SelectOption} from 'naive-ui'
 import {FilterOutline, KeyOutline, PulseOutline, RefreshOutline, SearchOutline} from '@vicons/ionicons5'
-import type {LogQueryRequest} from '../types/log'
+import type {LogQueryRequestV2} from '../types/log_v2'
 import {channelApi} from '../services/channelService'
 import {modelApi} from '../services/modelService'
 
 interface Emits {
-  (e: 'filter', data: LogQueryRequest): void
+  (e: 'filter', data: LogQueryRequestV2): void
 }
 
 const emit = defineEmits<Emits>()
@@ -227,7 +227,7 @@ function handleDateChange(value: [number, number] | null) {
 
 // 处理查询
 function handleQuery() {
-  const queryData: LogQueryRequest = {
+  const queryData: LogQueryRequestV2 = {
     ...formData,
     is_success: formData.is_success === 'true' ? true : formData.is_success === 'false' ? false : null,
     requested_model: formData.requested_model || undefined,
@@ -253,7 +253,7 @@ function handleReset() {
   setDefaultDateTime()
 
   // 重置后自动查询
-  const queryData: LogQueryRequest = {
+  const queryData: LogQueryRequestV2 = {
     ...formData,
     is_success: null,
     requested_model: undefined,

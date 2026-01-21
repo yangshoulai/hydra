@@ -38,10 +38,9 @@ func RegisterRoutes(
 	probeHandler := circuit.NewProbeHandler(circuitManager, logger)
 	healthCheckService := adminService.NewHealthCheckService(logger, keyRepo, channelRepo, probeHandler)
 	syncService := modelsyncService.NewSyncService(logger, channelRepo, modelConfigRepo, keyRepo)
-	logQueryService := adminService.NewLogQueryService(logger, requestLogRepo)
 
 	// 创建 Dashboard 服务
-	dashboardService := adminService.NewDashboardService(logger, requestLogRepo, channelRepo, keyRepo)
+	dashboardService := adminService.NewDashboardService(logger, requestLogRepo, channelRepo, keyRepo, circuitManager)
 
 	// 创建 Model 服务
 	modelService := adminService.NewModelService(modelRepo, modelConfigRepo, logger)
@@ -55,13 +54,13 @@ func RegisterRoutes(
 	keyHandler := NewKeyHandler(keyRepo, channelRepo, healthCheckService, circuitManager, logger)
 	modelConfigHandler := NewChannelModelHandler(modelConfigRepo, channelRepo, logger)
 	modelSyncHandler := NewModelSyncHandler(syncService, modelConfigRepo, db, logger)
-	logHandler := NewLogHandler(logQueryService, logger)
 	dashboardHandler := NewDashboardHandler(dashboardService)
 	settingsHandler := NewSettingsHandler(logger, systemSettingRepo, settingService)
 	tokensHandler := NewTokensHandler(logger, accessTokenRepo)
 	modelHandler := NewModelHandler(modelService, logger)
 	providerHandler := NewProviderHandler(providerService, logger)
 	endpointHandler := NewEndpointHandler()
+	logHandler := NewLogHandler(logger, requestLogRepo)
 
 	// 注册路由
 	adminAPI := router.Group("/admin/api")
@@ -90,12 +89,12 @@ func RegisterRoutes(
 			keyHandler.RegisterRoutes(protected)
 			modelConfigHandler.RegisterRoutes(protected)
 			modelSyncHandler.RegisterRoutes(protected)
-			logHandler.RegisterRoutes(protected)
 			dashboardHandler.RegisterRoutes(protected)
 			settingsHandler.RegisterRoutes(protected)
 			tokensHandler.RegisterRoutes(protected)
 			modelHandler.RegisterRoutes(protected)
 			providerHandler.RegisterRoutes(protected)
+			logHandler.RegisterRoutes(protected)
 		}
 	}
 	logger.Info("管理后台路由注册成功", slog.String("prefix", "/admin/api"))

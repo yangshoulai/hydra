@@ -55,7 +55,7 @@ func (qa *QPSAggregator) AggregateLastHour(ctx context.Context) ([]QPSDataPoint,
 
 	for _, log := range logs {
 		// 将 UTC 时间转换为本地时间再分组
-		localTime := log.CreatedAt.Local()
+		localTime := log.StartTime.Local()
 		// 按分钟分组 (格式: 2024-01-12 15:30)
 		minuteKey := localTime.Format("2006-01-02 15:04")
 		minuteBuckets[minuteKey]++
@@ -109,7 +109,7 @@ func (qa *QPSAggregator) AggregateByInterval(
 
 	for _, log := range logs {
 		// 按间隔分组（使用 Unix 时间戳整除间隔秒数）
-		intervalKey := log.CreatedAt.Truncate(interval).Format(time.RFC3339)
+		intervalKey := log.StartTime.Truncate(interval).Format(time.RFC3339)
 		intervalBuckets[intervalKey]++
 	}
 

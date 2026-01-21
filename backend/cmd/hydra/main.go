@@ -264,9 +264,9 @@ func setupRouter(
 	ctx := context.Background()
 	requestTimeout, _, _, maxRetry := settingService.GetProxyConfig(ctx)
 
-	// 创建审计日志记录器
+	// 创建审计日志记录器（新版）
 	requestLogRepo := repository.NewRequestLogRepository(db)
-	auditLogger := loggerService.NewAuditLogger(logger, requestLogRepo, debugModeManager)
+	auditLoggerV2 := loggerService.NewAuditLogger(logger, requestLogRepo, debugModeManager)
 
 	// 注册代理路由
 	proxyServiceConfig := &proxyService.ProxyServiceConfig{
@@ -275,7 +275,7 @@ func setupRouter(
 		RequestTimeout: requestTimeout,
 	}
 
-	proxy.RegisterRoutes(router, db, logger, circuitManager, auditLogger, proxyServiceConfig, settingService)
+	proxy.RegisterRoutes(router, db, logger, circuitManager, auditLoggerV2, debugModeManager, proxyServiceConfig, settingService)
 
 	// 注册 Admin API 路由
 	admin.RegisterRoutes(router, db, logger, circuitManager, settingService)
@@ -293,28 +293,8 @@ func initCronScheduler(db *gorm.DB, logger *slog.Logger, settingService *configS
 	// 创建定时任务调度器
 	cronScheduler := schedulerService.NewCronScheduler(logger)
 
-	// 创建日志清理服务（传入 settingService 以便每次清理时读取最新配置）
-	requestLogRepo := repository.NewRequestLogRepository(db)
-	cleanupService := loggerService.NewCleanupService(logger, requestLogRepo, db, settingService)
-
-	// 添加日志清理任务 - 每天凌晨3点执行
-	err := cronScheduler.AddJob(
-		"log-cleanup",
-		schedulerService.EveryDayAt3AM,
-		func(ctx context.Context) error {
-			_, err := cleanupService.CleanupOldLogs(ctx)
-			return err
-		},
-	)
-
-	if err != nil {
-		logger.Error("添加日志清理任务失败", slog.String("error", err.Error()))
-	} else {
-		logger.Info("日志清理任务调度成功", slog.String("schedule", "every day at 3:00 AM"))
-	}
-
 	// 添加熔断器清理任务 - 每小时执行一次
-	err = cronScheduler.AddJob(
+	err := cronScheduler.AddJob(
 		"circuit-breaker-cleanup",
 		schedulerService.EveryHour,
 		func(ctx context.Context) error {

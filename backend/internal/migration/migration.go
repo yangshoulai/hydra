@@ -40,6 +40,20 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_5_0_AddTotalResponseTime(tx)
 			},
 		},
+		// v1.6.0 添加请求日志主表和明细表
+		{
+			ID: "v1.6.0_add_request_log_main_detail",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_6_0_AddRequestLogMainDetail(tx)
+			},
+		},
+		// v1.7.0 删除旧的 RequestLog 表
+		{
+			ID: "v1.7.0_drop_request_log",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_7_0_DropRequestLog(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

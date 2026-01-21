@@ -79,7 +79,8 @@ func (src *SuccessRateCalculator) calculateSuccessRate(
 
 	// 统计成功和失败的请求数
 	for _, log := range logs {
-		if log.StatusCode >= 200 && log.StatusCode < 300 {
+		// 使用 IsSuccess 字段判断请求是否成功
+		if log.IsSuccess {
 			stats.SuccessRequests++
 		} else {
 			stats.FailedRequests++
@@ -121,18 +122,19 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByChannel(
 	channelStats := make(map[uint]*SuccessRateStats)
 
 	for _, log := range logs {
-		if log.ChannelID == nil {
+		// 使用 LastChannelID 替代原来的 ChannelID
+		if log.LastChannelID == nil {
 			continue
 		}
 
-		if _, exists := channelStats[*log.ChannelID]; !exists {
-			channelStats[*log.ChannelID] = &SuccessRateStats{}
+		if _, exists := channelStats[*log.LastChannelID]; !exists {
+			channelStats[*log.LastChannelID] = &SuccessRateStats{}
 		}
 
-		stats := channelStats[*log.ChannelID]
+		stats := channelStats[*log.LastChannelID]
 		stats.TotalRequests++
 
-		if log.StatusCode >= 200 && log.StatusCode < 300 {
+		if log.IsSuccess {
 			stats.SuccessRequests++
 		} else {
 			stats.FailedRequests++
@@ -175,7 +177,8 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByModel(
 	modelStats := make(map[string]*SuccessRateStats)
 
 	for _, log := range logs {
-		modelName := log.RequestedModel
+		// 使用 UnifiedModel 替代原来的 RequestedModel
+		modelName := log.UnifiedModel
 		if modelName == "" {
 			modelName = "unknown"
 		}
@@ -187,7 +190,7 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByModel(
 		stats := modelStats[modelName]
 		stats.TotalRequests++
 
-		if log.StatusCode >= 200 && log.StatusCode < 300 {
+		if log.IsSuccess {
 			stats.SuccessRequests++
 		} else {
 			stats.FailedRequests++

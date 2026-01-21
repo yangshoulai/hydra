@@ -25,7 +25,6 @@ func v1_0_0_Init() *gormigrate.Migration {
 				&models.Key{},
 				&models.ChannelModelConfig{},
 				&models.Model{},
-				&models.RequestLog{},
 			); err != nil {
 				return err
 			}
@@ -45,7 +44,6 @@ func v1_0_0_Init() *gormigrate.Migration {
 		Rollback: func(tx *gorm.DB) error {
 			// 删除所有表
 			return tx.Migrator().DropTable(
-				&models.RequestLog{},
 				&models.Model{},
 				&models.Provider{},
 				&models.ChannelModelConfig{},
@@ -63,46 +61,7 @@ func v1_0_0_Init() *gormigrate.Migration {
 func createAdditionalIndexes(db *gorm.DB) error {
 	// GORM 的 AutoMigrate 会创建基本的索引，但我们需要额外的复合索引来优化查询
 
-	// request_logs 表的复合索引
-	indexes := []string{
-		// 索引: trace_id + created_at (用于按 TraceID 查询和排序)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_trace_id_created_at ON request_logs(trace_id, created_at DESC)`,
-
-		// 索引: access_token + created_at (用于按 Token 查询请求历史)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_access_token_created_at ON request_logs(access_token, created_at DESC)`,
-
-		// 索引: channel_id + created_at (用于按渠道查询统计)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_channel_id_created_at ON request_logs(channel_id, created_at DESC)`,
-
-		// 索引: requested_model + created_at (用于按模型查询统计)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_requested_model_created_at ON request_logs(requested_model, created_at DESC)`,
-
-		// 索引: status_code + created_at (用于按状态码查询失败请求)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_status_code_created_at ON request_logs(status_code, created_at DESC)`,
-
-		// 索引: is_success + created_at (用于快速统计成功/失败率)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_is_success_created_at ON request_logs(is_success, created_at DESC)`,
-
-		// 索引: created_at DESC (用于时间范围查询)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_created_at_desc ON request_logs(created_at DESC)`,
-
-		// 索引: channel_id + status_code + created_at (复合索引用于渠道成功率统计)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_channel_status_created_at ON request_logs(channel_id, status_code, created_at DESC)`,
-
-		// 索引: is_stream + created_at (用于流式请求查询)
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_is_stream_created_at ON request_logs(is_stream, created_at DESC)`,
-
-		// 索引: unified_model
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_unified_model ON request_logs(unified_model)`,
-	}
-
-	for _, indexSQL := range indexes {
-		if err := db.Exec(indexSQL).Error; err != nil {
-			// 索引创建失败不应该阻止整个迁移，可能是索引已存在
-			// 只记录日志，不返回错误
-			db.Logger.Warn(nil, "failed to create index", "error", err.Error())
-		}
-	}
+	// 其他表的复合索引可以在这里添加
 
 	return nil
 }
