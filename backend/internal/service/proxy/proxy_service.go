@@ -133,7 +133,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	}
 
 	isStream := ps.requestBuilder.IsStreamRequest(bodyBytes)
-	mainLog.RequestedModel(unifiedModel).UnifiedModel(unifiedModel).IsStream(isStream)
+	mainLog.RequestedModel(unifiedModel).IsStream(isStream)
 
 	ps.logWithTrace("处理请求", traceID,
 		slog.String("endpoint", endpoint),

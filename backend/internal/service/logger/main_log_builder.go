@@ -43,11 +43,6 @@ func (b *MainLogBuilder) RequestedModel(model string) *MainLogBuilder {
 	return b
 }
 
-func (b *MainLogBuilder) UnifiedModel(model string) *MainLogBuilder {
-	b.main.UnifiedModel = model
-	return b
-}
-
 func (b *MainLogBuilder) AccessToken(token string) *MainLogBuilder {
 	b.main.AccessToken = token
 	return b

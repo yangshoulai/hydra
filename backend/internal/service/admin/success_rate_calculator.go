@@ -54,11 +54,6 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByTimeRange(
 	ctx context.Context,
 	startTime, endTime time.Time,
 ) (*SuccessRateStats, error) {
-	src.logger.Info("calculating success rate by time range",
-		slog.Time("start_time", startTime),
-		slog.Time("end_time", endTime),
-	)
-
 	return src.calculateSuccessRate(ctx, startTime, endTime)
 }
 
@@ -107,11 +102,6 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByChannel(
 	ctx context.Context,
 	startTime, endTime time.Time,
 ) (map[uint]*SuccessRateStats, error) {
-	src.logger.Info("calculating success rate by channel",
-		slog.Time("start_time", startTime),
-		slog.Time("end_time", endTime),
-	)
-
 	// 查询时间范围内的所有请求日志
 	logs, err := src.requestLogRepo.GetByTimeRange(ctx, startTime, endTime)
 	if err != nil {
@@ -162,11 +152,6 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByModel(
 	ctx context.Context,
 	startTime, endTime time.Time,
 ) (map[string]*SuccessRateStats, error) {
-	src.logger.Info("calculating success rate by model",
-		slog.Time("start_time", startTime),
-		slog.Time("end_time", endTime),
-	)
-
 	// 查询时间范围内的所有请求日志
 	logs, err := src.requestLogRepo.GetByTimeRange(ctx, startTime, endTime)
 	if err != nil {
@@ -177,8 +162,7 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByModel(
 	modelStats := make(map[string]*SuccessRateStats)
 
 	for _, log := range logs {
-		// 使用 UnifiedModel 替代原来的 RequestedModel
-		modelName := log.UnifiedModel
+		modelName := log.RequestedModel
 		if modelName == "" {
 			modelName = "unknown"
 		}

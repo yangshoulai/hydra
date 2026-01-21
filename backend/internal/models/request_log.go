@@ -20,7 +20,6 @@ type RequestLogMain struct {
 	RequestPath    string `gorm:"type:varchar(500);not null;index" json:"request_path"`
 	RequestMethod  string `gorm:"type:varchar(10);not null" json:"request_method"`
 	RequestedModel string `gorm:"type:varchar(100);index" json:"requested_model"`
-	UnifiedModel   string `gorm:"type:varchar(100);index" json:"unified_model"`
 
 	// 客户端信息
 	AccessToken string `gorm:"type:varchar(64);index" json:"access_token"`
@@ -28,15 +27,15 @@ type RequestLogMain struct {
 	UserAgent   string `gorm:"type:varchar(500)" json:"user_agent"`
 
 	// 时间信息
-	StartTime      time.Time `gorm:"not null;index" json:"start_time"`
-	EndTime        time.Time `gorm:"not null" json:"end_time"`
-	Duration       int       `gorm:"not null" json:"duration"` // 总耗时（毫秒）
+	StartTime time.Time `gorm:"not null;index" json:"start_time"`
+	EndTime   time.Time `gorm:"not null" json:"end_time"`
+	Duration  int       `gorm:"not null" json:"duration"` // 总耗时（毫秒）
 
 	// 最终结果
-	IsSuccess   bool  `gorm:"not null;index" json:"is_success"`
-	StatusCode  int   `gorm:"not null;index" json:"status_code"`
-	RetryCount  int   `gorm:"not null;default:0" json:"retry_count"`
-	IsStream    bool  `gorm:"not null;default:false;index" json:"is_stream"`
+	IsSuccess  bool `gorm:"not null;index" json:"is_success"`
+	StatusCode int  `gorm:"not null;index" json:"status_code"`
+	RetryCount int  `gorm:"not null;default:0" json:"retry_count"`
+	IsStream   bool `gorm:"not null;default:false;index" json:"is_stream"`
 
 	// 最后成功/失败的渠道信息
 	LastChannelID   *uint  `gorm:"index" json:"last_channel_id,omitempty"`
@@ -82,18 +81,18 @@ type RequestLogDetail struct {
 	Duration  int       `gorm:"not null" json:"duration"` // 本次尝试耗时（毫秒）
 
 	// 请求和响应信息
-	RequestBodySize  int    `gorm:"default:0" json:"request_body_size"`
-	ResponseBodySize int    `gorm:"default:0" json:"response_body_size"`
+	RequestBodySize  int `gorm:"default:0" json:"request_body_size"`
+	ResponseBodySize int `gorm:"default:0" json:"response_body_size"`
 
 	// 状态信息
 	StatusCode int    `gorm:"not null" json:"status_code"`
 	IsSuccess  bool   `gorm:"not null" json:"is_success"`
-	Status     string `gorm:"type:varchar(50)" json:"status"` // success, failed, timeout, etc.
+	Status     string `gorm:"type:varchar(50)" json:"status"`                       // success, failed, timeout, etc.
 	RetryIndex int    `gorm:"not null;index:idx_main_log_retry" json:"retry_index"` // 第几次重试（0表示首次尝试）
 
 	// 流式响应信息
-	IsStream      bool `gorm:"not null;default:false" json:"is_stream"`
-	StreamChunks  int  `gorm:"default:0" json:"stream_chunks"`
+	IsStream             bool `gorm:"not null;default:false" json:"is_stream"`
+	StreamChunks         int  `gorm:"default:0" json:"stream_chunks"`
 	StreamFirstChunkTime *int `json:"stream_first_chunk_time,omitempty"` // 首帧响应时间（毫秒）
 
 	// 详细信息（仅在调试模式启用时记录）

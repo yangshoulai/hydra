@@ -59,8 +59,8 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	var activeModels int64
 	if err := db.Model(&models.RequestLogMain{}).
 		Where("start_time >= ?", startOfDayUTC).
-		Where("unified_model != ''").
-		Distinct("unified_model").
+		Where("requested_model != ''").
+		Distinct("requested_model").
 		Count(&activeModels).Error; err != nil {
 		m.logger.Error("failed to count active models", slog.String("error", err.Error()))
 		return nil, err
@@ -71,7 +71,7 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	var totalRequests int64
 	if err := db.Model(&models.RequestLogMain{}).
 		Where("start_time >= ?", startOfDayUTC).
-		Where("unified_model != ''").
+		Where("requested_model != ''").
 		Count(&totalRequests).Error; err != nil {
 		m.logger.Error("failed to count total requests", slog.String("error", err.Error()))
 		return nil, err
@@ -82,7 +82,7 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	var successRequests int64
 	if err := db.Model(&models.RequestLogMain{}).
 		Where("start_time >= ?", startOfDayUTC).
-		Where("unified_model != ''").
+		Where("requested_model != ''").
 		Where("is_success = ?", true).
 		Count(&successRequests).Error; err != nil {
 		m.logger.Error("failed to count success requests", slog.String("error", err.Error()))
@@ -101,10 +101,10 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	}
 	var modelStats []modelStat
 	if err := db.Model(&models.RequestLogMain{}).
-		Select("unified_model as model_name, COUNT(*) as total_requests, SUM(CASE WHEN is_success = true THEN 1 ELSE 0 END) as success_requests").
+		Select("requested_model as model_name, COUNT(*) as total_requests, SUM(CASE WHEN is_success = true THEN 1 ELSE 0 END) as success_requests").
 		Where("start_time >= ?", startOfDayUTC).
-		Where("unified_model != ''").
-		Group("unified_model").
+		Where("requested_model != ''").
+		Group("requested_model").
 		Order("total_requests DESC").
 		Scan(&modelStats).Error; err != nil {
 		m.logger.Error("failed to get model details", slog.String("error", err.Error()))

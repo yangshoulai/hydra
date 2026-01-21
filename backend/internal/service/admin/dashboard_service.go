@@ -139,7 +139,7 @@ type ChannelHealthMetrics struct {
 
 // GetChannelHealthMetrics 获取渠道健康指标
 func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]ChannelHealthMetrics, error) {
-	channels, err := s.channelRepo.FindAll(ctx)
+	channels, err := s.channelRepo.FindActive(ctx)
 	if err != nil {
 		s.logger.Error("failed to get channels", slog.String("error", err.Error()))
 		return nil, err
