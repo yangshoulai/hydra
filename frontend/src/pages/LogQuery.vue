@@ -11,7 +11,7 @@
         :pagination="false"
         :row-key="(row: RequestLogMain) => row.id"
         :row-props="rowProps"
-        :scroll-x="1720"
+        :scroll-x="1800"
         :single-line="false"
         striped
     />
@@ -42,6 +42,7 @@ import {logApi} from '../services/logService'
 import type {LogQueryRequest, RequestLogMain} from '../types/log'
 import LogFilter from '../components/LogFilter.vue'
 import LogDetailDrawer from '../components/LogDetailDrawer.vue'
+import EndpointTags from '../components/EndpointTags.vue'
 
 // State
 const logs = ref<RequestLogMain[]>([])
@@ -135,13 +136,14 @@ const columns: DataTableColumns<RequestLogMain> = [
   {
     title: '端点类型',
     key: 'endpoint_type',
-    width: 120,
+    width: 200,
     align: 'center',
     ellipsis: {
       tooltip: true
     },
     render(row) {
-      return h(NText, {depth: 3}, {default: () => row.endpoint_type || '-'})
+      if (!row.endpoint_type) return h(NText, {depth: 3}, {default: () => '-'})
+      return h(EndpointTags, {types: [row.endpoint_type]})
     }
   },
   {

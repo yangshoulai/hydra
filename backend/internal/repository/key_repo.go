@@ -123,3 +123,43 @@ func (r *KeyRepository) FindAll(ctx context.Context) ([]*models.Key, error) {
 		Find(&keys).Error
 	return keys, err
 }
+
+// KeyStatusCount 密钥状态统计
+type KeyStatusCount struct {
+	Active   int64 `json:"active"`
+	Cooling  int64 `json:"cooling"`
+	Disabled int64 `json:"disabled"`
+}
+
+// CountByChannelIDAndStatus 根据渠道ID统计不同状态的密钥数量
+func (r *KeyRepository) CountByChannelIDAndStatus(ctx context.Context, channelID uint) (*KeyStatusCount, error) {
+	var counts []struct {
+		Status string
+		Count  int64
+	}
+
+	err := r.db.WithContext(ctx).
+		Model(&models.Key{}).
+		Select("status, COUNT(*) as count").
+		Where("channel_id = ?", channelID).
+		Group("status").
+		Scan(&counts).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	result := &KeyStatusCount{}
+	for _, c := range counts {
+		switch c.Status {
+		case "active":
+			result.Active = c.Count
+		case "cooling":
+			result.Cooling = c.Count
+		case "disabled":
+			result.Disabled = c.Count
+		}
+	}
+
+	return result, nil
+}

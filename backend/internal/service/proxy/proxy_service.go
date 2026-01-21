@@ -159,12 +159,13 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		)
 
 		if err != nil {
-			ps.logErrorWithTrace("请求路由失败", traceID, slog.String("model", unifiedModel), slog.String("error", err.Error()))
+			ps.logErrorWithTrace("路由失败", traceID, slog.String("model", unifiedModel), slog.String("error", err.Error()))
 			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable, "No available channels for model: "+unifiedModel, traceID)
 			mainLog.EndTime(time.Now()).StatusCode(http.StatusServiceUnavailable).ErrorMessage("没有可用渠道")
 			ps.auditLogger.LogAsync(mainLog.Build())
 			return err
 		}
+		ps.logWithTrace("路由成功", traceID, slog.Uint64("channel_id", uint64(routeResult.Channel.ID)), slog.String("channel_name", routeResult.Channel.Name), slog.Uint64("key_id", uint64(routeResult.Key.ID)), slog.String("unified_model", unifiedModel), slog.String("upstream_model", routeResult.UpstreamModel))
 
 		// 构建上游请求
 		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, endpoint)
@@ -254,7 +255,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			if fake200Err, ok := forwardErr.(*Fake200Error); ok {
 				ps.recordFailure(routeResult, FailureTypeSoft)
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, fake200Err, FailureTypeSoft)
-				ps.logWarnWithTrace("流式响应首帧检测到假200", traceID, slog.String("error_type", fake200Err.Message))
+				ps.logWarnWithTrace("检测到流式假 200 响应", traceID, slog.String("error_type", fake200Err.Message))
 
 				detailLog.IsSuccess(false).Status("failed").
 					StreamChunks(streamChunks).
@@ -314,11 +315,8 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			ErrorMessage(errorMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 
 		mainLog.AddDetail(detailLog)
-		statusCode := http.StatusOK
-		if forwardErr != nil {
-			statusCode = http.StatusInternalServerError
-		}
-		mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(statusCode).ErrorMessage(errorMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
+		statusCode := upstreamResp.StatusCode
+		mainLog.IsSuccess(forwardErr == nil).EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(statusCode).ErrorMessage(errorMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 		ps.auditLogger.LogAsync(mainLog.Build())
 		return forwardErr
 	}

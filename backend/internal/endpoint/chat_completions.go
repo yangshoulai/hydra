@@ -25,6 +25,10 @@ func (e *ChatCompletionsEndpoint) GetDescription() string {
 	return "OpenAI Chat Completions API"
 }
 
+func (e *ChatCompletionsEndpoint) GetColor() string {
+	return "#10b981"
+}
+
 func (e *ChatCompletionsEndpoint) GetTestPayload(modelName string) map[string]interface{} {
 	return map[string]interface{}{
 		"model": modelName,

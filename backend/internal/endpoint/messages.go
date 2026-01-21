@@ -25,6 +25,10 @@ func (e *MessagesEndpoint) GetDescription() string {
 	return "Anthropic Messages API"
 }
 
+func (e *MessagesEndpoint) GetColor() string {
+	return "#f59e0b"
+}
+
 func (e *MessagesEndpoint) GetTestPayload(modelName string) map[string]interface{} {
 	return map[string]interface{}{
 		"model": modelName,

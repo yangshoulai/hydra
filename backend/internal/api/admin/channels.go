@@ -17,6 +17,7 @@ import (
 type ChannelHandler struct {
 	channelRepo     *repository.ChannelRepository
 	modelConfigRepo *repository.ChannelModelConfigRepository
+	keyRepo         *repository.KeyRepository
 	db              *gorm.DB
 	logger          *slog.Logger
 	circuitManager  *circuit.Manager
@@ -26,6 +27,7 @@ type ChannelHandler struct {
 func NewChannelHandler(
 	channelRepo *repository.ChannelRepository,
 	modelConfigRepo *repository.ChannelModelConfigRepository,
+	keyRepo *repository.KeyRepository,
 	db *gorm.DB,
 	logger *slog.Logger,
 	circuitManager *circuit.Manager,
@@ -33,6 +35,7 @@ func NewChannelHandler(
 	return &ChannelHandler{
 		channelRepo:     channelRepo,
 		modelConfigRepo: modelConfigRepo,
+		keyRepo:         keyRepo,
 		db:              db,
 		logger:          logger,
 		circuitManager:  circuitManager,
@@ -61,7 +64,8 @@ type ChannelListResponse struct {
 // ChannelWithModelCount 带模型数量的渠道信息
 type ChannelWithModelCount struct {
 	*models.Channel
-	ModelCount int `json:"model_count"`
+	ModelCount      int                        `json:"model_count"`
+	KeyStats        *repository.KeyStatusCount `json:"key_stats"`
 }
 
 // CreateChannelRequest 创建渠道请求
@@ -150,7 +154,7 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 		return
 	}
 
-	// 查询每个渠道的模型配置数量
+	// 查询每个渠道的模型配置数量和密钥统计
 	result := make([]ChannelWithModelCount, 0, len(channels))
 	for _, channel := range channels {
 		// 查询该渠道的模型配置数量
@@ -163,9 +167,20 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 			count = 0
 		}
 
+		// 查询该渠道的密钥统计
+		keyStats, err := h.keyRepo.CountByChannelIDAndStatus(c.Request.Context(), channel.ID)
+		if err != nil {
+			h.logger.Warn("查询渠道密钥统计失败",
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("error", err.Error()),
+			)
+			keyStats = &repository.KeyStatusCount{}
+		}
+
 		result = append(result, ChannelWithModelCount{
 			Channel:    channel,
 			ModelCount: count,
+			KeyStats:   keyStats,
 		})
 	}
 

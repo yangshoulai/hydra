@@ -35,11 +35,11 @@ func NewModelRouter(logger *slog.Logger) *ModelRouter {
 // 返回: 上游真实模型名(如 gpt-4-0613)
 func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, endpointType string, traceID string) (string, error) {
 	if channel == nil {
-		return "", errors.New("channel is nil")
+		return "", errors.New("渠道为空")
 	}
 
 	if len(channel.ModelConfigs) == 0 {
-		mr.logger.Warn("渠道没有配置模型",
+		mr.logger.Debug("渠道没有配置模型",
 			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),

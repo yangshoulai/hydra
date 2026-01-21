@@ -25,6 +25,10 @@ func (e *ResponsesEndpoint) GetDescription() string {
 	return "OpenAI Responses API"
 }
 
+func (e *ResponsesEndpoint) GetColor() string {
+	return "#3b82f6"
+}
+
 func (e *ResponsesEndpoint) GetTestPayload(modelName string) map[string]interface{} {
 	return map[string]interface{}{
 		"model": modelName,

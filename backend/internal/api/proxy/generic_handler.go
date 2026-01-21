@@ -66,11 +66,4 @@ func (h *GenericHandler) Handle(c *gin.Context) {
 		}
 		return
 	}
-
-	h.logger.Info("请求处理完成",
-		slog.String("trace_id", traceID),
-		slog.String("endpoint", h.endpointName),
-		slog.Duration("duration", duration),
-		slog.Int("status_code", c.Writer.Status()),
-	)
 }

@@ -11,10 +11,17 @@ export interface Channel {
   status: 'active' | 'disabled'
   description: string
   model_count?: number  // 已配置的模型数量
+  key_stats?: KeyStats  // 密钥统计
   created_at: string
   updated_at: string
   keys?: Key[]
   model_configs?: ChannelModelConfig[]
+}
+
+export interface KeyStats {
+  active: number    // 健康的密钥数量
+  cooling: number   // 冷却中的密钥数量
+  disabled: number  // 禁用的密钥数量
 }
 
 export interface Key {

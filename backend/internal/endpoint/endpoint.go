@@ -30,14 +30,18 @@ type Endpoint interface {
 	// ConfigureRequest 配置请求（设置特定的请求头等）
 	// 在发送请求前调用，允许端点定制化配置
 	ConfigureRequest(req *http.Request, apiKey string)
+
+	// GetColor 获取端点颜色（用于前端展示）
+	GetColor() string
 }
 
 // EndpointInfo 端点信息（用于API返回）
 type EndpointInfo struct {
-	Name        string                 `json:"name"`
-	Type        string                 `json:"type"`
-	Path        string                 `json:"path"`
-	Description string                 `json:"description"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Path        string `json:"path"`
+	Description string `json:"description"`
+	Color       string `json:"color"`
 }
 
 // ToInfo 将 Endpoint 转换为 EndpointInfo
@@ -47,6 +51,7 @@ func ToInfo(ep Endpoint) EndpointInfo {
 		Type:        ep.GetType(),
 		Path:        ep.GetPath(),
 		Description: ep.GetDescription(),
+		Color:       ep.GetColor(),
 	}
 }
 

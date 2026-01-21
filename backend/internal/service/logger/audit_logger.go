@@ -16,14 +16,8 @@ type AuditLogger struct {
 	logger           *slog.Logger
 	requestLogRepo   *repository.RequestLogRepository
 	debugModeManager *DebugModeManager
-	logChan          chan *LogRequest
+	logChan          chan *models.RequestLogMain
 	stopChan         chan struct{}
-}
-
-// LogRequest 日志请求
-type LogRequest struct {
-	Main    *models.RequestLogMain
-	Details []models.RequestLogDetail
 }
 
 // NewAuditLogger 创建审计日志记录器
@@ -36,7 +30,7 @@ func NewAuditLogger(
 		logger:           logger,
 		requestLogRepo:   requestLogRepo,
 		debugModeManager: debugModeManager,
-		logChan:          make(chan *LogRequest, 1000),
+		logChan:          make(chan *models.RequestLogMain, 1000),
 		stopChan:         make(chan struct{}),
 	}
 
@@ -72,10 +66,7 @@ func (al *AuditLogger) LogAsync(mainLog *models.RequestLogMain) {
 	}
 
 	select {
-	case al.logChan <- &LogRequest{
-		Main:    mainLog,
-		Details: mainLog.Details,
-	}:
+	case al.logChan <- mainLog:
 	default:
 		al.logger.Warn("日志队列已满，丢弃日志")
 	}
@@ -99,25 +90,15 @@ func (al *AuditLogger) processLogs() {
 }
 
 // writeLog 写入日志到数据库
-func (al *AuditLogger) writeLog(logReq *LogRequest) {
+func (al *AuditLogger) writeLog(logReq *models.RequestLogMain) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// 写入主日志
-	if logReq.Main != nil {
-		if err := al.requestLogRepo.CreateMain(ctx, logReq.Main); err != nil {
-			al.logger.Error("写入主日志失败", slog.String("error", err.Error()))
+	if logReq != nil {
+		if err := al.requestLogRepo.CreateMain(ctx, logReq); err != nil {
+			al.logger.Error("写入日志失败", slog.String("error", err.Error()))
 			return
-		}
-
-		// 写入所有明细日志
-		for i := range logReq.Details {
-			logReq.Details[i].MainLogID = logReq.Main.ID
-			if err := al.requestLogRepo.CreateDetail(ctx, &logReq.Details[i]); err != nil {
-				al.logger.Error("写入明细日志失败",
-					slog.String("error", err.Error()),
-					slog.Int("retry_index", logReq.Details[i].RetryIndex))
-			}
 		}
 	}
 }

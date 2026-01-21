@@ -43,6 +43,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	ph.logger.Debug("开始嗅探密钥",
 		slog.Uint64("key_id", uint64(key.ID)),
 		slog.Uint64("channel_id", uint64(channel.ID)),
+		slog.String("channel_name", channel.Name),
 	)
 
 	// 确定要使用的端点类型和模型名称
@@ -61,6 +62,8 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	if err != nil {
 		ph.logger.Error("无法获取端点类型",
 			slog.String("endpoint_type", endpointType),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
 			slog.String("error", err.Error()),
 		)
 		return false, false, err
@@ -98,6 +101,9 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	if err != nil {
 		ph.logger.Warn("嗅探请求失败（网络错误）",
 			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
+			slog.String("url", req.URL.String()),
 			slog.String("error", err.Error()),
 		)
 		// 网络错误视为软故障
@@ -112,6 +118,9 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	if err != nil {
 		ph.logger.Warn("无法读取嗅探响应报文",
 			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
+			slog.String("url", req.URL.String()),
 			slog.String("error", err.Error()),
 		)
 		return false, false, err
@@ -123,6 +132,8 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		ph.logger.Info("嗅探成功",
 			slog.Uint64("key_id", uint64(key.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
+			slog.String("url", req.URL.String()),
 		)
 		return true, false, nil
 	}
@@ -133,6 +144,9 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		// 认证失败,硬故障
 		ph.logger.Warn("嗅探失败 (authentication error)",
 			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
+			slog.String("url", req.URL.String()),
 			slog.Int("status_code", resp.StatusCode),
 		)
 		return false, true, fmt.Errorf("authentication failed: %d", resp.StatusCode)
@@ -141,6 +155,10 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		// 限流,视为软故障
 		ph.logger.Warn("嗅探失败 (rate limited)",
 			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
+			slog.String("url", req.URL.String()),
+			slog.Int("status_code", resp.StatusCode),
 		)
 		return false, false, fmt.Errorf("rate limited")
 
@@ -148,6 +166,9 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		// 服务器错误,软故障
 		ph.logger.Warn("嗅探失败 (server error)",
 			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
+			slog.String("url", req.URL.String()),
 			slog.Int("status_code", resp.StatusCode),
 		)
 		return false, false, fmt.Errorf("server error: %d", resp.StatusCode)
@@ -156,6 +177,9 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		// 其他错误,视为软故障
 		ph.logger.Warn("嗅探失败 (validation error)",
 			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
+			slog.String("url", req.URL.String()),
 			slog.Int("status_code", resp.StatusCode),
 			slog.String("error", errMsg),
 		)
@@ -178,34 +202,40 @@ func (ph *ProbeHandler) getTestEndpointAndModel(channel *models.Channel) (string
 }
 
 // HandleProbeResult 处理探测结果
-func (ph *ProbeHandler) HandleProbeResult(keyID uint, channelID uint, success bool, isHardFailure bool) {
+func (ph *ProbeHandler) HandleProbeResult(keyID uint, channel *models.Channel, success bool, isHardFailure bool) {
 	keyBreaker := ph.manager.GetKeyBreaker(keyID)
 	currentState := keyBreaker.GetState()
 
 	if success {
 		// 探测成功,记录成功并恢复为正常状态
-		ph.manager.RecordKeySuccess(keyID, channelID)
+		ph.manager.RecordKeySuccess(keyID, channel.ID)
 
-		ph.logger.Info("key recovered after probe",
+		ph.logger.Info("密钥已恢复",
 			slog.Uint64("key_id", uint64(keyID)),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
 			slog.String("previous_state", string(currentState)),
 		)
 	} else {
 		if isHardFailure {
 			// 硬故障,标记为永久禁用
-			ph.manager.RecordKeyHardFailure(keyID, channelID)
+			ph.manager.RecordKeyHardFailure(keyID, channel.ID)
 
-			ph.logger.Error("key marked as dead after probe",
+			ph.logger.Error("密钥已失效",
 				slog.Uint64("key_id", uint64(keyID)),
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("channel_name", channel.Name),
 			)
 		} else {
 			// 软故障,重新进入冷却状态
-			ph.manager.RecordKeySoftFailure(keyID, channelID)
+			ph.manager.RecordKeySoftFailure(keyID, channel.ID)
 
 			newState := keyBreaker.GetState()
 			if newState == KeyStateCooling {
-				ph.logger.Warn("探测失败后密钥重新进入冷却状态",
+				ph.logger.Warn("密钥未恢复",
 					slog.Uint64("key_id", uint64(keyID)),
+					slog.Uint64("channel_id", uint64(channel.ID)),
+					slog.String("channel_name", channel.Name),
 					slog.String("previous_state", string(currentState)),
 				)
 			}
@@ -227,7 +257,7 @@ func (ph *ProbeHandler) ProbeKeyWithRetry(ctx context.Context, key *models.Key, 
 				return false, false, ctx.Err()
 			}
 
-			ph.logger.Debug("retrying probe",
+			ph.logger.Debug("重新嗅探",
 				slog.Uint64("key_id", uint64(key.ID)),
 				slog.Int("attempt", attempt+1),
 			)
@@ -243,7 +273,7 @@ func (ph *ProbeHandler) ProbeKeyWithRetry(ctx context.Context, key *models.Key, 
 
 		// 如果是硬故障,不再重试
 		if hardFailure {
-			ph.logger.Warn("stopping probe retries due to hard failure",
+			ph.logger.Warn("密钥硬故障，停止嗅探",
 				slog.Uint64("key_id", uint64(key.ID)),
 			)
 			break

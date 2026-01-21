@@ -45,21 +45,10 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 	// 获取所有支持该模型和端点类型的 Channel
 	channels, err := cs.channelRepo.FindByModelAndEndpointType(ctx, modelName, endpointType)
 	if err != nil {
-		cs.logger.Error("查找支持模型的渠道失败",
-			slog.String("trace_id", traceID),
-			slog.String("model", modelName),
-			slog.String("endpoint_type", endpointType),
-			slog.String("error", err.Error()),
-		)
 		return nil, err
 	}
 
 	if len(channels) == 0 {
-		cs.logger.Warn("没有渠道支持该模型",
-			slog.String("trace_id", traceID),
-			slog.String("model", modelName),
-			slog.String("endpoint_type", endpointType),
-		)
 		return nil, ErrNoAvailableChannel
 	}
 
@@ -67,11 +56,6 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 	availableChannels := cs.filterAvailableChannels(channels, traceID)
 
 	if len(availableChannels) == 0 {
-		cs.logger.Warn("no available channels for model",
-			slog.String("trace_id", traceID),
-			slog.String("model", modelName),
-			slog.Int("total_channels", len(channels)),
-		)
 		return nil, ErrNoAvailableChannel
 	}
 
@@ -90,21 +74,9 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 		// 按权重选择
 		selectedChannel := cs.selectByWeight(channelsInGroup)
 		if selectedChannel != nil {
-			cs.logger.Debug("channel selected",
-				slog.String("trace_id", traceID),
-				slog.Uint64("channel_id", uint64(selectedChannel.ID)),
-				slog.String("channel_name", selectedChannel.Name),
-				slog.Int("priority", selectedChannel.Priority),
-				slog.Int("weight", selectedChannel.Weight),
-			)
 			return selectedChannel, nil
 		}
 	}
-
-	cs.logger.Warn("all channels are unavailable",
-		slog.String("trace_id", traceID),
-		slog.String("model", modelName),
-	)
 	return nil, ErrNoAvailableChannel
 }
 

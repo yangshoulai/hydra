@@ -242,7 +242,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 		n, err := upstreamResp.Body.Read(buf)
 		if err != nil {
 			if err == io.EOF {
-				sf.logger.Info("SSE流正常完成",
+				sf.logger.Info("流式转发完成",
 					slog.String("trace_id", traceID),
 					slog.Int("bytes_sent", bytesSent),
 					slog.Int("chunk_count", chunkCount),

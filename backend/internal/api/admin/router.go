@@ -50,7 +50,7 @@ func RegisterRoutes(
 
 	// 创建 handlers
 	authHandler := NewAuthHandler(authService, logger)
-	channelHandler := NewChannelHandler(channelRepo, modelConfigRepo, db, logger, circuitManager)
+	channelHandler := NewChannelHandler(channelRepo, modelConfigRepo, keyRepo, db, logger, circuitManager)
 	keyHandler := NewKeyHandler(keyRepo, channelRepo, healthCheckService, circuitManager, logger)
 	modelConfigHandler := NewChannelModelHandler(modelConfigRepo, channelRepo, logger)
 	modelSyncHandler := NewModelSyncHandler(syncService, modelConfigRepo, db, logger)

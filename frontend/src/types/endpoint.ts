@@ -7,5 +7,5 @@ export interface EndpointInfo {
   type: string
   path: string
   description: string
-  test_payload: Record<string, any>
+  color: string
 }

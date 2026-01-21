@@ -252,8 +252,7 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingProxyMaxConcurrent ||
 		key == models.SettingProxyMaxRetry:
 		return "proxy"
-	case key == models.SettingSnifferPlainTextErrorRules ||
-		key == models.SettingSnifferStreamErrorRules:
+	case key == models.SettingSnifferPlainTextErrorRules:
 		return "sniffer"
 	default:
 		return "unknown"
@@ -346,7 +345,7 @@ func (s *SettingService) SetPlainTextErrorRules(ctx context.Context, keywords []
 
 // GetStreamErrorRules 获取流式响应错误规则
 func (s *SettingService) GetStreamErrorRules(ctx context.Context) []string {
-	value, err := s.get(ctx, models.SettingSnifferStreamErrorRules)
+	value, err := s.get(ctx, models.SettingSnifferPlainTextErrorRules)
 	if err != nil || value == "" {
 		// 返回默认规则
 		return s.getDefaultStreamErrorRules()
@@ -365,29 +364,10 @@ func (s *SettingService) GetStreamErrorRules(ctx context.Context) []string {
 	return keywords
 }
 
-// SetStreamErrorRules 设置流式响应错误规则
-func (s *SettingService) SetStreamErrorRules(ctx context.Context, keywords []string) error {
-	// 转换为 JSON
-	jsonBytes, err := json.Marshal(keywords)
-	if err != nil {
-		s.logger.Error("序列化流式错误规则失败",
-			slog.String("error", err.Error()),
-		)
-		return fmt.Errorf("failed to marshal keywords: %w", err)
-	}
-
-	// 保存到数据库
-	if err := s.Set(ctx, models.SettingSnifferStreamErrorRules, string(jsonBytes)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // getDefaultStreamErrorRules 获取默认的流式错误关键词
 func (s *SettingService) getDefaultStreamErrorRules() []string {
 	return []string{
-		"\"error\"",           // JSON error 字段
+		"\"error\"", // JSON error 字段
 		"无可用后端",
 		"额度不足",
 		"maintenance",

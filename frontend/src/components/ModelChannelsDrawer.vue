@@ -58,6 +58,7 @@ import {computed, h, ref, watch} from 'vue'
 import {type DataTableColumns, NAlert, NCard, NDataTable, NDrawer, NDrawerContent, NIcon, NSpace, NSpin, NTag, NText} from 'naive-ui'
 import {InformationCircleOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
+import EndpointTags from './EndpointTags.vue'
 
 interface ModelConfig {
   id: number
@@ -106,24 +107,6 @@ const visible = computed({
 const title = computed(() => {
   return `模型渠道列表 - ${props.modelName}`
 })
-
-function getEndpointTypeLabel(type: string) {
-  const labels: Record<string, string> = {
-    'openai': 'OpenAI',
-    'openai-response': 'Response',
-    'anthropic': 'Anthropic'
-  }
-  return labels[type] || type
-}
-
-function getEndpointTypeColor(type: string) {
-  const colors: Record<string, any> = {
-    'openai': 'success',
-    'openai-response': 'info',
-    'anthropic': 'warning'
-  }
-  return colors[type] || 'default'
-}
 
 function groupChannelsByChannel() {
   const groupMap = new Map<number, ChannelGroup>()
@@ -183,26 +166,9 @@ const columns: DataTableColumns<ModelConfig> = [
   {
     title: '端点类型',
     key: 'endpoint_types',
-    width: 160,
+    width: 200,
     render: (row: ModelConfig) => {
-      return h(
-          NSpace,
-          {size: 4},
-          {
-            default: () =>
-                row.endpoint_types.map((type) =>
-                    h(
-                        NTag,
-                        {
-                          type: getEndpointTypeColor(type),
-                          size: 'small',
-                          bordered: false
-                        },
-                        {default: () => getEndpointTypeLabel(type)}
-                    )
-                )
-          }
-      )
+      return h(EndpointTags, {types: row.endpoint_types})
     }
   },
   {

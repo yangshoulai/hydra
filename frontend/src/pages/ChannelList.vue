@@ -79,7 +79,7 @@
         :pagination="false"
         :single-line="false"
         bordered
-        :scroll-x="1440"
+        :scroll-x="1560"
         striped
         :row-key="(row: Channel) => row.id"
         @update:sorter="handleSorterChange"
@@ -342,13 +342,24 @@ const columns = computed<DataTableColumns<Channel>>(() => {
       }
     },
     {
-      title: '密钥数量',
+      title: '密钥（健康 / 冷却 / 失效）',
       key: 'keys_count',
-      width: 80,
+      width: 200,
+      align: 'right',
       render(row) {
-        return row.keys?.length || 0
-      },
-      align: 'right'
+        const stats = row.key_stats
+        if (!stats) {
+          return h(NText, {depth: 3}, {default: () => '0 / 0 / 0'})
+        }
+        const color = stats.active > 0 ? '#10b981' : stats.cooling > 0 ? '#f59e0b' : '#ef4444'
+        return h(NSpace, {align: 'center', size: 2, justify: 'end'}, {
+          default: () => [
+            h(NText, {style: {color: color, fontWeight: 500}}, {
+              default: () => `${stats.active} / ${stats.cooling} / ${stats.disabled}`
+            })
+          ]
+        })
+      }
     },
     {
       title: '操作',

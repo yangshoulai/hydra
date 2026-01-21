@@ -58,7 +58,6 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	// 1. 选择 Channel (同时考虑模型和端点类型)
 	channel, err := lb.channelSelector.SelectChannel(ctx, unifiedModel, endpointType, traceID)
 	if err != nil {
-		lb.logger.Warn("选择渠道失败", slog.String("trace_id", traceID), slog.String("unified_model", unifiedModel), slog.String("endpoint_type", endpointType), slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -67,17 +66,14 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	if err != nil {
 		// 如果是没有可用的 key，返回 ErrNoAvailableChannel 让上层尝试其他 channel
 		if errors.Is(err, ErrNoAvailableKey) {
-			lb.logger.Debug("渠道当前没有可用密钥，尝试别的渠道", slog.String("trace_id", traceID), slog.Uint64("channel_id", uint64(channel.ID)), slog.String("channel_name", channel.Name))
 			return nil, ErrNoAvailableChannel
 		}
-		lb.logger.Warn("选择密钥失败", slog.String("trace_id", traceID), slog.Uint64("channel_id", uint64(channel.ID)), slog.String("channel_name", channel.Name), slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	// 3. 路由模型
 	upstreamModel, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType, traceID)
 	if err != nil {
-		lb.logger.Warn("模型路由失败", slog.String("trace_id", traceID), slog.Uint64("channel_id", uint64(channel.ID)), slog.String("channel_name", channel.Name), slog.String("unified_model", unifiedModel), slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -87,9 +83,6 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 		UpstreamModel: upstreamModel,
 		UnifiedModel:  unifiedModel,
 	}
-
-	lb.logger.Info("请求路由成功", slog.String("trace_id", traceID), slog.Uint64("channel_id", uint64(channel.ID)), slog.String("channel_name", channel.Name), slog.Uint64("key_id", uint64(key.ID)), slog.String("unified_model", unifiedModel), slog.String("upstream_model", upstreamModel))
-
 	return result, nil
 }
 
@@ -117,7 +110,7 @@ func (lb *LoadBalancer) RouteWithRetry(
 		if err != nil {
 			// 检查 context 是否被取消或超时
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				lb.logger.Debug("请求上下文已取消", slog.String("trace_id", traceID), slog.String("error", err.Error()))
+				lb.logger.Debug("请求已取消", slog.String("trace_id", traceID), slog.String("error", err.Error()))
 				return nil, err
 			}
 
@@ -128,7 +121,6 @@ func (lb *LoadBalancer) RouteWithRetry(
 			// 其他错误,继续重试
 			continue
 		}
-
 		// 检查是否已在排除列表中
 		if excludeMap[result.Channel.ID] {
 			lb.logger.Debug("渠道已经尝试过, 再试一次", slog.String("trace_id", traceID), slog.Uint64("channel_id", uint64(result.Channel.ID)), slog.Int("retry_count", i))
@@ -138,7 +130,7 @@ func (lb *LoadBalancer) RouteWithRetry(
 		return result, nil
 	}
 
-	lb.logger.Error("所有重试尝试均失败", slog.String("trace_id", traceID), slog.String("unified_model", unifiedModel), slog.Int("max_retries", maxRetries))
+	lb.logger.Debug("所有重试尝试均失败", slog.String("trace_id", traceID), slog.String("unified_model", unifiedModel), slog.Int("max_retries", maxRetries))
 
 	return nil, ErrNoAvailableRoute
 }

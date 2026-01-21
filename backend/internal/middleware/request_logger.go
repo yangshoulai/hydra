@@ -22,7 +22,6 @@ func RequestLogger(logger *slog.Logger) gin.HandlerFunc {
 			slog.String("method", c.Request.Method),
 			slog.String("path", c.Request.URL.Path),
 			slog.String("client_ip", c.ClientIP()),
-			slog.String("user_agent", c.Request.UserAgent()),
 		)
 
 		// 处理请求

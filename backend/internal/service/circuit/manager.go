@@ -338,7 +338,7 @@ func (m *Manager) probeKey(keyID uint) {
 	success, isHardFailure, err := probeHandler.ProbeKeyWithRetry(ctx, key, channel, 0)
 
 	// 处理探测结果
-	probeHandler.HandleProbeResult(keyID, key.ChannelID, success, isHardFailure)
+	probeHandler.HandleProbeResult(keyID, channel, success, isHardFailure)
 
 	if err != nil {
 		m.logger.Debug("探测完成但有错误",

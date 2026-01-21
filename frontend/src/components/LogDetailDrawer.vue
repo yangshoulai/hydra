@@ -79,7 +79,7 @@
               </n-descriptions-item>
 
               <n-descriptions-item label="端点类型">
-                <n-tag type="info" size="small">{{ log.endpoint_type }}</n-tag>
+                <EndpointTags :types="[log.endpoint_type]" />
               </n-descriptions-item>
 
               <!--              <n-descriptions-item label="统一模型">{{ log.unified_model }}</n-descriptions-item>-->
@@ -374,6 +374,7 @@ import {
 } from '@vicons/ionicons5'
 import {logApi} from '../services/logService'
 import type {LogDetailResponse} from '../types/log'
+import EndpointTags from './EndpointTags.vue'
 
 // highlight.js 配置
 import hljs from 'highlight.js/lib/core'
