@@ -302,7 +302,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		// 更新明细日志
 		errorMsg := ""
 		if forwardErr != nil {
-			errorMsg = forwardErr.Error()
+			if errors.Is(forwardErr, context.Canceled) {
+				errorMsg = "渠道断开连接"
+			} else {
+				errorMsg = forwardErr.Error()
+			}
 		}
 		detailLog.ResponseBody(responseBodyStr).StreamChunks(streamChunks).StreamFirstChunkTime(firstChunkTime).
 			IsSuccess(forwardErr == nil).
@@ -310,7 +314,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			ErrorMessage(errorMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 
 		mainLog.AddDetail(detailLog)
-		mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(upstreamResp.StatusCode).ErrorMessage(errorMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
+		statusCode := http.StatusOK
+		if forwardErr != nil {
+			statusCode = http.StatusInternalServerError
+		}
+		mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(statusCode).ErrorMessage(errorMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 		ps.auditLogger.LogAsync(mainLog.Build())
 		return forwardErr
 	}
