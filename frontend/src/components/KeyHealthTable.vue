@@ -17,7 +17,7 @@
 <script setup lang="ts">
 import {computed, h, onMounted, ref} from 'vue'
 import {type DataTableColumns, NButton, NDataTable, NIcon, NSpace, NTag, NText} from 'naive-ui'
-import {AlertCircle, CheckmarkCircle, CloseCircle, ContrastOutline, CopyOutline, PulseOutline, RefreshOutline, TrashOutline} from '@vicons/ionicons5'
+import {AlertCircle, CheckmarkCircle, CloseCircle, ContrastOutline, CopyOutline, PlayCircleOutline, TrashOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import type {Channel, ChannelHealthCheckResult, Key} from '../types/channel'
 
@@ -42,6 +42,7 @@ interface KeyHealthRow {
   test_message?: string
   message: string
   latency: string
+  cooling_time?: string
   key?: Key
 }
 
@@ -50,11 +51,32 @@ const loading = ref(false)
 const channel = ref<Channel | null>(null)
 const testingKeys = ref<Set<number>>(new Set())
 const testResults = ref<Map<number, { status: 'healthy' | 'unhealthy' | 'error', message: string, latency: string }>>(new Map())
+const currentTime = ref(Date.now())
 
 // 脱敏key函数
 function maskKey(key: string): string {
   if (!key || key.length < 10) return key || ''
   return key.substring(0, 6) + '**********' + key.substring(key.length - 4)
+}
+
+// 计算冷却时间
+function calculateCoolingTime(coolingAt?: string): string | undefined {
+  if (!coolingAt) return undefined
+
+  const coolingTime = new Date(coolingAt).getTime()
+  const diff = currentTime.value - coolingTime
+
+  if (diff < 0) return undefined
+
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+
+  if (minutes > 0) {
+    return `${minutes}分${remainingSeconds}秒`
+  } else {
+    return `${remainingSeconds}秒`
+  }
 }
 
 // 计算显示数据
@@ -71,6 +93,7 @@ const displayData = computed<KeyHealthRow[]>(() => {
       test_message: testResult?.message,
       message: '',
       latency: testResult?.latency || '',
+      cooling_time: key.status === 'cooling' ? calculateCoolingTime(key.cooling_at) : undefined,
       key
     }
   }) || []
@@ -92,7 +115,7 @@ const columns: DataTableColumns<KeyHealthRow> = [
   {
     title: '密钥',
     key: 'key_preview',
-    width: 240,
+    width: 200,
     render(row) {
       return h(
           'div',
@@ -141,7 +164,7 @@ const columns: DataTableColumns<KeyHealthRow> = [
     title: '状态',
     key: 'status',
     align: 'center',
-    width: 120,
+    width: 80,
     render(row) {
       const config = {
         active: {type: 'success' as const, text: '正常', icon: CheckmarkCircle},
@@ -154,22 +177,27 @@ const columns: DataTableColumns<KeyHealthRow> = [
           'div',
           {style: {display: 'flex', alignItems: 'center', gap: '8px', 'justifyContent': 'center'}},
           [
-            h(NIcon, {
-              color: status.type === 'success' ? '#18a058' :
-                  status.type === 'error' ? '#d03050' :
-                      '#f0a020'
-            }, {
-              default: () => h(status.icon)
-            }),
             h(NTag, {type: status.type, size: 'small'}, {default: () => status.text})
           ]
       )
     }
   },
   {
+    title: '已冷却',
+    key: 'cooling_time',
+    align: 'center',
+    width: 120,
+    render(row) {
+      if (row.status !== 'cooling' || !row.cooling_time) {
+        return h(NText, {depth: 3}, {default: () => '-'})
+      }
+      return h(NText, {}, {default: () => row.cooling_time})
+    }
+  },
+  {
     title: '备注',
     key: 'key_remark',
-    width: 200,
+    width: 120,
     ellipsis: {
       tooltip: true
     }
@@ -180,57 +208,79 @@ const columns: DataTableColumns<KeyHealthRow> = [
     align: 'center',
     width: 120,
     render(row) {
+      // 如果正在测试
       if (testingKeys.value.has(row.key_id)) {
         return h(
-            'div',
-            {style: {display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center'}},
-            [
-              h(NIcon, {
-                color: '#2080f0',
-                class: 'spin-icon'
-              }, {
-                default: () => h(RefreshOutline)
-              }),
-              h(NTag, {type: 'info', size: 'small'}, {default: () => '测试中'})
-            ]
+            NButton,
+            {
+              size: 'tiny',
+              type: 'info',
+              loading: true,
+              disabled: true
+            },
+            {
+              default: () => '测试中',
+              icon: () => h(NIcon, {}, {default: () => h(PlayCircleOutline)})
+            }
         )
       }
 
-      if (!row.test_status) {
-        return h(NText, {depth: 3}, {default: () => '-'})
+      // 有测试结果时显示为按钮
+      if (row.test_status) {
+        const config = {
+          healthy: {type: 'success' as const, text: '健康'},
+          unhealthy: {type: 'error' as const, text: '异常'},
+          error: {type: 'warning' as const, text: '错误'},
+          testing: {type: 'info' as const, text: '测试中'}
+        }
+        const status = config[row.test_status]
+
+        return h(
+            NButton,
+            {
+              size: 'tiny',
+              type: status.type,
+              title: row.test_message || '',
+              onClick: () => handleTestKey(row.key_id)
+            },
+            {
+              default: () => status.text,
+              icon: () => h(NIcon, {}, {default: () => h(PlayCircleOutline)})
+            }
+        )
       }
 
-      const config = {
-        healthy: {type: 'success' as const, text: '健康', icon: CheckmarkCircle, color: '#18a058'},
-        unhealthy: {type: 'error' as const, text: '异常', icon: CloseCircle, color: '#d03050'},
-        error: {type: 'warning' as const, text: '错误', icon: AlertCircle, color: '#f0a020'},
-        testing: {type: 'info' as const, text: '测试中', icon: RefreshOutline, color: '#2080f0'},
-      }
-      const status = config[row.test_status]
-
+      // 没有测试结果时显示测试按钮
       return h(
-          'div',
+          NButton,
           {
-            style: {display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center'},
-            title: row.test_message || ''
+            size: 'tiny',
+            type: 'info',
+            onClick: () => handleTestKey(row.key_id)
           },
-          [
-            h(NIcon, {color: status.color}, {default: () => h(status.icon)}),
-            h(NTag, {type: status.type, size: 'small'}, {default: () => status.text})
-          ]
+          {
+            default: () => '测试',
+            icon: () => h(NIcon, {}, {default: () => h(PlayCircleOutline)})
+          }
       )
     }
   },
   {
     title: '延迟',
     key: 'latency',
-    width: 120,
+    width: 80,
     align: 'right',
     render(row) {
-      if (row.latency === '-') {
+      if (!row.latency || row.latency === '-') {
         return h(NText, {depth: 3}, {default: () => '-'})
       }
-      // 解析延迟字符串并显示
+      // 解析延迟字符串，保留最多2位小数
+      const match = row.latency.match(/^([\d.]+)(.*)$/)
+      if (match) {
+        const value = parseFloat(match[1] || '')
+        const unit = match[2]
+        return h(NText, {}, {default: () => `${value.toFixed(2)}${unit}`})
+      }
       return h(NText, {}, {default: () => row.latency})
     }
   },
@@ -238,7 +288,7 @@ const columns: DataTableColumns<KeyHealthRow> = [
     title: '操作',
     key: 'actions',
     align: 'center',
-    width: 240,
+    width: 160,
     fixed: 'right',
     render(row) {
       return h(
@@ -248,20 +298,6 @@ const columns: DataTableColumns<KeyHealthRow> = [
           },
           {
             default: () => [
-              h(
-                  NButton,
-                  {
-                    size: 'tiny',
-                    type: 'info',
-                    loading: testingKeys.value.has(row.key_id),
-                    disabled: testingKeys.value.has(row.key_id),
-                    onClick: () => handleTestKey(row.key_id)
-                  },
-                  {
-                    default: () => '测试',
-                    icon: () => h(NIcon, {}, {default: () => h(PulseOutline)})
-                  }
-              ),
               row.key && row.key.status !== 'disabled' && h(
                   NButton,
                   {
@@ -446,6 +482,11 @@ defineExpose({
 // 初始化
 onMounted(() => {
   fetchChannel()
+
+  // 每秒更新一次当前时间，用于实时更新冷却时间
+  setInterval(() => {
+    currentTime.value = Date.now()
+  }, 1000)
 })
 </script>
 
