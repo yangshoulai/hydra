@@ -163,3 +163,14 @@ func (r *KeyRepository) CountByChannelIDAndStatus(ctx context.Context, channelID
 
 	return result, nil
 }
+
+// FindAllCooling 查询所有处于冷却中的 Key（仅包含激活渠道的密钥）
+func (r *KeyRepository) FindAllCooling(ctx context.Context) ([]*models.Key, error) {
+	var keys []*models.Key
+	err := r.db.WithContext(ctx).
+		Joins("JOIN channels ON keys.channel_id = channels.id").
+		Where("keys.status = ? AND channels.status <> ?", "cooling", "disabled").
+		Order("keys.id ASC").
+		Find(&keys).Error
+	return keys, err
+}

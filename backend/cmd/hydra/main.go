@@ -84,6 +84,16 @@ func main() {
 	// 初始化熔断器管理器（传入 settingService 以支持配置热更新）
 	circuitManager := initCircuitManager(db, mainLogger, settingService, failureThreshold, coolingDuration)
 
+	// 从数据库加载冷却中的密钥到缓存
+	if err := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return circuitManager.LoadCoolingKeys(ctx)
+	}(); err != nil {
+		mainLogger.Error("加载冷却中的密钥失败", slog.String("error", err.Error()))
+		// 不终止程序，只记录错误
+	}
+
 	// 初始化调试模式管理器
 	debugModeManager := loggerService.NewDebugModeManager(mainLogger, settingService)
 	if err := debugModeManager.Initialize(ctx); err != nil {

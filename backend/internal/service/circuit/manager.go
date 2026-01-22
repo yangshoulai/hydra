@@ -65,6 +65,50 @@ func NewManager(
 	}
 }
 
+// LoadCoolingKeys 从数据库加载所有冷却中的密钥到缓存
+func (m *Manager) LoadCoolingKeys(ctx context.Context) error {
+	keys, err := m.keyRepo.FindAllCooling(ctx)
+	if err != nil {
+		return err
+	}
+
+	if len(keys) == 0 {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	loadedCount := 0
+	for _, key := range keys {
+		var lastFailure time.Time
+		if key.CoolingAt != nil {
+			lastFailure = key.CoolingAt.Add(-m.coolingDuration)
+		} else {
+			lastFailure = time.Now()
+		}
+
+		breaker := &KeyBreaker{
+			keyID:            key.ID,
+			state:            KeyStateCooling,
+			failureCount:     m.failureThreshold,
+			lastFailure:      lastFailure,
+			failureThreshold: m.failureThreshold,
+			coolingDuration:  m.coolingDuration,
+		}
+		m.keyBreakers[key.ID] = breaker
+		loadedCount++
+	}
+
+	if loadedCount > 0 {
+		m.logger.Info("从数据库加载冷却中的密钥",
+			slog.Int("count", loadedCount),
+		)
+	}
+
+	return nil
+}
+
 // GetKeyBreaker 获取或创建 Key 熔断器
 func (m *Manager) GetKeyBreaker(keyID uint) *KeyBreaker {
 	m.mu.RLock()
