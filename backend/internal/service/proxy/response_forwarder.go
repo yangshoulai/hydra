@@ -98,7 +98,9 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 	unifiedModel string,
 	traceID string,
 ) (string, error) {
-	defer upstreamResp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(upstreamResp.Body)
 
 	// 读取响应 Body
 	body, err := io.ReadAll(upstreamResp.Body)
@@ -115,7 +117,6 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 				slog.String("trace_id", traceID),
 				slog.String("error", err.Error()),
 			)
-			// 失败时使用原始 Body
 		} else {
 			body = modifiedBody
 		}
@@ -128,9 +129,20 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 	c.Status(upstreamResp.StatusCode)
 	c.Header("Content-Type", "application/json")
 
-	// 写入响应
-	if _, err := c.Writer.Write(body); err != nil {
-		return string(body), err
+	// 写入响应（分片写入 + flush，避免大响应体写入超时）
+	const chunkSize = 32 * 1024 // 32KB 每块
+	for i := 0; i < len(body); i += chunkSize {
+		end := i + chunkSize
+		if end > len(body) {
+			end = len(body)
+		}
+
+		if _, err := c.Writer.Write(body[i:end]); err != nil {
+			return string(body), err
+		}
+
+		// 每次写入后刷新，确保数据及时发送给客户端
+		c.Writer.Flush()
 	}
 
 	return string(body), nil
