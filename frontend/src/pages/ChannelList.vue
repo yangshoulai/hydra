@@ -79,7 +79,7 @@
         :pagination="false"
         :single-line="false"
         bordered
-        :scroll-x="1560"
+        :scroll-x="960"
         striped
         :row-key="(row: Channel) => row.id"
         @update:sorter="handleSorterChange"
@@ -128,7 +128,7 @@
 
 <script setup lang="ts">
 import {computed, h, onMounted, reactive, ref} from 'vue'
-import {type DataTableColumns, NButton, NCard, NDataTable, NForm, NFormItemGi, NGrid, NIcon, NInput, NPagination, NSelect, NSpace, NTag, NText} from 'naive-ui'
+import {type DataTableColumns, NButton, NCard, NDataTable, NForm, NFormItemGi, NGrid, NIcon, NInput, NPagination, NSelect, NSpace, NTag, NText, NTooltip} from 'naive-ui'
 import {AddOutline, CreateOutline, GridOutline, KeyOutline, RefreshOutline, SearchOutline, TrashOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import type {Channel, ChannelListParams} from '../types/channel'
@@ -267,12 +267,7 @@ const columns = computed<DataTableColumns<Channel>>(() => {
     {
       title: '名称',
       key: 'name',
-      width: 200
-    },
-    {
-      title: 'BASE URL',
-      key: 'base_url',
-      width: 280,
+      width: 160,
       ellipsis: {
         tooltip: true
       },
@@ -288,7 +283,7 @@ const columns = computed<DataTableColumns<Channel>>(() => {
               target: "_blank"
             },
             {
-              default: () => (row.base_url)
+              default: () => (row.name)
             }
         )
       }
@@ -342,9 +337,9 @@ const columns = computed<DataTableColumns<Channel>>(() => {
       }
     },
     {
-      title: '密钥（健康 / 冷却 / 失效）',
+      title: '密钥',
       key: 'keys_count',
-      width: 200,
+      width: 120,
       align: 'right',
       render(row) {
         const stats = row.key_stats
@@ -352,13 +347,23 @@ const columns = computed<DataTableColumns<Channel>>(() => {
           return h(NText, {depth: 3}, {default: () => '0 / 0 / 0'})
         }
         const color = stats.active > 0 ? '#10b981' : stats.cooling > 0 ? '#f59e0b' : '#ef4444'
-        return h(NSpace, {align: 'center', size: 2, justify: 'end'}, {
-          default: () => [
-            h(NText, {style: {color: color, fontWeight: 500}}, {
-              default: () => `${stats.active} / ${stats.cooling} / ${stats.disabled}`
-            })
-          ]
-        })
+
+        return h(
+          NTooltip,
+          {},
+          {
+            trigger: () =>
+              h(NText, {style: {color: color, fontWeight: 500}}, {
+                default: () => `${stats.active} / ${stats.cooling} / ${stats.disabled}`
+              }),
+            default: () =>
+              h('div', {style: {lineHeight: '1.8'}}, [
+                h('div', {}, `健康：${stats.active}`),
+                h('div', {}, `冷却：${stats.cooling}`),
+                h('div', {}, `失效：${stats.disabled}`)
+              ])
+          }
+        )
       }
     },
     {

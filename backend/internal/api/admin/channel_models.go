@@ -285,6 +285,75 @@ func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 	})
 }
 
+// ToggleChannelModelStatus 切换渠道模型配置状态
+// @Summary 切换模型配置状态
+// @Description 切换指定模型配置的启用/禁用状态
+// @Tags 模型配置
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "配置ID"
+// @Success 200 {object} models.ChannelModelConfig
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /admin/api/channel-models/{id}/toggle-status [patch]
+func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid config id",
+		})
+		return
+	}
+
+	// 查询现有配置
+	modelConfig, err := h.modelConfigRepo.FindByID(c.Request.Context(), uint(id))
+	if err != nil {
+		h.logger.Error("failed to find model config",
+			slog.Uint64("config_id", id),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to find model config",
+		})
+		return
+	}
+
+	if modelConfig == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "model config not found",
+		})
+		return
+	}
+
+	// 切换状态
+	if modelConfig.Status == "active" {
+		modelConfig.Status = "disabled"
+	} else {
+		modelConfig.Status = "active"
+	}
+
+	// 保存更新
+	if err := h.modelConfigRepo.Update(c.Request.Context(), modelConfig); err != nil {
+		h.logger.Error("failed to update model config status",
+			slog.Uint64("config_id", id),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to update model config status",
+		})
+		return
+	}
+
+	h.logger.Info("model config status toggled",
+		slog.Uint64("config_id", uint64(modelConfig.ID)),
+		slog.String("new_status", modelConfig.Status),
+	)
+
+	c.JSON(http.StatusOK, modelConfig)
+}
+
 // RegisterRoutes 注册模型配置路由
 func (h *ChannelModelHandler) RegisterRoutes(r *gin.RouterGroup) {
 	models := r.Group("/channel-models")
@@ -292,5 +361,6 @@ func (h *ChannelModelHandler) RegisterRoutes(r *gin.RouterGroup) {
 		models.POST("", h.CreateChannelModel)
 		models.PUT("/:id", h.UpdateChannelModel)
 		models.DELETE("/:id", h.DeleteChannelModel)
+		models.PATCH("/:id/toggle-status", h.ToggleChannelModelStatus)
 	}
 }

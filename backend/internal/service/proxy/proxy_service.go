@@ -115,6 +115,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	// 1. 读取请求 Body
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
+		ps.logErrorWithTrace("读取请求异常", traceID, slog.String("error", err.Error()))
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Failed to read request body", traceID)
 		mainLog.EndTime(time.Now()).StatusCode(http.StatusBadRequest).ErrorMessage("读取请求异常: " + err.Error())
 		ps.auditLogger.LogAsync(mainLog.Build())
@@ -126,6 +127,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	// 2. 解析请求获取模型名
 	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes)
 	if err != nil {
+		ps.logErrorWithTrace("获取请求模型异常", traceID, slog.String("error", err.Error()))
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Invalid request: "+err.Error(), traceID)
 		mainLog.EndTime(time.Now()).StatusCode(http.StatusBadRequest).ErrorMessage("获取请求模型异常: " + err.Error())
 		ps.auditLogger.LogAsync(mainLog.Build())
@@ -214,6 +216,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 
 		// 处理故障
 		if failureType != FailureTypeNone {
+			ps.logErrorWithTrace("渠道故障", traceID, slog.String("filure_tyoe", string(failureType)),
+				slog.Uint64("channel_id", uint64(routeResult.Channel.ID)),
+				slog.String("channel_name", routeResult.Channel.Name),
+				slog.String("error", errMsg),
+			)
 			if failureType != FailureTypeModelNotFound {
 				ps.recordFailure(routeResult, failureType, errMsg)
 			}
@@ -278,9 +285,9 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		} else {
 			sniffResult, sniffErr := ps.responseSniffer.SniffResponse(upstreamResp)
 			if sniffErr != nil {
-				ps.logErrorWithTrace("嗅探响应失败", traceID, slog.String("error", sniffErr.Error()))
+				ps.logWarnWithTrace("嗅探响应失败", traceID, slog.String("error", sniffErr.Error()))
 			} else if sniffResult.IsFake200 {
-				ps.logWarnWithTrace("检测到假 200 响应", traceID, slog.String("rule", sniffResult.MatchedRule))
+				ps.logErrorWithTrace("检测到假 200 响应", traceID, slog.String("rule", sniffResult.MatchedRule))
 				ps.recordFailure(routeResult, FailureTypeSoft, "假 200 响应")
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, errors.New("fake 200 response"), FailureTypeSoft)
 
@@ -308,6 +315,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			} else {
 				errorMsg = forwardErr.Error()
 			}
+			ps.logErrorWithTrace("转发异常", traceID,
+				slog.Uint64("channel_id", uint64(routeResult.Channel.ID)),
+				slog.String("channel_name", routeResult.Channel.Name),
+				slog.String("error", errorMsg),
+			)
 		}
 		detailLog.ResponseBody(responseBodyStr).StreamChunks(streamChunks).StreamFirstChunkTime(firstChunkTime).
 			IsSuccess(forwardErr == nil).

@@ -210,5 +210,15 @@ export const channelApi = {
   async getChannelsByModel(modelId: number): Promise<any[]> {
     const response = await apiClient.get(`/admin/api/models/${modelId}/channels`)
     return response.data
+  },
+
+  /**
+   * 切换渠道模型配置状态
+   */
+  async toggleChannelModelStatus(configId: number): Promise<ChannelModelConfig> {
+    const response = await apiClient.patch<ChannelModelConfig>(
+      `/admin/api/channel-models/${configId}/toggle-status`
+    )
+    return response.data
   }
 }

@@ -527,6 +527,8 @@ func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
 
 	// 构建响应
 	type ChannelModelInfo struct {
+		ConfigID      uint     `json:"config_id"`
+		ConfigStatus  string   `json:"config_status"`
 		ChannelID     uint     `json:"channel_id"`
 		ChannelName   string   `json:"channel_name"`
 		ChannelStatus string   `json:"channel_status"`
@@ -538,6 +540,8 @@ func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
 	for _, config := range configs {
 		if config.Channel != nil {
 			result = append(result, ChannelModelInfo{
+				ConfigID:      config.ID,
+				ConfigStatus:  config.Status,
 				ChannelID:     config.ChannelID,
 				ChannelName:   config.Channel.Name,
 				ChannelStatus: config.Channel.Status,

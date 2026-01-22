@@ -312,7 +312,14 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 	if err != nil {
 		return false, fmt.Sprintf("无法读取响应内容: %v", err), latency, err
 	}
-
+	h.logger.Info("模型测试完成", slog.Uint64("channel_id", uint64(channel.ID)),
+		slog.String("channel_name", channel.Name),
+		slog.String("upstream_model", upstreamModel),
+		slog.String("endpoint_type", endpointType),
+		slog.String("url", req.URL.String()),
+		slog.Uint64("status_code", uint64(resp.StatusCode)),
+		slog.String("request_body", string(body)),
+	)
 	// 使用端点的验证方法验证响应
 	valid, errMsg := ep.ValidateResponse(resp.StatusCode, body)
 	if valid {
