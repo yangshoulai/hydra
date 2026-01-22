@@ -39,7 +39,7 @@ func (fc *FailureClassifier) ClassifyHTTPError(statusCode int) (FailureType, str
 	if statusCode == http.StatusUnauthorized || // 401
 		statusCode == http.StatusPaymentRequired || // 402
 		statusCode == http.StatusForbidden { // 403
-		return FailureTypeHard, "认证和授权问题（" + strconv.Itoa(statusCode) + "）"
+		return FailureTypeSoft, "认证和授权问题（" + strconv.Itoa(statusCode) + "）"
 	}
 
 	// 429 需要检查是否为 quota exceeded

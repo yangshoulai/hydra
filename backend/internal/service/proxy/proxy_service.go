@@ -193,9 +193,9 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 				EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 
 			mainLog.AddDetail(detailLog)
+			mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusInternalServerError).ErrorMessage("构建代理请求异常" + err.Error()).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 			if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 				ps.responseForwarder.ForwardErrorResponse(c, http.StatusInternalServerError, "Failed to build proxy request", traceID)
-				mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusInternalServerError).ErrorMessage("构建代理请求异常" + err.Error()).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 				ps.auditLogger.LogAsync(mainLog.Build())
 				return err
 			}
@@ -216,7 +216,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 
 		// 处理故障
 		if failureType != FailureTypeNone {
-			ps.logErrorWithTrace("渠道故障", traceID, slog.String("filure_tyoe", string(failureType)),
+			ps.logErrorWithTrace("渠道故障", traceID, slog.String("failure_type", string(failureType)),
 				slog.Uint64("channel_id", uint64(routeResult.Channel.ID)),
 				slog.String("channel_name", routeResult.Channel.Name),
 				slog.String("error", errMsg),
@@ -228,13 +228,9 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			detailLog.IsSuccess(false).Status("failed").ErrorMessage(errMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, errors.New(errMsg), failureType)
 			mainLog.AddDetail(detailLog)
+			mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage(errMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 			if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 				ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
-				statusCode := http.StatusBadGateway
-				if upstreamResp != nil {
-					statusCode = upstreamResp.StatusCode
-				}
-				mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(statusCode).ErrorMessage(errMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 				ps.auditLogger.LogAsync(mainLog.Build())
 				return errors.New(errMsg)
 			}
@@ -271,10 +267,9 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 					ErrorMessage(fake200Err.Error()).
 					EndTime(time.Now()).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 				mainLog.AddDetail(detailLog)
-
+				mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage(fake200Err.Error()).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
-					mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage(fake200Err.Error()).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 					ps.auditLogger.LogAsync(mainLog.Build())
 					return fake200Err
 				}
@@ -293,10 +288,10 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 
 				detailLog.EndTime(time.Now()).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds())).IsSuccess(false).Status("failed").ResponseBody(string(sniffResult.Body))
 				mainLog.AddDetail(detailLog)
-
+				mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage("Fake 200 response").LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
 					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
-					mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage("Fake 200 response").LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
+					ps.auditLogger.LogAsync(mainLog.Build())
 					return errors.New("fake 200 response")
 				}
 

@@ -1,9 +1,7 @@
 package circuit
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/models"
 )
 
@@ -40,6 +37,7 @@ func NewProbeHandler(manager *Manager, logger *slog.Logger) *ProbeHandler {
 
 // ProbeKey 探测指定的 Key
 // 返回值: (成功, 是否为硬故障, 错误信息)
+// 通过调用渠道的 /models 接口来判断密钥是否可用
 func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *models.Channel) (bool, bool, error) {
 	ph.logger.Debug("开始嗅探密钥",
 		slog.Uint64("key_id", uint64(key.ID)),
@@ -47,44 +45,10 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		slog.String("channel_name", channel.Name),
 	)
 
-	// 确定要使用的端点类型和模型名称
-	endpointType, modelName, err := ph.getTestEndpointAndModel(channel)
-	if err != nil {
-		ph.logger.Warn("渠道未配置模型，跳过密钥探测",
-			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.String("channel_name", channel.Name),
-		)
-		// 返回软故障，不影响其他密钥
-		return false, false, err
-	}
+	// 构造 /models 端点的请求 URL
+	probeURL := fmt.Sprintf("%s/v1/models", channel.BaseURL)
 
-	// 从注册中心获取端点
-	ep, err := endpoint.Get(endpointType)
-	if err != nil {
-		ph.logger.Error("无法获取端点类型",
-			slog.String("endpoint_type", endpointType),
-			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.String("channel_name", channel.Name),
-			slog.String("error", err.Error()),
-		)
-		return false, false, err
-	}
-
-	// 构造探测请求
-	probeURL := fmt.Sprintf("%s%s", channel.BaseURL, ep.GetPath())
-	payload := ep.GetTestPayload(modelName)
-
-	// 序列化请求体
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		ph.logger.Error("序列化测试报文异常",
-			slog.Uint64("key_id", uint64(key.ID)),
-			slog.String("error", err.Error()),
-		)
-		return false, false, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", probeURL, bytes.NewReader(payloadBytes))
+	req, err := http.NewRequestWithContext(ctx, "GET", probeURL, nil)
 	if err != nil {
 		ph.logger.Error("创建嗅探请求异常",
 			slog.Uint64("key_id", uint64(key.ID)),
@@ -93,9 +57,9 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		return false, false, err
 	}
 
-	// 使用端点的配置方法设置请求头
-	ep.ConfigureRequest(req, key.KeyValue)
-	req.Header.Set("User-Agent", "Hydra-Probe/1.0")
+	// 设置请求头（使用 OpenAI 格式的认证头）
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", key.KeyValue))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36")
 
 	// 发送探测请求
 	resp, err := ph.httpClient.Do(req)
@@ -114,7 +78,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		_ = Body.Close()
 	}(resp.Body)
 
-	// 读取响应体
+	// 读取响应体（用于日志记录）
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		ph.logger.Warn("无法读取嗅探响应报文",
@@ -128,9 +92,9 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		return false, false, err
 	}
 
-	// 使用端点的验证方法验证响应
-	valid, errMsg := ep.ValidateResponse(resp.StatusCode, body)
-	if valid {
+	// 判断响应状态码
+	// 200 状态码表示密钥可用（包括模型列表为空的情况）
+	if resp.StatusCode == http.StatusOK {
 		ph.logger.Info("嗅探成功",
 			slog.Uint64("key_id", uint64(key.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
@@ -141,7 +105,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 		return true, false, nil
 	}
 
-	// 验证失败，根据状态码判断故障类型
+	// 根据状态码判断故障类型
 	switch {
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		// 认证失败,硬故障
@@ -151,8 +115,9 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
 			slog.Int("status_code", resp.StatusCode),
+			slog.String("response_body", string(body)),
 		)
-		return false, true, fmt.Errorf("authentication failed: %d", resp.StatusCode)
+		return false, false, fmt.Errorf("authentication failed: %d", resp.StatusCode)
 
 	case resp.StatusCode == 429:
 		// 限流,视为软故障
@@ -178,15 +143,15 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 
 	default:
 		// 其他错误,视为软故障
-		ph.logger.Warn("嗅探失败 (validation error)",
+		ph.logger.Warn("嗅探失败 (unexpected status)",
 			slog.Uint64("key_id", uint64(key.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
 			slog.Int("status_code", resp.StatusCode),
-			slog.String("error", errMsg),
+			slog.String("response_body", string(body)),
 		)
-		return false, false, fmt.Errorf("嗅探失败: %s", errMsg)
+		return false, false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 }
 

@@ -217,7 +217,7 @@ func initCircuitManager(
 	keyRepo := repository.NewKeyRepository(db)
 	channelRepo := repository.NewChannelRepository(db)
 
-	probeInterval := 30 * time.Second // 探测间隔 30 秒
+	probeInterval := 90 * time.Second // 探测间隔 90 秒
 
 	return circuit.NewManager(
 		db,

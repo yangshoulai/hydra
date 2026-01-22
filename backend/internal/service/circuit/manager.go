@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -154,9 +155,19 @@ func (m *Manager) RecordKeyHardFailure(keyID uint, channelID uint, channelName s
 func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName string, errMsg string) {
 	keyBreaker := m.GetKeyBreaker(keyID)
 	keyBreaker.RecordSoftFailure()
+	m.logger.Warn("密钥连续["+strconv.Itoa(keyBreaker.failureCount)+"]次失败",
+		slog.Uint64("key_id", uint64(keyID)),
+		slog.Uint64("channel_id", uint64(channelID)),
+		slog.String("channel_name", channelName),
+	)
 
 	channelBreaker := m.GetChannelBreaker(channelID)
 	channelBreaker.RecordFailure()
+	m.logger.Warn("渠道连续["+strconv.Itoa(channelBreaker.failureCount)+"]次失败",
+		slog.Uint64("key_id", uint64(keyID)),
+		slog.Uint64("channel_id", uint64(channelID)),
+		slog.String("channel_name", channelName),
+	)
 
 	// 如果进入冷却状态,更新数据库
 	if keyBreaker.GetState() == KeyStateCooling {

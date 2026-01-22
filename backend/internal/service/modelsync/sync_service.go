@@ -131,7 +131,7 @@ func (s *SyncService) fetchUpstreamModels(ctx context.Context, channel *models.C
 
 	// 设置请求头
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Hydra/1.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36")
 
 	// 查询渠道的活跃密钥
 	keys, err := s.keyRepo.FindActiveByChannelID(ctx, channel.ID)
