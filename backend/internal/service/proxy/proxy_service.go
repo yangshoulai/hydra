@@ -163,7 +163,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		if err != nil {
 			ps.logErrorWithTrace("路由失败", traceID, slog.String("model", unifiedModel), slog.String("error", err.Error()))
 			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable, "No available channels for model: "+unifiedModel, traceID)
-			mainLog.EndTime(time.Now()).StatusCode(http.StatusServiceUnavailable).ErrorMessage("没有可用渠道")
+			mainLog.EndTime(time.Now()).StatusCode(http.StatusServiceUnavailable).ErrorMessage(err.Error())
 			ps.auditLogger.LogAsync(mainLog.Build())
 			return err
 		}
