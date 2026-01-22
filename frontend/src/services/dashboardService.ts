@@ -16,10 +16,14 @@ export interface SuccessRateStats {
 export interface ChannelHealthInfo {
     channel_id: number
     channel_name: string
+    status: 'active' | 'disabled'
     failed_requests: number
     success_rate: number
     success_requests: number
     total_requests: number
+    healthy_keys: number
+    total_keys: number
+    health_percentage: number
 }
 
 export interface OverallHealthStatus {
@@ -48,10 +52,12 @@ export interface ModelDetailInfo {
 
 export interface DashboardMetrics {
     qps: number
+    current_qps: number
     qps_trend: QPSDataPoint[]
     today_success_rate: SuccessRateStats
     overall_health: OverallHealthStatus
     channel_stats: ChannelHealthInfo[]
+    channel_health_list: ChannelHealthInfo[]
     model_stats: ModelStats
     total_requests: number
     total_channels: number
@@ -59,7 +65,6 @@ export interface DashboardMetrics {
     active_channels: number
     generated_at: string,
     success_rate: number
-
 }
 
 export interface QPSMetrics {

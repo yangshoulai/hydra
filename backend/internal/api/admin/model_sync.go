@@ -58,7 +58,7 @@ func (h *ModelSyncHandler) SyncChannelModels(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		h.logger.Warn("invalid channel id",
+		h.logger.Warn("非法的渠道 ID",
 			slog.String("id", idStr),
 			slog.String("error", err.Error()),
 		)
@@ -68,11 +68,28 @@ func (h *ModelSyncHandler) SyncChannelModels(c *gin.Context) {
 		return
 	}
 
-	// 执行同步
-	result, err := h.syncService.SyncChannelModels(c.Request.Context(), uint(id))
+	channel, err := h.syncService.GetChannel(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to sync channel models",
+		h.logger.Error("查询渠道异常",
+			slog.Uint64("channel_id", uint64(id)),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+
+	if channel == nil {
+		h.logger.Error("渠道不存在",
 			slog.Uint64("channel_id", id),
+		)
+		return
+	}
+
+	// 执行同步
+	result, err := h.syncService.SyncChannelModels(c.Request.Context(), channel)
+	if err != nil {
+		h.logger.Error("同步渠道模型异常",
+			slog.Uint64("channel_id", id),
+			slog.String("channel_name", channel.Name),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -87,14 +104,13 @@ func (h *ModelSyncHandler) SyncChannelModels(c *gin.Context) {
 		})
 		return
 	}
-
-	h.logger.Info("channel models synced successfully",
+	h.logger.Info("渠道模型同步查询完成",
 		slog.Uint64("channel_id", id),
+		slog.String("channel_name", channel.Name),
 		slog.Int("upstream_count", result.Diff.TotalUpstreamModels),
 		slog.Int("added", result.Diff.AddedCount),
 		slog.Int("removed", result.Diff.RemovedCount),
 	)
-
 	c.JSON(http.StatusOK, result)
 }
 
@@ -161,7 +177,7 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 	// 获取渠道信息
 	channel, err := h.syncService.GetChannel(c.Request.Context(), channelID)
 	if err != nil {
-		h.logger.Error("failed to get channel",
+		h.logger.Error("无法获取渠道信息",
 			slog.Uint64("channel_id", uint64(channelID)),
 			slog.String("error", err.Error()),
 		)
@@ -182,8 +198,9 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 	keyRepo := repository.NewKeyRepository(h.db)
 	keys, err := keyRepo.FindActiveByChannelID(c.Request.Context(), channelID)
 	if err != nil {
-		h.logger.Error("failed to get keys",
+		h.logger.Error("无法获取渠道密钥信息",
 			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("channel_name", channel.Name),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -205,8 +222,9 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 	// 调用上游API测试模型
 	success, message, latency, err := h.testModelViaUpstream(channel, testKey.KeyValue, req.UpstreamModel, req.EndpointType)
 	if err != nil {
-		h.logger.Error("failed to test model",
+		h.logger.Error("测试渠道模型异常",
 			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("channel_name", channel.Name),
 			slog.String("upstream_model", req.UpstreamModel),
 			slog.String("endpoint_type", req.EndpointType),
 			slog.String("error", err.Error()),
@@ -218,15 +236,17 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 	}
 
 	if success {
-		h.logger.Info("model test succeeded",
+		h.logger.Info("模型测试成功",
 			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("channel_name", channel.Name),
 			slog.String("upstream_model", req.UpstreamModel),
 			slog.String("unified_model", req.UnifiedModel),
 			slog.String("latency", latency),
 		)
 	} else {
-		h.logger.Warn("model test failed",
+		h.logger.Warn("渠道模型测试失败",
 			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("channel_name", channel.Name),
 			slog.String("upstream_model", req.UpstreamModel),
 			slog.String("message", message),
 		)

@@ -11,7 +11,7 @@
         :pagination="false"
         :row-key="(row: RequestLogMain) => row.id"
         :row-props="rowProps"
-        :scroll-x="1800"
+        :scroll-x="1840"
         :single-line="false"
         striped
     />
@@ -88,6 +88,7 @@ const columns: DataTableColumns<RequestLogMain> = [
     key: 'id',
     width: 80,
     align: 'left',
+    fixed: 'left',
     render(row) {
       return h(NText, {depth: 3}, {default: () => `#${row.id}`})
     }
@@ -97,6 +98,7 @@ const columns: DataTableColumns<RequestLogMain> = [
     key: 'trace_id',
     width: 160,
     align: 'center',
+    fixed: 'left',
     render(row) {
       return h(NText, {code: true}, {default: () => row.trace_id.substring(0, 13)})
     }
@@ -110,15 +112,7 @@ const columns: DataTableColumns<RequestLogMain> = [
       return h(NTime, {time: new Date(row.start_time), format: 'yyyy-MM-dd HH:mm:ss'})
     }
   },
-  {
-    title: '结束时间',
-    key: 'end_time',
-    width: 200,
-    align: 'center',
-    render(row) {
-      return h(NTime, {time: new Date(row.end_time), format: 'yyyy-MM-dd HH:mm:ss'})
-    }
-  },
+
   {
     title: '状态',
     key: 'is_success',
@@ -131,6 +125,54 @@ const columns: DataTableColumns<RequestLogMain> = [
       }, {
         default: () => row.is_success ? '成功' : '失败'
       })
+    }
+  },
+  {
+    title: '耗时',
+    key: 'duration',
+    width: 80,
+    align: 'right',
+    render(row) {
+      const seconds = (row.duration / 1000).toFixed(2)
+      const color = row.duration < 5000 ? 'success' : row.duration < 10000 ? 'warning' : 'error'
+      return h(NTag, {type: color, size: 'small'}, {default: () => `${seconds}s`})
+    }
+  },
+  {
+    title: '重试',
+    key: 'retry_count',
+    width: 80,
+    align: 'center',
+    render(row) {
+      const type = row.retry_count === 0 ? 'success' : (row.retry_count === 1 ? 'warning' : 'error')
+      return h(NTag, {type: type, size: 'small'}, {default: () => row.retry_count})
+    }
+  },
+  {
+    title: '请求模型',
+    key: 'requested_model',
+    width: 200,
+    ellipsis: {
+      tooltip: true
+    }
+  },
+  {
+    title: '渠道',
+    key: 'last_channel_name',
+    width: 160,
+    ellipsis: {
+      tooltip: true
+    },
+    render(row) {
+      return h(NText, {}, {default: () => row.last_channel_name || '-'})
+    }
+  },
+  {
+    title: '渠道模型',
+    key: 'last_model',
+    width: 200,
+    ellipsis: {
+      tooltip: true
     }
   },
   {
@@ -161,56 +203,6 @@ const columns: DataTableColumns<RequestLogMain> = [
     }
   },
   {
-    title: '耗时',
-    key: 'duration',
-    width: 80,
-    align: 'right',
-    render(row) {
-      const seconds = (row.duration / 1000).toFixed(2)
-      const color = row.duration < 5000 ? 'success' : row.duration < 10000 ? 'warning' : 'error'
-      return h(NTag, {type: color, size: 'small'}, {default: () => `${seconds}s`})
-    }
-  },
-  {
-    title: '重试',
-    key: 'retry_count',
-    width: 80,
-    align: 'center',
-    render(row) {
-      if (row.retry_count === 0) {
-        return h(NText, {depth: 3}, {default: () => '0'})
-      }
-      return h(NTag, {type: 'warning', size: 'small'}, {default: () => row.retry_count})
-    }
-  },
-  {
-    title: '请求模型',
-    key: 'requested_model',
-    width: 160,
-    ellipsis: {
-      tooltip: true
-    }
-  },
-  {
-    title: '最后渠道',
-    key: 'last_channel_name',
-    width: 160,
-    ellipsis: {
-      tooltip: true
-    },
-    render(row) {
-      return h(NText, {}, {default: () => row.last_channel_name || '-'})
-    }
-  },
-  {
-    title: '最后模型',
-    key: 'last_model',
-    width: 200,
-    ellipsis: {
-      tooltip: true
-    }
-  },
-  {
     title: '状态码',
     key: 'status_code',
     width: 80,
@@ -219,7 +211,16 @@ const columns: DataTableColumns<RequestLogMain> = [
       const type = row.status_code >= 200 && row.status_code < 300 ? 'success' : 'error'
       return h(NTag, {type, size: 'small'}, {default: () => row.status_code})
     }
-  }
+  },
+  {
+    title: '结束时间',
+    key: 'end_time',
+    width: 200,
+    align: 'center',
+    render(row) {
+      return h(NTime, {time: new Date(row.end_time), format: 'yyyy-MM-dd HH:mm:ss'})
+    }
+  },
 ]
 
 // 获取日志列表

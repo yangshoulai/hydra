@@ -86,7 +86,6 @@
                 v-model:value="dateRange"
                 type="datetimerange"
                 clearable
-                style="width: 400px"
                 @update:value="handleDateChange"
             />
           </n-form-item-gi>
@@ -121,12 +120,12 @@
 import {onMounted, reactive, ref} from 'vue'
 import {NButton, NCard, NDatePicker, NForm, NFormItemGi, NGrid, NIcon, NInput, NSelect, NSpace, type SelectOption} from 'naive-ui'
 import {FilterOutline, KeyOutline, PulseOutline, RefreshOutline, SearchOutline} from '@vicons/ionicons5'
-import type {LogQueryRequestV2} from '../types/log_v2'
+import type {LogQueryRequest} from '../types/log'
 import {channelApi} from '../services/channelService'
 import {modelApi} from '../services/modelService'
 
 interface Emits {
-  (e: 'filter', data: LogQueryRequestV2): void
+  (e: 'filter', data: LogQueryRequest): void
 }
 
 const emit = defineEmits<Emits>()
@@ -227,9 +226,9 @@ function handleDateChange(value: [number, number] | null) {
 
 // 处理查询
 function handleQuery() {
-  const queryData: LogQueryRequestV2 = {
+  const queryData: LogQueryRequest = {
     ...formData,
-    is_success: formData.is_success === 'true' ? true : formData.is_success === 'false' ? false : null,
+    is_success: formData.is_success === 'true' ? true : (formData.is_success === 'false' ? false : undefined),
     requested_model: formData.requested_model || undefined,
     channel_id: formData.channel_id || undefined,
     status_code: formData.status_code || undefined,
@@ -253,9 +252,9 @@ function handleReset() {
   setDefaultDateTime()
 
   // 重置后自动查询
-  const queryData: LogQueryRequestV2 = {
+  const queryData: LogQueryRequest = {
     ...formData,
-    is_success: null,
+    is_success: undefined,
     requested_model: undefined,
     channel_id: undefined,
     status_code: undefined,

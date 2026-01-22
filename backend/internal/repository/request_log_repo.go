@@ -70,6 +70,7 @@ type ListMainFilter struct {
 	EndpointType   string
 	RequestedModel string
 	UnifiedModel   string
+	ChannelID      *int64
 	Offset         int
 	Limit          int
 }
@@ -108,6 +109,10 @@ func (r *RequestLogRepository) ListMain(ctx context.Context, filter *ListMainFil
 	}
 	if filter.UnifiedModel != "" {
 		query = query.Where("unified_model = ?", filter.UnifiedModel)
+	}
+	if filter.ChannelID != nil {
+		// 从从表 request_log_detail 的渠道 channel_id 过滤
+		query = query.Where("id IN (SELECT main_log_id FROM request_logs_detail WHERE channel_id = ?)", *filter.ChannelID)
 	}
 
 	// 查询总数

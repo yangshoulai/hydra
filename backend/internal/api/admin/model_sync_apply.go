@@ -70,7 +70,7 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 
 	var req ApplySyncRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid apply sync request",
+		h.logger.Warn("非法的渠道模型配置更新请求",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -108,7 +108,7 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		}
 
 		if err := h.modelConfigRepo.Create(c.Request.Context(), config); err != nil {
-			h.logger.Error("failed to create model config",
+			h.logger.Error("新建渠道模型配置异常",
 				slog.Uint64("channel_id", uint64(channelID)),
 				slog.String("upstream_model", item.UpstreamModel),
 				slog.String("error", err.Error()),
@@ -131,7 +131,7 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 
 		config, err := h.modelConfigRepo.FindByID(c.Request.Context(), item.ID)
 		if err != nil {
-			h.logger.Error("failed to find model config",
+			h.logger.Error("获取渠道模型配置异常",
 				slog.Uint64("config_id", uint64(item.ID)),
 				slog.String("error", err.Error()),
 			)
@@ -166,7 +166,7 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		}
 
 		if err := h.modelConfigRepo.Update(c.Request.Context(), config); err != nil {
-			h.logger.Error("failed to update model config",
+			h.logger.Error("更新渠道模型异常",
 				slog.Uint64("config_id", uint64(item.ID)),
 				slog.String("error", err.Error()),
 			)
@@ -181,7 +181,7 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 	// 3. 删除模型配置
 	for _, modelID := range req.DeleteModelIDs {
 		if err := h.modelConfigRepo.Delete(c.Request.Context(), modelID); err != nil {
-			h.logger.Error("failed to delete model config",
+			h.logger.Error("删除渠道模型配置异常",
 				slog.Uint64("model_id", uint64(modelID)),
 				slog.String("error", err.Error()),
 			)
@@ -192,13 +192,6 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		}
 		deletedCount++
 	}
-
-	h.logger.Info("channel sync applied successfully",
-		slog.Uint64("channel_id", uint64(channelID)),
-		slog.Int("added", addedCount),
-		slog.Int("updated", updatedCount),
-		slog.Int("deleted", deletedCount),
-	)
 
 	c.JSON(http.StatusOK, ApplySyncResponse{
 		Success:      true,

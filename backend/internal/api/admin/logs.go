@@ -42,10 +42,27 @@ func (h *LogHandler) ListLogs(c *gin.Context) {
 	}
 
 	filter := &repository.ListMainFilter{
-		TraceID:     c.Query("trace_id"),
-		AccessToken: c.Query("access_token"),
-		Offset:      (page - 1) * pageSize,
-		Limit:       pageSize,
+		TraceID:        c.Query("trace_id"),
+		AccessToken:    c.Query("access_token"),
+		RequestedModel: c.Query("requested_model"),
+		Offset:         (page - 1) * pageSize,
+		Limit:          pageSize,
+	}
+	if c.Query("status_code") != "" {
+		statusCode, e := strconv.Atoi(c.Query("status_code"))
+		if e == nil {
+			filter.StatusCode = &statusCode
+		}
+	}
+	if isSuccess := c.Query("is_success"); isSuccess != "" {
+		success := isSuccess == "true"
+		filter.IsSuccess = &success
+	}
+	if channelId := c.Query("channel_id"); channelId != "" {
+		channelId, e := strconv.ParseInt(channelId, 10, 64)
+		if e == nil {
+			filter.ChannelID = &channelId
+		}
 	}
 
 	// 解析时间范围

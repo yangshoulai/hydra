@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/endpoint"
@@ -121,6 +122,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
+			slog.String("status_code", strconv.Itoa(resp.StatusCode)),
 			slog.String("error", err.Error()),
 		)
 		return false, false, err
@@ -134,6 +136,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
+			slog.String("status_code", strconv.Itoa(resp.StatusCode)),
 		)
 		return true, false, nil
 	}
@@ -202,7 +205,7 @@ func (ph *ProbeHandler) getTestEndpointAndModel(channel *models.Channel) (string
 }
 
 // HandleProbeResult 处理探测结果
-func (ph *ProbeHandler) HandleProbeResult(keyID uint, channel *models.Channel, success bool, isHardFailure bool) {
+func (ph *ProbeHandler) HandleProbeResult(keyID uint, channel *models.Channel, success bool, isHardFailure bool, errMsg string) {
 	keyBreaker := ph.manager.GetKeyBreaker(keyID)
 	currentState := keyBreaker.GetState()
 
@@ -219,16 +222,10 @@ func (ph *ProbeHandler) HandleProbeResult(keyID uint, channel *models.Channel, s
 	} else {
 		if isHardFailure {
 			// 硬故障,标记为永久禁用
-			ph.manager.RecordKeyHardFailure(keyID, channel.ID)
-
-			ph.logger.Error("密钥已失效",
-				slog.Uint64("key_id", uint64(keyID)),
-				slog.Uint64("channel_id", uint64(channel.ID)),
-				slog.String("channel_name", channel.Name),
-			)
+			ph.manager.RecordKeyHardFailure(keyID, channel.ID, channel.Name, errMsg)
 		} else {
 			// 软故障,重新进入冷却状态
-			ph.manager.RecordKeySoftFailure(keyID, channel.ID)
+			ph.manager.RecordKeySoftFailure(keyID, channel.ID, channel.Name, errMsg)
 
 			newState := keyBreaker.GetState()
 			if newState == KeyStateCooling {
@@ -236,6 +233,7 @@ func (ph *ProbeHandler) HandleProbeResult(keyID uint, channel *models.Channel, s
 					slog.Uint64("key_id", uint64(keyID)),
 					slog.Uint64("channel_id", uint64(channel.ID)),
 					slog.String("channel_name", channel.Name),
+					slog.String("error", errMsg),
 					slog.String("previous_state", string(currentState)),
 				)
 			}
@@ -259,6 +257,8 @@ func (ph *ProbeHandler) ProbeKeyWithRetry(ctx context.Context, key *models.Key, 
 
 			ph.logger.Debug("重新嗅探",
 				slog.Uint64("key_id", uint64(key.ID)),
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("channel_name", channel.Name),
 				slog.Int("attempt", attempt+1),
 			)
 		}
@@ -275,6 +275,8 @@ func (ph *ProbeHandler) ProbeKeyWithRetry(ctx context.Context, key *models.Key, 
 		if hardFailure {
 			ph.logger.Warn("密钥硬故障，停止嗅探",
 				slog.Uint64("key_id", uint64(key.ID)),
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("channel_name", channel.Name),
 			)
 			break
 		}

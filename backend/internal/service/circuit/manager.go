@@ -135,13 +135,15 @@ func (m *Manager) RecordKeySuccess(keyID uint, channelID uint) {
 }
 
 // RecordKeyHardFailure 记录 Key 硬故障
-func (m *Manager) RecordKeyHardFailure(keyID uint, channelID uint) {
+func (m *Manager) RecordKeyHardFailure(keyID uint, channelID uint, channelName string, errMsg string) {
 	keyBreaker := m.GetKeyBreaker(keyID)
 	keyBreaker.RecordHardFailure()
 
 	m.logger.Warn("密钥硬故障",
 		slog.Uint64("key_id", uint64(keyID)),
 		slog.Uint64("channel_id", uint64(channelID)),
+		slog.String("channel_name", channelName),
+		slog.String("errMsg", errMsg),
 	)
 
 	// 异步更新数据库
@@ -149,7 +151,7 @@ func (m *Manager) RecordKeyHardFailure(keyID uint, channelID uint) {
 }
 
 // RecordKeySoftFailure 记录 Key 软故障
-func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint) {
+func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName string, errMsg string) {
 	keyBreaker := m.GetKeyBreaker(keyID)
 	keyBreaker.RecordSoftFailure()
 
@@ -161,6 +163,8 @@ func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint) {
 		m.logger.Warn("密钥进入冷却状态",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("channel_name", channelName),
+			slog.String("errMsg", errMsg),
 		)
 		go m.enterKeyCooling(keyID)
 	}
@@ -330,19 +334,31 @@ func (m *Manager) probeKey(keyID uint) {
 		)
 		return
 	}
+	if channel == nil {
+		m.logger.Error("探测时渠道不存在",
+			slog.Uint64("key_id", uint64(keyID)),
+			slog.Uint64("channel_id", uint64(key.ChannelID)),
+		)
+		return
+	}
 
 	// 创建探测处理器
 	probeHandler := NewProbeHandler(m, m.logger)
 
 	// 执行探测(带重试)
 	success, isHardFailure, err := probeHandler.ProbeKeyWithRetry(ctx, key, channel, 0)
-
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
 	// 处理探测结果
-	probeHandler.HandleProbeResult(keyID, channel, success, isHardFailure)
+	probeHandler.HandleProbeResult(keyID, channel, success, isHardFailure, errMsg)
 
 	if err != nil {
 		m.logger.Debug("探测完成但有错误",
 			slog.Uint64("key_id", uint64(keyID)),
+			slog.Uint64("channel_id", uint64(key.ChannelID)),
+			slog.String("channel_name", channel.Name),
 			slog.Bool("success", success),
 			slog.String("error", err.Error()),
 		)

@@ -215,7 +215,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		// 处理故障
 		if failureType != FailureTypeNone {
 			if failureType != FailureTypeModelNotFound {
-				ps.recordFailure(routeResult, failureType)
+				ps.recordFailure(routeResult, failureType, errMsg)
 			}
 
 			detailLog.IsSuccess(false).Status("failed").ErrorMessage(errMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
@@ -253,7 +253,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			responseBodyStr, streamChunks, firstChunkTime, forwardErr = ps.sseForwarderWithSniffer.ForwardStreamWithDetection(c, upstreamResp, traceID)
 			// 检查假200错误
 			if fake200Err, ok := forwardErr.(*Fake200Error); ok {
-				ps.recordFailure(routeResult, FailureTypeSoft)
+				ps.recordFailure(routeResult, FailureTypeSoft, forwardErr.Error())
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, fake200Err, FailureTypeSoft)
 				ps.logWarnWithTrace("检测到流式假 200 响应", traceID, slog.String("error_type", fake200Err.Message))
 
@@ -281,7 +281,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 				ps.logErrorWithTrace("嗅探响应失败", traceID, slog.String("error", sniffErr.Error()))
 			} else if sniffResult.IsFake200 {
 				ps.logWarnWithTrace("检测到假 200 响应", traceID, slog.String("rule", sniffResult.MatchedRule))
-				ps.recordFailure(routeResult, FailureTypeSoft)
+				ps.recordFailure(routeResult, FailureTypeSoft, "假 200 响应")
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, errors.New("fake 200 response"), FailureTypeSoft)
 
 				detailLog.EndTime(time.Now()).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds())).IsSuccess(false).Status("failed").ResponseBody(string(sniffResult.Body))
@@ -323,11 +323,11 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 }
 
 // recordFailure 记录故障到熔断器
-func (ps *ProxyService) recordFailure(routeResult *RouteResult, failureType FailureType) {
+func (ps *ProxyService) recordFailure(routeResult *RouteResult, failureType FailureType, errMsg string) {
 	if failureType == FailureTypeHard {
-		ps.circuitManager.RecordKeyHardFailure(routeResult.Key.ID, routeResult.Channel.ID)
+		ps.circuitManager.RecordKeyHardFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
 	} else if failureType == FailureTypeSoft {
-		ps.circuitManager.RecordKeySoftFailure(routeResult.Key.ID, routeResult.Channel.ID)
+		ps.circuitManager.RecordKeySoftFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
 	}
 }
 

@@ -18,20 +18,20 @@ const (
 
 // ModelDiff 模型差异项
 type ModelDiff struct {
-	Type           ModelDiffType `json:"type"`
-	UnifiedModel   string        `json:"unified_model"`
-	UpstreamModel  string        `json:"upstream_model"`
+	Type           ModelDiffType              `json:"type"`
+	UnifiedModel   string                     `json:"unified_model"`
+	UpstreamModel  string                     `json:"upstream_model"`
 	ExistingConfig *models.ChannelModelConfig `json:"existing_config,omitempty"` // 对于存量模型，包含现有配置
 }
 
 // SyncDiff 同步差异汇总
 type SyncDiff struct {
-	TotalUpstreamModels int          `json:"total_upstream_models"` // 上游模型总数
-	TotalLocalModels    int          `json:"total_local_models"`    // 本地配置模型总数
-	AddedCount          int          `json:"added_count"`           // 新增模型数
-	RemovedCount        int          `json:"removed_count"`         // 移除模型数
-	ExistingCount       int          `json:"existing_count"`        // 存量模型数
-	Diffs               []ModelDiff  `json:"diffs"`                 // 差异详情
+	TotalUpstreamModels int         `json:"total_upstream_models"` // 上游模型总数
+	TotalLocalModels    int         `json:"total_local_models"`    // 本地配置模型总数
+	AddedCount          int         `json:"added_count"`           // 新增模型数
+	RemovedCount        int         `json:"removed_count"`         // 移除模型数
+	ExistingCount       int         `json:"existing_count"`        // 存量模型数
+	Diffs               []ModelDiff `json:"diffs"`                 // 差异详情
 }
 
 // DiffCalculator 模型差异计算器
@@ -109,15 +109,6 @@ func (dc *DiffCalculator) Calculate(
 
 	// 排序：按类型和模型名称排序
 	sortDiffs(diff.Diffs)
-
-	dc.logger.Info("model diff calculated",
-		slog.Int("total_upstream", diff.TotalUpstreamModels),
-		slog.Int("total_local", diff.TotalLocalModels),
-		slog.Int("added", diff.AddedCount),
-		slog.Int("removed", diff.RemovedCount),
-		slog.Int("existing", diff.ExistingCount),
-	)
-
 	return diff
 }
 

@@ -37,7 +37,8 @@ export interface RequestLogMain {
     last_channel_name?: string
     last_model?: string
 
-    // 关联明细记录（不在此接口返回，通过单独接口获取）
+    // 错误信息
+    error_message?: string
 }
 
 // 日志明细记录
@@ -99,7 +100,7 @@ export interface LogQueryRequest {
     access_token?: string
     requested_model?: string
     status_code?: number
-    is_success?: boolean
+    is_success?: boolean | undefined
     endpoint_type?: string
     channel_id?: number
     start_time?: string
