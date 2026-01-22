@@ -128,13 +128,29 @@
 
 <script setup lang="ts">
 import {computed, h, onMounted, reactive, ref} from 'vue'
-import {type DataTableColumns, NButton, NCard, NDataTable, NForm, NFormItemGi, NGrid, NIcon, NInput, NPagination, NSelect, NSpace, NTag, NText, NTooltip} from 'naive-ui'
+import {
+  type DataTableColumns,
+  NButton,
+  NCard,
+  NDataTable,
+  NForm,
+  NFormItemGi,
+  NGrid,
+  NIcon,
+  NInput,
+  NPagination,
+  NSelect,
+  NSpace,
+  NTag,
+  NText,
+  NTooltip
+} from 'naive-ui'
 import {AddOutline, CreateOutline, GridOutline, KeyOutline, RefreshOutline, SearchOutline, TrashOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import type {Channel, ChannelListParams} from '../types/channel'
 import ChannelDialog from '../components/ChannelDialog.vue'
 import KeyManagementDialog from '../components/KeyManagementDialog.vue'
-import ModelManagementDialog from '../components/ModelManagementDialog.vue' // State
+import ModelManagementDialog from '../components/ModelManagementDialog.vue'
 
 // State
 const channels = ref<Channel[]>([])
@@ -349,20 +365,20 @@ const columns = computed<DataTableColumns<Channel>>(() => {
         const color = stats.active > 0 ? '#10b981' : stats.cooling > 0 ? '#f59e0b' : '#ef4444'
 
         return h(
-          NTooltip,
-          {},
-          {
-            trigger: () =>
-              h(NText, {style: {color: color, fontWeight: 500}}, {
-                default: () => `${stats.active} / ${stats.cooling} / ${stats.disabled}`
-              }),
-            default: () =>
-              h('div', {style: {lineHeight: '1.8'}}, [
-                h('div', {}, `健康：${stats.active}`),
-                h('div', {}, `冷却：${stats.cooling}`),
-                h('div', {}, `失效：${stats.disabled}`)
-              ])
-          }
+            NTooltip,
+            {},
+            {
+              trigger: () =>
+                  h(NText, {style: {color: color, fontWeight: 500}}, {
+                    default: () => `${stats.active} / ${stats.cooling} / ${stats.disabled}`
+                  }),
+              default: () =>
+                  h('div', {style: {lineHeight: '1.8'}}, [
+                    h('div', {}, `健康：${stats.active}`),
+                    h('div', {}, `冷却：${stats.cooling}`),
+                    h('div', {}, `失效：${stats.disabled}`)
+                  ])
+            }
         )
       }
     },
@@ -459,23 +475,23 @@ function handleEdit(channel: Channel) {
 
 // 删除渠道
 async function handleDelete(channel: Channel) {
-  const confirmed = await window.$dialog?.warning({
+  await window.$dialog?.warning({
     title: '确认删除',
     content: `确定要删除渠道 "${channel.name}" 吗？`,
     positiveText: '删除',
-    negativeText: '取消'
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await channelApi.delete(channel.id)
+        window.$message?.success('删除成功')
+        await fetchChannels()
+      } catch (error: any) {
+        console.error('Failed to delete channel:', error)
+        window.$message?.error(error.response?.data?.error || '删除失败')
+      }
+    }
   })
 
-  if (!confirmed) return
-
-  try {
-    await channelApi.delete(channel.id)
-    window.$message?.success('删除成功')
-    await fetchChannels()
-  } catch (error: any) {
-    console.error('Failed to delete channel:', error)
-    window.$message?.error(error.response?.data?.error || '删除失败')
-  }
 }
 
 // 对话框确认
