@@ -50,7 +50,7 @@
                 </template>
 
                 <template #default>
-                  {{ log.is_success ? '成功' : '失败' }}
+                  <n-text :type="log.is_success ? 'success' : 'error'">{{ log.is_success ? '成功' : '失败' }}</n-text>
                 </template>
               </n-statistic>
             </n-gi>
@@ -58,7 +58,7 @@
 
           <!-- 请求概览表格 -->
           <n-card title="请求概览" size="small" :bordered="false">
-            <n-descriptions :column="2" label-placement="left" bordered size="small">
+            <n-descriptions :column="2" label-placement="left" bordered size="small" :label-style="{width: '100px'}">
               <n-descriptions-item label="Trace ID" :span="2">
                 <n-text>
                   <n-text code>
@@ -78,18 +78,34 @@
                 <n-tag type="info" size="small">{{ log.requested_model }}</n-tag>
               </n-descriptions-item>
 
-              <n-descriptions-item label="端点类型">
-                <EndpointTags :types="[log.endpoint_type]" />
+              <n-descriptions-item label="重试次数">
+                <n-tag :type="log.retry_count === 0 ? 'success' : (log.retry_count === 1 ?'warning' : 'error')" size="small">{{ log.retry_count }}</n-tag>
               </n-descriptions-item>
 
-              <!--              <n-descriptions-item label="统一模型">{{ log.unified_model }}</n-descriptions-item>-->
+              <n-descriptions-item label="最后渠道">
+                <n-text type="primary" size="small">{{ log.last_channel_name }}</n-text>
+              </n-descriptions-item>
+
+              <n-descriptions-item label="最后模型">
+                <n-text type="info" size="small">{{ log.last_model }}</n-text>
+              </n-descriptions-item>
+
+              <n-descriptions-item label="端点类型">
+                <EndpointTags :types="[log.endpoint_type]"/>
+              </n-descriptions-item>
+
               <n-descriptions-item label="请求路径">
-                <n-tag type="info" size="small">{{ log.request_path }}</n-tag>
+                <n-text type="info" size="small">{{ log.request_path }}</n-text>
               </n-descriptions-item>
               <n-descriptions-item label="请求方法">
-                <n-tag :type="getMethodTagType(log.request_method)" size="small">
+                <n-text :type="getMethodTagType(log.request_method)" size="small">
                   {{ log.request_method }}
-                </n-tag>
+                </n-text>
+              </n-descriptions-item>
+              <n-descriptions-item label="状态码">
+                <n-text :type="getStatusCodeType(log.status_code)" size="small">
+                  {{ log.status_code }}
+                </n-text>
               </n-descriptions-item>
               <n-descriptions-item label="开始时间">
                 <n-space align="center">
@@ -99,22 +115,22 @@
               <n-descriptions-item label="结束时间">
                 <n-text>{{ formatTime(log.end_time) }}</n-text>
               </n-descriptions-item>
-              <n-descriptions-item label="状态码">
-                <n-tag :type="getStatusCodeType(log.status_code)" size="small">
-                  {{ log.status_code }}
-                </n-tag>
-              </n-descriptions-item>
+
               <n-descriptions-item label="耗时">
-                {{ (log.duration / 1000).toFixed(2) }} 秒
+                <n-text :type="log.duration <= 5000 ? 'success': (log.duration <= 10000 ? 'warning' : 'error')">{{ (log.duration / 1000).toFixed(2) }} 秒
+                </n-text>
               </n-descriptions-item>
               <n-descriptions-item label="流式">
-                <n-tag :type="log.is_stream ? 'info' : 'default'" size="small">
+                <n-text :type="log.is_stream ? 'info' : 'default'" size="small">
                   {{ log.is_stream ? '是' : '否' }}
-                </n-tag>
+                </n-text>
               </n-descriptions-item>
               <n-descriptions-item label="客户端 IP" :span="2">{{ log.client_ip }}</n-descriptions-item>
               <n-descriptions-item label="User Agent" :span="2">
-                <n-text depth="3" style="font-size: 12px">{{ log.user_agent }}</n-text>
+                <n-text style="font-size: 12px" type="default">{{ log.user_agent }}</n-text>
+              </n-descriptions-item>
+              <n-descriptions-item label="错误" :span="2" v-if="log.error_message">
+                <n-text style="font-size: 12px;" type="error">{{ log.error_message }}</n-text>
               </n-descriptions-item>
             </n-descriptions>
           </n-card>
