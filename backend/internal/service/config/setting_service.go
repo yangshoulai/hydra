@@ -140,10 +140,26 @@ func (s *SettingService) get(ctx context.Context, key string) (string, error) {
 
 // Set 设置配置值
 func (s *SettingService) Set(ctx context.Context, key string, value string) error {
+	existing, err := s.systemSettingRepo.GetByKey(ctx, key)
+	if err != nil {
+		s.logger.Error("获取配置失败",
+			slog.String("key", key),
+			slog.String("error", err.Error()),
+		)
+		return err
+	}
+	if existing != nil && existing.Value == value {
+		s.cache.Store(key, cachedSetting{
+			value:     value,
+			expiresAt: time.Now().Add(s.cacheTTL),
+		})
+		return nil
+	}
+
 	// 获取默认 category（Repository 会保留原有 category）
 	category := s.getDefaultCategory(key)
 
-	err := s.systemSettingRepo.Set(ctx, key, value, category)
+	err = s.systemSettingRepo.Set(ctx, key, value, category)
 	if err != nil {
 		s.logger.Error("设置配置失败",
 			slog.String("key", key),
@@ -171,52 +187,6 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 		actualCategory = category
 	}
 	s.notifier.Notify(ctx, actualCategory)
-
-	return nil
-}
-
-// BatchSet 批量设置配置
-func (s *SettingService) BatchSet(ctx context.Context, settings map[string]string) error {
-	// 为每个 key 获取默认 category（Repository 会保留原有 category）
-	categories := make(map[string]string)
-	for key := range settings {
-		categories[key] = s.getDefaultCategory(key)
-	}
-
-	err := s.systemSettingRepo.BatchSet(ctx, settings, categories)
-	if err != nil {
-		s.logger.Error("批量设置配置失败",
-			slog.String("error", err.Error()),
-		)
-		return err
-	}
-
-	// 收集所有实际的分类（用于通知）
-	uniqueCategories := make(map[string]bool)
-
-	// 更新缓存
-	for key, value := range settings {
-		s.cache.Store(key, cachedSetting{
-			value:     value,
-			expiresAt: time.Now().Add(s.cacheTTL),
-		})
-
-		// 获取实际的 category
-		actualCategory, _ := s.getCategoryFromDB(ctx, key)
-		if actualCategory == "" {
-			actualCategory = categories[key]
-		}
-		uniqueCategories[actualCategory] = true
-	}
-
-	s.logger.Info("批量更新设置完成",
-		slog.Int("count", len(settings)),
-	)
-
-	// 触发配置变更通知（通知所有涉及的分类）
-	for category := range uniqueCategories {
-		s.notifier.Notify(ctx, category)
-	}
 
 	return nil
 }
@@ -261,27 +231,6 @@ func (s *SettingService) getDefaultCategory(key string) string {
 	}
 }
 
-// GetAll 获取所有设置
-func (s *SettingService) GetAll(ctx context.Context) ([]*models.SystemSetting, error) {
-	return s.systemSettingRepo.GetAll(ctx)
-}
-
-// GetByCategory 根据分类获取设置
-func (s *SettingService) GetByCategory(ctx context.Context, category string) ([]*models.SystemSetting, error) {
-	return s.systemSettingRepo.GetByCategory(ctx, category)
-}
-
-// InvalidateCache 使缓存失效
-func (s *SettingService) InvalidateCache(key string) {
-	s.cache.Delete(key)
-}
-
-// InvalidateAllCache 使所有缓存失效
-func (s *SettingService) InvalidateAllCache() {
-	s.cache = sync.Map{}
-	s.logger.Debug("所有设置缓存已失效")
-}
-
 // GetCircuitBreakerConfig 获取熔断器配置
 func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureThreshold int, coolingDuration time.Duration) {
 	failureThreshold = s.GetInt(ctx, models.SettingCircuitBreakerFailureThreshold, 3)
@@ -324,25 +273,6 @@ func (s *SettingService) GetPlainTextErrorRules(ctx context.Context) []string {
 	}
 
 	return keywords
-}
-
-// SetPlainTextErrorRules 设置明文错误规则
-func (s *SettingService) SetPlainTextErrorRules(ctx context.Context, keywords []string) error {
-	// 转换为 JSON
-	jsonBytes, err := json.Marshal(keywords)
-	if err != nil {
-		s.logger.Error("序列化明文错误规则失败",
-			slog.String("error", err.Error()),
-		)
-		return fmt.Errorf("failed to marshal keywords: %w", err)
-	}
-
-	// 保存到数据库
-	if err := s.Set(ctx, models.SettingSnifferPlainTextErrorRules, string(jsonBytes)); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // GetStreamErrorRules 获取流式响应错误规则

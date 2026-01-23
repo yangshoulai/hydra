@@ -67,50 +67,6 @@ func (m *DebugModeManager) IsEnabled() bool {
 	return m.enabled
 }
 
-// SetEnabled 设置调试模式
-func (m *DebugModeManager) SetEnabled(ctx context.Context, enabled bool) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// 更新系统设置
-	value := strconv.FormatBool(enabled)
-	if err := m.settingService.Set(ctx, models.SettingLogDebugEnabled, value); err != nil {
-		m.logger.Error("更新系统设置中的调试模式失败",
-			slog.Bool("enabled", enabled),
-			slog.String("error", err.Error()),
-		)
-		return err
-	}
-
-	// 更新内存状态
-	oldEnabled := m.enabled
-	m.enabled = enabled
-
-	m.logger.Info("调试模式已更改",
-		slog.Bool("old_enabled", oldEnabled),
-		slog.Bool("new_enabled", enabled),
-	)
-
-	// 通知所有监听器
-	for _, callback := range m.onChangeCallbacks {
-		go callback(enabled)
-	}
-
-	return nil
-}
-
-// Toggle 切换调试模式
-func (m *DebugModeManager) Toggle(ctx context.Context) (bool, error) {
-	current := m.IsEnabled()
-	newState := !current
-
-	if err := m.SetEnabled(ctx, newState); err != nil {
-		return current, err
-	}
-
-	return newState, nil
-}
-
 // OnChange 注册状态变化回调
 func (m *DebugModeManager) OnChange(callback func(enabled bool)) {
 	m.mu.Lock()

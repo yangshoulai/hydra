@@ -3,10 +3,11 @@ package admin
 import (
 	"net/http"
 
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/config"
-	"log/slog"
 )
 
 // SettingsHandler 系统设置处理器
@@ -63,7 +64,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	var req UpdateSettingsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"message": err.Error(),
 		})
 		return
@@ -78,7 +79,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 				slog.String("error", err.Error()),
 			)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to update settings",
+				"error":   "Failed to update settings",
 				"message": err.Error(),
 			})
 			return
@@ -137,7 +138,7 @@ func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 	var req UpdateSettingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"message": err.Error(),
 		})
 		return
@@ -150,7 +151,7 @@ func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update setting",
+			"error":   "Failed to update setting",
 			"message": err.Error(),
 		})
 		return

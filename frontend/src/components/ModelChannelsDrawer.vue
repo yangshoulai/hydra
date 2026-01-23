@@ -178,7 +178,8 @@ async function handleToggleStatus(row: ModelConfig) {
   try {
     await channelApi.toggleChannelModelStatus(row.config_id)
     message.success(`已${row.status === 'active' ? '禁用' : '启用'}该模型配置`)
-    await loadChannels()
+    // await loadChannels()
+    row.status = 'active' === row.status ? 'disabled' : 'active'
   } catch (error: any) {
     console.error('Failed to toggle status:', error)
     message.error('切换状态失败')
