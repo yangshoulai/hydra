@@ -56,6 +56,10 @@ type FirstFrameResult struct {
 // DetectFirstFrame 检测首帧是否包含错误
 // 读取第一个 SSE 事件，检查是否包含明显的错误信息
 func (sf *SSEForwarderWithSniffer) DetectFirstFrame(resp *http.Response) (*FirstFrameResult, error) {
+	if resp == nil || resp.Body == nil {
+		return nil, io.ErrUnexpectedEOF
+	}
+
 	result := &FirstFrameResult{
 		ContainsError: false,
 		FirstChunk:    []byte{},
@@ -214,6 +218,14 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 		}
 	}
 
+	// 首帧为空且没有更多数据，视为异常（用于触发重试）
+	if len(firstFrame.FirstChunk) == 0 && !firstFrame.HasMoreData {
+		return "", 0, firstChunkTime, &EmptySSEBodyError{
+			TraceID: traceID,
+			Message: "empty sse response body",
+		}
+	}
+
 	// 3. 首帧正常，继续流式转发
 	c.Status(http.StatusOK)
 	flusher.Flush()
@@ -330,5 +342,23 @@ func (e *Fake200Error) Timeout() bool {
 }
 
 func (e *Fake200Error) Temporary() bool {
+	return false
+}
+
+// EmptySSEBodyError 空响应体错误（用于触发重试）
+type EmptySSEBodyError struct {
+	TraceID string
+	Message string
+}
+
+func (e *EmptySSEBodyError) Error() string {
+	return e.Message
+}
+
+func (e *EmptySSEBodyError) Timeout() bool {
+	return false
+}
+
+func (e *EmptySSEBodyError) Temporary() bool {
 	return false
 }

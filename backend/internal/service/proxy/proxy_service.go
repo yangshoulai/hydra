@@ -254,11 +254,33 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 
 		if isStream {
 			responseBodyStr, streamChunks, firstChunkTime, forwardErr = ps.sseForwarderWithSniffer.ForwardStreamWithDetection(c, upstreamResp, traceID)
+			if emptyBodyErr, ok := forwardErr.(*EmptySSEBodyError); ok {
+				ps.recordFailure(routeResult, FailureTypeSoft, forwardErr.Error())
+				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, emptyBodyErr, FailureTypeSoft)
+				ps.logWarnWithTrace("检测到空的流式响应体", traceID, slog.String("error", emptyBodyErr.Message))
+
+				detailLog.IsSuccess(false).Status("failed").
+					StreamChunks(streamChunks).
+					StreamFirstChunkTime(firstChunkTime).
+					ResponseBody(responseBodyStr).
+					ErrorMessage(emptyBodyErr.Error()).
+					EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
+				mainLog.AddDetail(detailLog)
+				mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage(emptyBodyErr.Error()).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
+				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
+					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
+					ps.auditLogger.LogAsync(mainLog.Build())
+					return emptyBodyErr
+				}
+
+				_ = ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
+				continue
+			}
 			// 检查假200错误
 			if fake200Err, ok := forwardErr.(*Fake200Error); ok {
 				ps.recordFailure(routeResult, FailureTypeSoft, forwardErr.Error())
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, fake200Err, FailureTypeSoft)
-				ps.logWarnWithTrace("检测到流式假 200 响应", traceID, slog.String("error_type", fake200Err.Message))
+				ps.logWarnWithTrace("检测到流式假 200 响应", traceID, slog.String("error", fake200Err.Message))
 
 				detailLog.IsSuccess(false).Status("failed").
 					StreamChunks(streamChunks).
