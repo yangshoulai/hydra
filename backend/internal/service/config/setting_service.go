@@ -254,6 +254,8 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		return "proxy"
 	case key == models.SettingSnifferPlainTextErrorRules:
 		return "sniffer"
+	case key == models.SettingChannelGlobalSyncEnabled:
+		return "channel_sync"
 	default:
 		return "unknown"
 	}

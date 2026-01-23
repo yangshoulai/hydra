@@ -25,6 +25,7 @@ import (
 	"github.com/yangshoulai/hydra/internal/service/circuit"
 	configService "github.com/yangshoulai/hydra/internal/service/config"
 	loggerService "github.com/yangshoulai/hydra/internal/service/logger"
+	modelsyncService "github.com/yangshoulai/hydra/internal/service/modelsync"
 	proxyService "github.com/yangshoulai/hydra/internal/service/proxy"
 	schedulerService "github.com/yangshoulai/hydra/internal/service/scheduler"
 	"gorm.io/gorm"
@@ -100,12 +101,6 @@ func main() {
 		mainLogger.Error("初始化调试模式管理器失败", slog.String("error", err.Error()))
 	}
 
-	// 注册配置监听器以支持热更新
-	configService.RegisterConfigListeners(settingService, []configService.ConfigListener{
-		circuitManager,
-		debugModeManager, // 注册 DebugModeManager 作为配置监听器
-	})
-
 	// 启动熔断器探测调度器
 	go func() {
 		mainLogger.Info("启动熔断器探测调度器")
@@ -114,6 +109,27 @@ func main() {
 
 	// 初始化定时任务调度器
 	cronScheduler := initCronScheduler(db, mainLogger, settingService, circuitManager)
+
+	// 初始化渠道模型同步调度器
+	channelRepo := repository.NewChannelRepository(db)
+	modelConfigRepo := repository.NewChannelModelConfigRepository(db)
+	keyRepo := repository.NewKeyRepository(db)
+	channelSyncScheduler := modelsyncService.NewChannelModelSyncScheduler(
+		mainLogger,
+		cronScheduler,
+		settingService,
+		channelRepo,
+		modelConfigRepo,
+		keyRepo,
+	)
+	channelSyncScheduler.Initialize(ctx)
+
+	// 注册配置监听器以支持热更新
+	configService.RegisterConfigListeners(settingService, []configService.ConfigListener{
+		circuitManager,
+		debugModeManager, // 注册 DebugModeManager 作为配置监听器
+		channelSyncScheduler,
+	})
 
 	// 启动定时任务调度器
 	go func() {

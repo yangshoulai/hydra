@@ -9,6 +9,8 @@ export interface Channel {
   priority: number
   weight: number
   status: 'active' | 'disabled'
+  sync_enabled: boolean
+  last_sync_time?: string
   description: string
   model_count?: number  // 已配置的模型数量
   key_stats?: KeyStats  // 密钥统计
@@ -41,7 +43,8 @@ export interface ChannelModelConfig {
   channel_id: number
   unified_model: string
   upstream_model: string
-  status: 'active' | 'disabled'
+  status: 'active' | 'disabled' | 'non_exist'
+  endpoint_types?: string[]
   remark: string
   created_at: string
   updated_at: string
@@ -54,6 +57,7 @@ export interface CreateChannelRequest {
   weight?: number
   status?: 'active' | 'disabled'
   description?: string
+  sync_enabled?: boolean
 }
 
 export interface UpdateChannelRequest {
@@ -63,6 +67,7 @@ export interface UpdateChannelRequest {
   weight?: number
   status?: 'active' | 'disabled'
   description?: string
+  sync_enabled?: boolean
 }
 
 export interface ChannelListResponse {

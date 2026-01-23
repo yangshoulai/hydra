@@ -127,7 +127,12 @@
           </n-grid-item>
 
           <n-grid-item>
-            <!-- 空白列，保持布局对齐 -->
+            <n-form-item label="自动同步" path="sync_enabled">
+              <n-switch v-model:value="formData.sync_enabled"/>
+              <template #feedback>
+                开启后允许定时同步渠道模型
+              </template>
+            </n-form-item>
           </n-grid-item>
 
           <n-grid-item span="2">
@@ -185,7 +190,8 @@ import {
   NInputNumber,
   NModal,
   NSelect,
-  NSpace
+  NSpace,
+  NSwitch
 } from 'naive-ui'
 import {
   BookmarkOutline,
@@ -225,6 +231,7 @@ const formData = reactive({
   priority: 100,
   weight: 100,
   status: 'active' as 'active' | 'disabled',
+  sync_enabled: true,
   description: ''
 })
 
@@ -271,6 +278,7 @@ watch(
         formData.weight = newChannel.weight
         formData.status = newChannel.status
         formData.description = newChannel.description
+        formData.sync_enabled = newChannel.sync_enabled ?? true
       } else {
         // 重置表单
         formData.name = ''
@@ -279,6 +287,7 @@ watch(
         formData.weight = 100
         formData.status = 'active'
         formData.description = ''
+        formData.sync_enabled = true
       }
       // 每次打开时重置显示状态
       showModal.value = true
@@ -300,7 +309,8 @@ async function handleSubmit() {
           priority: formData.priority,
           weight: formData.weight,
           status: formData.status,
-          description: formData.description
+          description: formData.description,
+          sync_enabled: formData.sync_enabled
         } as UpdateChannelRequest)
         : ({
           name: formData.name,
@@ -308,7 +318,8 @@ async function handleSubmit() {
           priority: formData.priority,
           weight: formData.weight,
           status: formData.status,
-          description: formData.description
+          description: formData.description,
+          sync_enabled: formData.sync_enabled
         } as CreateChannelRequest)
 
     emit('confirm', data)

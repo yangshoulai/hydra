@@ -81,12 +81,12 @@ interface ModelConfig {
   config_status: string
   upstream_model: string
   endpoint_types: string[]
-  status: string
+  status: 'disabled' | 'active' | 'non_exist'
 }
 
 interface ChannelInfo {
   config_id: number
-  config_status: string
+  config_status: 'disabled' | 'active' | 'non_exist'
   channel_id: number
   channel_name: string
   channel_status: string
@@ -249,14 +249,20 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
       width: 80,
       align: 'center',
       render: (row: ModelConfig) => {
+        const statusConfig = {
+          active: {type: 'success' as const, text: '启用'},
+          disabled: {type: 'default' as const, text: '禁用'},
+          non_exist: {type: 'error' as const, text: '失效'}
+        }
+        const config = statusConfig[row.status] || statusConfig.disabled
         return h(
             NTag,
             {
-              type: row.status === 'active' ? 'success' : 'default',
+              type: config.type,
               size: 'small',
               bordered: false
             },
-            {default: () => (row.status === 'active' ? '启用' : '禁用')}
+            {default: () => config.text}
         )
       }
     },
@@ -269,7 +275,7 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
         const isTesting = testingConfigs.value.has(row.config_id)
 
         return h(NSpace, {size: 8, justify: 'center'}, {
-          default: () => [
+          default: () => row.status === 'non_exist' ? [] : [
             // 测试按钮
             h(
                 NButton,

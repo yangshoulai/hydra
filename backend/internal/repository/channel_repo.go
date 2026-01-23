@@ -62,6 +62,17 @@ func (r *ChannelRepository) FindActive(ctx context.Context) ([]*models.Channel, 
 	return channels, err
 }
 
+// FindSyncEnabledActive 查询开启自动同步且处于激活状态的渠道
+func (r *ChannelRepository) FindSyncEnabledActive(ctx context.Context) ([]*models.Channel, error) {
+	var channels []*models.Channel
+	err := r.db.WithContext(ctx).
+		Where("status = ?", "active").
+		Where("sync_enabled = ?", true).
+		Order("priority ASC, id ASC").
+		Find(&channels).Error
+	return channels, err
+}
+
 // Update 更新渠道
 func (r *ChannelRepository) Update(ctx context.Context, channel *models.Channel) error {
 	return r.db.WithContext(ctx).Save(channel).Error

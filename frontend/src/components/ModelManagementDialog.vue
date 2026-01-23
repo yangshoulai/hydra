@@ -184,6 +184,7 @@
           size="small"
           v-model:checked-row-keys="checkedKeys"
           :bordered="true"
+          :scroll-x="1080"
       />
 
       <!-- 操作按钮 -->
@@ -466,6 +467,7 @@ interface ModelDisplayType {
   endpoint_types: string[]
   status: 'configured' | 'to_add' | 'to_remove'
   disabled: boolean
+  channel_status: 'active' | 'disabled' | 'non_exist' | 'unconfigured'
 }
 
 // 显示的模型列表
@@ -478,7 +480,8 @@ const displayModels = computed<ModelDisplayType[]>(() => {
       unified_model: config.unified_model,
       endpoint_types: config.endpoint_types || ['openai'],
       status: 'configured' as const,
-      disabled: false
+      disabled: false,
+      channel_status: config.status || 'unconfigured'
     }))
   }
 
@@ -500,19 +503,23 @@ const displayModels = computed<ModelDisplayType[]>(() => {
     let status: 'configured' | 'to_add' | 'to_remove'
     let disabled = false
     let endpointTypes = ['openai']
+    let channelStatus: 'active' | 'disabled' | 'non_exist' | 'unconfigured' = 'unconfigured'
 
     if (d.type === 'existing') {
       status = 'configured'
       disabled = false
       endpointTypes = d.existing_config?.endpoint_types || ['openai']
+      channelStatus = d.existing_config?.status || 'unconfigured'
     } else if (d.type === 'added') {
       status = 'to_add'
       disabled = false
       endpointTypes = ['openai']
+      channelStatus = 'unconfigured'
     } else {
       status = 'to_remove'
       disabled = true // 待删除的模型默认选中且禁用
       endpointTypes = d.existing_config?.endpoint_types || ['openai']
+      channelStatus = d.existing_config?.status || 'unconfigured'
     }
 
     models.push({
@@ -521,7 +528,8 @@ const displayModels = computed<ModelDisplayType[]>(() => {
       unified_model: unifiedModel,
       endpoint_types: endpointTypes,
       status,
-      disabled
+      disabled,
+      channel_status: channelStatus
     })
   })
 
@@ -559,7 +567,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '上游模型',
     key: 'upstream_model',
-    width: 280,
+    width: 240,
     render(row) {
       return h(NText, {code: true}, {default: () => row.upstream_model})
     }
@@ -567,7 +575,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '统一模型',
     key: 'unified_model',
-    width: 280,
+    width: 240,
     render(row) {
       const value = editMap.value[row.key] || row.unified_model
       return h(NSelect, {
@@ -617,9 +625,26 @@ const columns: DataTableColumns<ModelDisplayType> = [
     }
   },
   {
+    title: '渠道状态',
+    key: 'channel_status',
+    width: 80,
+    align: 'center',
+    render(row) {
+      const statusConfig = {
+        active: {type: 'success' as const, text: '正常'},
+        disabled: {type: 'warning' as const, text: '禁用'},
+        non_exist: {type: 'error' as const, text: '失效'},
+        unconfigured: {type: 'default' as const, text: '未配置'}
+      }
+      const config = statusConfig[row.channel_status] || statusConfig.unconfigured
+      return h(NTag, {type: config.type, size: 'small'}, {default: () => config.text})
+    }
+  },
+  {
     title: '测试状态',
     key: 'test_status',
-    width: 160,
+    width: 120,
+    fixed: 'right',
     align: 'center',
     render(row) {
       const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
@@ -643,8 +668,9 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '操作',
     key: 'actions',
-    width: 100,
+    width: 120,
     align: 'center',
+    fixed: 'right',
     render(row) {
       const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
       const isAnyTesting = endpointTypes.some((type: string) => testStatus.value[row.key]?.[type] === 'testing')

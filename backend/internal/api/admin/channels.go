@@ -76,6 +76,7 @@ type CreateChannelRequest struct {
 	Weight      int    `json:"weight" binding:"omitempty,min=1,max=1000"`
 	Status      string `json:"status" binding:"omitempty,oneof=active disabled"`
 	Description string `json:"description" binding:"omitempty,max=500"`
+	SyncEnabled *bool  `json:"sync_enabled" binding:"omitempty"`
 }
 
 // UpdateChannelRequest 更新渠道请求
@@ -86,6 +87,7 @@ type UpdateChannelRequest struct {
 	Weight      int    `json:"weight" binding:"omitempty,min=1,max=1000"`
 	Status      string `json:"status" binding:"omitempty,oneof=active disabled"`
 	Description string `json:"description" binding:"omitempty,max=500"`
+	SyncEnabled *bool  `json:"sync_enabled" binding:"omitempty"`
 }
 
 // ListChannels 获取渠道列表(分页)
@@ -235,6 +237,12 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 	if channel.Status == "" {
 		channel.Status = "active"
 	}
+	// 默认开启自动同步（实际执行仍受全局开关控制）
+	if req.SyncEnabled == nil {
+		channel.SyncEnabled = true
+	} else {
+		channel.SyncEnabled = *req.SyncEnabled
+	}
 
 	// 保存到数据库
 	if err := h.channelRepo.Create(c.Request.Context(), channel); err != nil {
@@ -372,6 +380,9 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 	}
 	if req.Description != "" {
 		channel.Description = req.Description
+	}
+	if req.SyncEnabled != nil {
+		channel.SyncEnabled = *req.SyncEnabled
 	}
 
 	// 保存更新

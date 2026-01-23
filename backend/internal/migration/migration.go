@@ -54,6 +54,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_7_0_DropRequestLog(tx)
 			},
 		},
+		// v1.8.0 添加渠道同步字段
+		{
+			ID: "v1.8.0_add_channel_sync_fields",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_8_0_AddChannelSyncFields(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

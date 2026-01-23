@@ -28,7 +28,7 @@
           </div>
         </template>
         <n-text class="card-description">保护系统免受级联故障影响，自动隔离异常服务</n-text>
-        <n-form :model="formData" label-placement="left" label-width="120px" class="settings-form">
+        <n-form :model="formData" label-placement="left" label-width="140px" class="settings-form">
           <div class="form-item-wrapper">
             <n-form-item label="失败阈值" path="circuit_breaker_failure_threshold">
               <n-input-number
@@ -105,7 +105,7 @@
         </template>
         <n-text class="card-description">控制请求代理行为和性能参数</n-text>
 
-        <n-form label-placement="left" label-width="120px" class="settings-form">
+        <n-form label-placement="left" label-width="140px" class="settings-form">
 
           <div class="form-item-wrapper">
             <n-form-item label="请求超时" path="proxy_request_timeout">
@@ -164,6 +164,33 @@
         </n-form>
       </n-card>
 
+      <!-- 渠道同步设置 -->
+      <n-card class="settings-card" :bordered="true">
+        <template #header>
+          <div class="card-header">
+            <div class="card-title">
+              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M3 12a9 9 0 0 1 9-9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M21 12a9 9 0 0 1-9 9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="3 12 3 6 9 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="21 12 21 18 15 18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>渠道同步设置</span>
+            </div>
+            <n-tag size="small" :bordered="false" type="primary">Channel Sync</n-tag>
+          </div>
+        </template>
+        <n-text class="card-description">定时拉取渠道模型信息，自动更新模型状态</n-text>
+        <n-form label-placement="left" label-width="140px" class="settings-form">
+          <div class="form-item-wrapper">
+            <n-form-item label="渠道模型定时同步" path="channel_global_sync_enabled">
+              <n-switch v-model:value="formData.channel_global_sync_enabled"/>
+            </n-form-item>
+            <n-text class="field-hint">开启后允许渠道按计划自动同步模型状态</n-text>
+          </div>
+        </n-form>
+      </n-card>
+
       <!-- 响应嗅探设置 -->
       <n-card class="settings-card" :bordered="true">
         <template #header>
@@ -180,7 +207,7 @@
         </template>
         <n-text class="card-description">配置明文错误关键词，用于识别假 200 响应</n-text>
 
-        <n-form label-placement="left" label-width="120px" class="settings-form">
+        <n-form label-placement="left" label-width="140px" class="settings-form">
           <div class="form-item-wrapper">
             <n-form-item label="错误关键词" path="sniffer_plain_text_error_keywords">
               <n-input
@@ -215,7 +242,7 @@
         </template>
         <n-text class="card-description">控制日志记录行为和存储策略</n-text>
 
-        <n-form label-placement="left" label-width="120px" class="settings-form">
+        <n-form label-placement="left" label-width="140px" class="settings-form">
 
           <div class="form-item-wrapper">
             <n-form-item label="日志保留天数" path="log_retention_days">
@@ -326,6 +353,7 @@ interface SettingsData {
   proxy_max_retry: number
   log_retention_days: number
   log_debug_enabled: boolean
+  channel_global_sync_enabled: boolean
 }
 
 const isLoading = ref(false)
@@ -346,7 +374,8 @@ const formData = ref<SettingsData>({
   proxy_max_response_size: 10,
   proxy_max_retry: 3,
   log_retention_days: 30,
-  log_debug_enabled: false
+  log_debug_enabled: false,
+  channel_global_sync_enabled: false
 })
 
 // 加载系统设置
@@ -406,6 +435,10 @@ const loadSettings = async () => {
       const debugMode = settings.log_debug_enabled === 'true'
       debugModeEnabled.value = debugMode
       originalDebugModeValue.value = debugMode // 保存原始值
+    }
+
+    if (settings.channel_global_sync_enabled !== undefined) {
+      formData.value.channel_global_sync_enabled = settings.channel_global_sync_enabled === 'true'
     }
 
     // 加载嗅探器关键词（从通用设置中获取）
@@ -500,6 +533,7 @@ const handleSave = async () => {
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
         log_retention_days: formData.value.log_retention_days.toString(),
         log_debug_enabled: debugModeEnabled.value.toString(),
+        channel_global_sync_enabled: formData.value.channel_global_sync_enabled.toString(),
         sniffer_plain_text_error_rules: JSON.stringify(keywords), // 嗅探器关键词以JSON格式保存
       },
     })
@@ -646,7 +680,7 @@ onMounted(() => {
   color: #a1a1aa;
   line-height: 1.5;
   text-align: left;
-  padding-left: 120px;
+  padding-left: 140px;
 }
 
 .switch-wrapper {

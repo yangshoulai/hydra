@@ -100,6 +100,14 @@ var DefaultSettings = []models.SystemSetting{
 		Category:  "proxy",
 		Remark:    "最大重试次数",
 	},
+	// 渠道同步设置
+	{
+		Key:       models.SettingChannelGlobalSyncEnabled,
+		Value:     "false",
+		ValueType: "bool",
+		Category:  "channel_sync",
+		Remark:    "渠道模型定时同步开关",
+	},
 }
 
 // GetDefaultPlainTextErrorRulesSetting 获取默认的明文错误规则设置

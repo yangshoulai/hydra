@@ -12,7 +12,7 @@ import (
 type CronScheduler struct {
 	logger *slog.Logger
 	cron   *cron.Cron
-	jobs   map[string]*cron.Job
+	jobs   map[string]cron.EntryID
 }
 
 // NewCronScheduler 创建定时任务调度器
@@ -23,7 +23,7 @@ func NewCronScheduler(logger *slog.Logger) *CronScheduler {
 	return &CronScheduler{
 		logger: logger,
 		cron:   c,
-		jobs:   make(map[string]*cron.Job),
+		jobs:   make(map[string]cron.EntryID),
 	}
 }
 
@@ -39,6 +39,10 @@ func (s *CronScheduler) AddJob(name string, spec string, task ScheduledTask) err
 		slog.String("job_name", name),
 		slog.String("cron_spec", spec),
 	)
+	if entryID, ok := s.jobs[name]; ok {
+		s.cron.Remove(entryID)
+		delete(s.jobs, name)
+	}
 
 	// 包装任务，添加context和错误处理
 	wrappedTask := func() {
@@ -60,7 +64,7 @@ func (s *CronScheduler) AddJob(name string, spec string, task ScheduledTask) err
 	}
 
 	// 添加任务到cron
-	_, err := s.cron.AddFunc(spec, wrappedTask)
+	entryID, err := s.cron.AddFunc(spec, wrappedTask)
 	if err != nil {
 		s.logger.Error("添加定时任务失败",
 			slog.String("job_name", name),
@@ -69,6 +73,7 @@ func (s *CronScheduler) AddJob(name string, spec string, task ScheduledTask) err
 		return err
 	}
 
+	s.jobs[name] = entryID
 	s.logger.Info("定时任务添加成功",
 		slog.String("job_name", name),
 	)
@@ -81,9 +86,10 @@ func (s *CronScheduler) RemoveJob(name string) {
 	s.logger.Info("移除定时任务",
 		slog.String("job_name", name),
 	)
-	// cron库没有直接支持通过名称移除任务的API
-	// 这里我们记录日志，实际使用时可以通过Stop()停止所有任务然后重新添加
-	delete(s.jobs, name)
+	if entryID, ok := s.jobs[name]; ok {
+		s.cron.Remove(entryID)
+		delete(s.jobs, name)
+	}
 }
 
 // Start 启动调度器
