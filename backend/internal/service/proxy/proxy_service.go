@@ -327,11 +327,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		// 更新明细日志
 		errorMsg := ""
 		if forwardErr != nil {
-			if errors.Is(forwardErr, context.Canceled) {
-				errorMsg = "渠道断开连接"
-			} else {
-				errorMsg = forwardErr.Error()
-			}
+			errorMsg = forwardErr.Error()
 			ps.logErrorWithTrace("转发异常", traceID,
 				slog.Uint64("channel_id", uint64(routeResult.Channel.ID)),
 				slog.String("channel_name", routeResult.Channel.Name),

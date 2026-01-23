@@ -222,7 +222,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 	if len(firstFrame.FirstChunk) == 0 && !firstFrame.HasMoreData {
 		return "", 0, firstChunkTime, &EmptySSEBodyError{
 			TraceID: traceID,
-			Message: "empty sse response body",
+			Message: "空流式响应体",
 		}
 	}
 

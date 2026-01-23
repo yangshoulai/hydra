@@ -62,7 +62,7 @@ type UpdateModelConfigRequest struct {
 func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	var req CreateModelConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid create model config request",
+		h.logger.Warn("非法的模型配置保存请求",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -74,7 +74,7 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	// 验证渠道是否存在
 	channel, err := h.channelRepo.FindByID(c.Request.Context(), req.ChannelID)
 	if err != nil {
-		h.logger.Error("failed to find channel",
+		h.logger.Error("查询渠道异常",
 			slog.Uint64("channel_id", uint64(req.ChannelID)),
 			slog.String("error", err.Error()),
 		)
@@ -108,8 +108,9 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 
 	// 保存到数据库
 	if err := h.modelConfigRepo.Create(c.Request.Context(), modelConfig); err != nil {
-		h.logger.Error("failed to create model config",
+		h.logger.Error("保存模型配置异常",
 			slog.Uint64("channel_id", uint64(req.ChannelID)),
+			slog.String("upstream_model", req.UpstreamModel),
 			slog.String("unified_model", req.UnifiedModel),
 			slog.String("error", err.Error()),
 		)
@@ -119,7 +120,7 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("model config created",
+	h.logger.Info("模型配置已保存",
 		slog.Uint64("config_id", uint64(modelConfig.ID)),
 		slog.Uint64("channel_id", uint64(req.ChannelID)),
 		slog.String("unified_model", req.UnifiedModel),
@@ -154,7 +155,7 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 
 	var req UpdateModelConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("invalid update model config request",
+		h.logger.Warn("非法的模型配置更新请求",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -166,7 +167,7 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 	// 查询现有配置
 	modelConfig, err := h.modelConfigRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to find model config",
+		h.logger.Error("查询模型配置异常",
 			slog.Uint64("config_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -202,8 +203,11 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 
 	// 保存更新
 	if err := h.modelConfigRepo.Update(c.Request.Context(), modelConfig); err != nil {
-		h.logger.Error("failed to update model config",
+		h.logger.Error("模型配置更新异常",
 			slog.Uint64("config_id", id),
+			slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
+			slog.String("upstream_model", modelConfig.UpstreamModel),
+			slog.String("unified_model", modelConfig.UnifiedModel),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -212,10 +216,11 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("model config updated",
+	h.logger.Info("模型配置已更新",
 		slog.Uint64("config_id", uint64(modelConfig.ID)),
-		slog.String("unified_model", modelConfig.UnifiedModel),
+		slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
 		slog.String("upstream_model", modelConfig.UpstreamModel),
+		slog.String("unified_model", modelConfig.UnifiedModel),
 	)
 
 	c.JSON(http.StatusOK, modelConfig)
@@ -246,7 +251,7 @@ func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 	// 先检查配置是否存在
 	modelConfig, err := h.modelConfigRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to find model config",
+		h.logger.Error("查询模型配置异常",
 			slog.Uint64("config_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -265,8 +270,11 @@ func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 
 	// 执行删除
 	if err := h.modelConfigRepo.Delete(c.Request.Context(), uint(id)); err != nil {
-		h.logger.Error("failed to delete model config",
+		h.logger.Error("删除模型配置异常",
 			slog.Uint64("config_id", id),
+			slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
+			slog.String("upstream_model", modelConfig.UpstreamModel),
+			slog.String("unified_model", modelConfig.UnifiedModel),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -275,8 +283,10 @@ func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("model config deleted",
+	h.logger.Info("模型配置已删除",
 		slog.Uint64("config_id", id),
+		slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
+		slog.String("upstream_model", modelConfig.UpstreamModel),
 		slog.String("unified_model", modelConfig.UnifiedModel),
 	)
 
@@ -310,7 +320,7 @@ func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
 	// 查询现有配置
 	modelConfig, err := h.modelConfigRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to find model config",
+		h.logger.Error("查询模型配置异常",
 			slog.Uint64("config_id", id),
 			slog.String("error", err.Error()),
 		)
@@ -336,8 +346,11 @@ func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
 
 	// 保存更新
 	if err := h.modelConfigRepo.Update(c.Request.Context(), modelConfig); err != nil {
-		h.logger.Error("failed to update model config status",
+		h.logger.Error("更新模型状态异常",
 			slog.Uint64("config_id", id),
+			slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
+			slog.String("upstream_model", modelConfig.UpstreamModel),
+			slog.String("unified_model", modelConfig.UnifiedModel),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -346,8 +359,11 @@ func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("model config status toggled",
+	h.logger.Info("模型配置状态已更新",
 		slog.Uint64("config_id", uint64(modelConfig.ID)),
+		slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
+		slog.String("upstream_model", modelConfig.UpstreamModel),
+		slog.String("unified_model", modelConfig.UnifiedModel),
 		slog.String("new_status", modelConfig.Status),
 	)
 
