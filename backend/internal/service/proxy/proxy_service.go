@@ -31,7 +31,6 @@ type ProxyService struct {
 	failureClassifier       *FailureClassifier
 	retryCoordinator        *RetryCoordinator
 	circuitManager          *circuit.Manager
-	modelRouter             *ModelRouter
 	auditLogger             *logger.AuditLogger // 审计日志记录器
 	settingService          *configService.SettingService
 	sseForwarderWithSniffer *SSEForwarderWithSniffer // 支持嗅探的SSE转发器
@@ -83,7 +82,6 @@ func NewProxyService(
 		failureClassifier:       NewFailureClassifier(),
 		retryCoordinator:        NewRetryCoordinator(logger, maxRetries, retryDelay),
 		circuitManager:          circuitManager,
-		modelRouter:             NewModelRouter(logger),
 		auditLogger:             auditLogger,
 		settingService:          settingService,
 		sseForwarderWithSniffer: NewSSEForwarderWithSniffer(logger, settingService, 1000),
@@ -161,13 +159,13 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		)
 
 		if err != nil {
-			ps.logErrorWithTrace("路由失败", traceID, slog.String("model", unifiedModel), slog.String("error", err.Error()))
-			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable, "No available channels for model: "+unifiedModel, traceID)
-			mainLog.EndTime(time.Now()).StatusCode(http.StatusServiceUnavailable).ErrorMessage(err.Error())
+			ps.logErrorWithTrace("路由异常", traceID, slog.String("model", unifiedModel), slog.String("error", err.Error()))
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "Error when route model: "+unifiedModel, traceID)
+			mainLog.EndTime(time.Now()).StatusCode(http.StatusBadGateway).ErrorMessage(err.Error())
 			ps.auditLogger.LogAsync(mainLog.Build())
 			return err
 		}
-		ps.logWithTrace("路由成功", traceID, slog.Uint64("channel_id", uint64(routeResult.Channel.ID)), slog.String("channel_name", routeResult.Channel.Name), slog.Uint64("key_id", uint64(routeResult.Key.ID)), slog.String("unified_model", unifiedModel), slog.String("upstream_model", routeResult.UpstreamModel))
+		ps.logWithTrace("路由成功", traceID, slog.Uint64("channel_id", uint64(routeResult.Channel.ID)), slog.String("channel_name", routeResult.Channel.Name), slog.Uint64("key_id", uint64(routeResult.Key.ID)), slog.Uint64("model_config_id", uint64(routeResult.ModelConfigID)), slog.String("unified_model", unifiedModel), slog.String("upstream_model", routeResult.UpstreamModel))
 
 		// 构建上游请求
 		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, endpoint)
@@ -212,7 +210,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		}
 
 		// 分类故障
-		failureType, errMsg := ps.failureClassifier.ClassifyResponseError(upstreamResp, err)
+		failureType, failureScope, errMsg := ps.failureClassifier.ClassifyResponseError(upstreamResp, err)
 
 		// 处理故障
 		if failureType != FailureTypeNone {
@@ -221,9 +219,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 				slog.String("channel_name", routeResult.Channel.Name),
 				slog.String("error", errMsg),
 			)
-			if failureType != FailureTypeModelNotFound {
-				ps.recordFailure(routeResult, failureType, errMsg)
-			}
+			ps.recordFailure(routeResult, failureType, failureScope, errMsg)
 
 			detailLog.IsSuccess(false).Status("failed").ErrorMessage(errMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, errors.New(errMsg), failureType)
@@ -241,7 +237,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 
 		// 成功响应
 		if upstreamResp != nil && upstreamResp.StatusCode < 400 {
-			ps.circuitManager.RecordKeySuccess(routeResult.Key.ID, routeResult.Channel.ID)
+			ps.recordSuccess(routeResult)
 		}
 
 		detailLog.IsSuccess(true).Status("success")
@@ -255,7 +251,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		if isStream {
 			responseBodyStr, streamChunks, firstChunkTime, forwardErr = ps.sseForwarderWithSniffer.ForwardStreamWithDetection(c, upstreamResp, traceID)
 			if emptyBodyErr, ok := forwardErr.(*EmptySSEBodyError); ok {
-				ps.recordFailure(routeResult, FailureTypeSoft, forwardErr.Error())
+				ps.recordFailure(routeResult, FailureTypeSoft, FailureScopeNone, forwardErr.Error())
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, emptyBodyErr, FailureTypeSoft)
 				ps.logWarnWithTrace("检测到空的流式响应体", traceID, slog.String("error", emptyBodyErr.Message))
 
@@ -278,7 +274,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			}
 			// 检查假200错误
 			if fake200Err, ok := forwardErr.(*Fake200Error); ok {
-				ps.recordFailure(routeResult, FailureTypeSoft, forwardErr.Error())
+				ps.recordFailure(routeResult, FailureTypeSoft, FailureScopeKey, forwardErr.Error())
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, fake200Err, FailureTypeSoft)
 				ps.logWarnWithTrace("检测到流式假 200 响应", traceID, slog.String("error", fake200Err.Message))
 
@@ -305,7 +301,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 				ps.logWarnWithTrace("嗅探响应失败", traceID, slog.String("error", sniffErr.Error()))
 			} else if sniffResult.IsFake200 {
 				ps.logErrorWithTrace("检测到假 200 响应", traceID, slog.String("rule", sniffResult.MatchedRule))
-				ps.recordFailure(routeResult, FailureTypeSoft, "假 200 响应")
+				ps.recordFailure(routeResult, FailureTypeSoft, FailureScopeKey, "假 200 响应")
 				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, errors.New("fake 200 response"), FailureTypeSoft)
 
 				detailLog.EndTime(time.Now()).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds())).IsSuccess(false).Status("failed").ResponseBody(string(sniffResult.Body))
@@ -348,11 +344,56 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 }
 
 // recordFailure 记录故障到熔断器
-func (ps *ProxyService) recordFailure(routeResult *RouteResult, failureType FailureType, errMsg string) {
-	if failureType == FailureTypeHard {
-		ps.circuitManager.RecordKeyHardFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
-	} else if failureType == FailureTypeSoft {
-		ps.circuitManager.RecordKeySoftFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
+func (ps *ProxyService) recordFailure(routeResult *RouteResult, failureType FailureType, failureScope FailureScope, errMsg string) {
+	switch failureScope {
+	case FailureScopeKey:
+		if failureType == FailureTypeHard {
+			ps.circuitManager.RecordKeyHardFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
+		} else if failureType == FailureTypeSoft {
+			ps.circuitManager.RecordKeySoftFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
+		}
+	case FailureScopeModelConfig:
+		if routeResult.ModelConfigID == 0 {
+			return
+		}
+		if failureType == FailureTypeSoft || failureType == FailureTypeModelNotFound {
+			ps.circuitManager.RecordModelConfigFailure(
+				routeResult.ModelConfigID,
+				routeResult.Channel.ID,
+				routeResult.Channel.Name,
+				routeResult.UnifiedModel,
+				routeResult.UpstreamModel,
+				errMsg,
+			)
+		}
+	case FailureScopeBoth:
+		if failureType == FailureTypeHard {
+			ps.circuitManager.RecordKeyHardFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
+		} else if failureType == FailureTypeSoft {
+			ps.circuitManager.RecordKeySoftFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
+		}
+		if routeResult.ModelConfigID == 0 {
+			return
+		}
+		if failureType == FailureTypeSoft || failureType == FailureTypeModelNotFound {
+			ps.circuitManager.RecordModelConfigFailure(
+				routeResult.ModelConfigID,
+				routeResult.Channel.ID,
+				routeResult.Channel.Name,
+				routeResult.UnifiedModel,
+				routeResult.UpstreamModel,
+				errMsg,
+			)
+		}
+	default:
+		return
+	}
+}
+
+func (ps *ProxyService) recordSuccess(routeResult *RouteResult) {
+	ps.circuitManager.RecordKeySuccess(routeResult.Key.ID, routeResult.Channel.ID)
+	if routeResult.ModelConfigID != 0 {
+		ps.circuitManager.RecordModelConfigSuccess(routeResult.ModelConfigID, routeResult.Channel.ID)
 	}
 }
 

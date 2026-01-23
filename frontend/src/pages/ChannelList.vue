@@ -79,7 +79,7 @@
         :pagination="false"
         :single-line="false"
         bordered
-        :scroll-x="960"
+        :scroll-x="1000"
         striped
         :row-key="(row: Channel) => row.id"
         @update:sorter="handleSorterChange"
@@ -197,6 +197,33 @@ const pagination = reactive({
     fetchChannels()
   }
 })
+
+function getModelStats(channel: Channel) {
+  const stats = channel.model_stats
+  if (stats) {
+    return {
+      active: stats.active || 0,
+      disabled: stats.disabled || 0,
+      nonExist: stats.non_exist || 0
+    }
+  }
+
+  if (channel.model_configs && channel.model_configs.length > 0) {
+    const result = {active: 0, disabled: 0, nonExist: 0}
+    channel.model_configs.forEach((config) => {
+      if (config.status === 'active') {
+        result.active += 1
+      } else if (config.status === 'disabled') {
+        result.disabled += 1
+      } else if (config.status === 'non_exist') {
+        result.nonExist += 1
+      }
+    })
+    return result
+  }
+
+  return {active: 0, disabled: 0, nonExist: 0}
+}
 
 // 获取渠道列表
 async function fetchChannels() {
@@ -344,12 +371,30 @@ const columns = computed<DataTableColumns<Channel>>(() => {
       sortOrder: getSortOrder('weight')
     },
     {
-      title: '模型数量',
+      title: '模型',
       key: 'model_count',
-      width: 80,
+      width: 120,
       align: 'right',
       render(row) {
-        return row.model_count || 0
+        const stats = getModelStats(row)
+        const color = stats.active > 0 ? '#10b981' : stats.disabled > 0 ? '#f59e0b' : '#ef4444'
+
+        return h(
+            NTooltip,
+            {},
+            {
+              trigger: () =>
+                  h(NText, {style: {color: color, fontWeight: 500}}, {
+                    default: () => `${stats.active} / ${stats.disabled} / ${stats.nonExist}`
+                  }),
+              default: () =>
+                  h('div', {style: {lineHeight: '1.8'}}, [
+                    h('div', {}, `正常：${stats.active}`),
+                    h('div', {}, `禁用：${stats.disabled}`),
+                    h('div', {}, `失效：${stats.nonExist}`)
+                  ])
+            }
+        )
       }
     },
     {

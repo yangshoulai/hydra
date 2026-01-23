@@ -242,6 +242,7 @@ func initCircuitManager(
 ) *circuit.Manager {
 	keyRepo := repository.NewKeyRepository(db)
 	channelRepo := repository.NewChannelRepository(db)
+	modelConfigRepo := repository.NewChannelModelConfigRepository(db)
 
 	probeInterval := 90 * time.Second // 探测间隔 90 秒
 
@@ -250,6 +251,7 @@ func initCircuitManager(
 		logger,
 		keyRepo,
 		channelRepo,
+		modelConfigRepo,
 		settingService,
 		failureThreshold,
 		coolingDuration,

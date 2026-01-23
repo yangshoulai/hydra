@@ -51,7 +51,7 @@ func (al *AuditLogger) LogAsync(mainLog *models.RequestLogMain) {
 		return
 	}
 	mainLog.Duration = int(mainLog.EndTime.Sub(mainLog.StartTime).Milliseconds())
-	mainLog.RetryCount = len(mainLog.Details) - 1
+	mainLog.RetryCount = max(len(mainLog.Details)-1, 0)
 
 	for i := range mainLog.Details {
 		mainLog.Details[i].Duration = int(mainLog.Details[i].EndTime.Sub(mainLog.Details[i].StartTime).Milliseconds())

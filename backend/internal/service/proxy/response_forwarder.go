@@ -130,7 +130,7 @@ func (rf *ResponseForwarder) ForwardJSONResponse(
 	c.Header("Content-Type", "application/json")
 
 	// 写入响应（分片写入 + flush，避免大响应体写入超时）
-	const chunkSize = 32 * 1024 // 32KB 每块
+	const chunkSize = 16 * 1024 // 16KB 每块
 	for i := 0; i < len(body); i += chunkSize {
 		end := i + chunkSize
 		if end > len(body) {

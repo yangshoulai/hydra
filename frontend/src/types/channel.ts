@@ -13,6 +13,7 @@ export interface Channel {
   last_sync_time?: string
   description: string
   model_count?: number  // 已配置的模型数量
+  model_stats?: ModelStatusCount // 模型状态统计
   key_stats?: KeyStats  // 密钥统计
   created_at: string
   updated_at: string
@@ -24,6 +25,12 @@ export interface KeyStats {
   active: number    // 健康的密钥数量
   cooling: number   // 冷却中的密钥数量
   disabled: number  // 禁用的密钥数量
+}
+
+export interface ModelStatusCount {
+  active: number
+  disabled: number
+  non_exist: number
 }
 
 export interface Key {

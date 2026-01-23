@@ -53,7 +53,7 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 	}
 
 	// 过滤出可用的 Channel
-	availableChannels := cs.filterAvailableChannels(channels, traceID)
+	availableChannels := cs.filterAvailableChannels(channels, modelName, endpointType, traceID)
 
 	if len(availableChannels) == 0 {
 		return nil, ErrNoAvailableChannel
@@ -81,13 +81,13 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 }
 
 // filterAvailableChannels 过滤出可用的 Channel
-func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, traceID string) []models.Channel {
+func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, modelName string, endpointType string, traceID string) []models.Channel {
 	available := make([]models.Channel, 0, len(channels))
 
 	for _, channel := range channels {
 		// 检查 Channel 是否激活
 		if !channel.IsActive() {
-			cs.logger.Debug("channel is not active",
+			cs.logger.Debug("渠道处于非正常状态",
 				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(channel.ID)),
 				slog.String("status", channel.Status),
@@ -95,18 +95,19 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, tr
 			continue
 		}
 
-		// 检查熔断器状态
-		if !cs.circuitManager.IsChannelAvailable(channel.ID) {
-			cs.logger.Debug("channel is not available (circuit breaker)",
+		// 检查模型配置熔断状态
+		if !cs.hasAvailableModelConfig(&channel, modelName, endpointType, traceID) {
+			cs.logger.Debug("渠道没有可用模型配置",
 				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("unified_model", modelName),
 			)
 			continue
 		}
 
 		// 检查是否有可用的 Key
 		if cs.keySelector.GetAvailableKeyCount(&channel, traceID) == 0 {
-			cs.logger.Debug("channel has no available keys",
+			cs.logger.Debug("渠道没有可用密钥",
 				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(channel.ID)),
 			)
@@ -117,6 +118,49 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, tr
 	}
 
 	return available
+}
+
+// hasAvailableModelConfig 检查渠道是否有可用的模型配置
+func (cs *ChannelSelector) hasAvailableModelConfig(channel *models.Channel, unifiedModel string, endpointType string, traceID string) bool {
+	if channel == nil {
+		return false
+	}
+
+	for i := range channel.ModelConfigs {
+		config := &channel.ModelConfigs[i]
+		if config.UnifiedModel != unifiedModel || !config.IsActive() {
+			continue
+		}
+		if !cs.hasEndpointType(config.EndpointTypes, endpointType) {
+			continue
+		}
+		if cs.circuitManager == nil || cs.circuitManager.IsModelConfigAvailable(config.ID) {
+			return true
+		}
+
+		cs.logger.Debug("model config is cooling",
+			slog.String("trace_id", traceID),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.Uint64("model_config_id", uint64(config.ID)),
+			slog.String("unified_model", unifiedModel),
+			slog.String("upstream_model", config.UpstreamModel),
+		)
+	}
+
+	return false
+}
+
+// hasEndpointType 检查端点类型是否匹配
+func (cs *ChannelSelector) hasEndpointType(endpointTypes []string, targetType string) bool {
+	if targetType == "" {
+		return true
+	}
+	for _, et := range endpointTypes {
+		if et == targetType {
+			return true
+		}
+	}
+	return false
 }
 
 // groupByPriority 按优先级分组
@@ -173,6 +217,6 @@ func (cs *ChannelSelector) GetAvailableChannelCount(ctx context.Context, modelNa
 		return 0, err
 	}
 
-	available := cs.filterAvailableChannels(channels, "")
+	available := cs.filterAvailableChannels(channels, modelName, "", "")
 	return len(available), nil
 }

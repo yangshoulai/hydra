@@ -19,6 +19,7 @@ var (
 type RouteResult struct {
 	Channel       *models.Channel // 选定的渠道
 	Key           *models.Key     // 选定的 Key
+	ModelConfigID uint            // 选中的模型配置ID
 	UpstreamModel string          // 上游模型名
 	UnifiedModel  string          // 统一模型名
 }
@@ -39,7 +40,7 @@ func NewLoadBalancer(
 ) *LoadBalancer {
 	keySelector := NewKeySelector(logger, circuitManager)
 	channelSelector := NewChannelSelector(logger, channelRepo, keySelector, circuitManager)
-	modelRouter := NewModelRouter(logger)
+	modelRouter := NewModelRouter(logger, circuitManager)
 
 	return &LoadBalancer{
 		logger:          logger,
@@ -72,15 +73,19 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	}
 
 	// 3. 路由模型
-	upstreamModel, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType, traceID)
+	selectedConfig, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType, traceID)
 	if err != nil {
+		if errors.Is(err, ErrModelNotFound) || errors.Is(err, ErrNoModelMapping) || errors.Is(err, ErrNoAvailableModelConfig) {
+			return nil, ErrNoAvailableChannel
+		}
 		return nil, err
 	}
 
 	result := &RouteResult{
 		Channel:       channel,
 		Key:           key,
-		UpstreamModel: upstreamModel,
+		ModelConfigID: selectedConfig.ID,
+		UpstreamModel: selectedConfig.UpstreamModel,
 		UnifiedModel:  unifiedModel,
 	}
 	return result, nil

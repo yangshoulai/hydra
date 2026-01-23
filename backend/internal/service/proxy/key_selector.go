@@ -64,7 +64,7 @@ func (ks *KeySelector) getAvailableKeys(channel *models.Channel, traceID string)
 
 		// 检查 Key 是否被禁用
 		if key.Status == "disabled" {
-			ks.logger.Debug("key is disabled",
+			ks.logger.Debug("密钥被禁用",
 				slog.String("trace_id", traceID),
 				slog.Uint64("key_id", uint64(key.ID)),
 			)
@@ -73,7 +73,7 @@ func (ks *KeySelector) getAvailableKeys(channel *models.Channel, traceID string)
 
 		// 检查熔断器状态
 		if !ks.circuitManager.IsKeyAvailable(key.ID) {
-			ks.logger.Debug("key is not available (circuit breaker)",
+			ks.logger.Debug("密钥不可用 (circuit breaker)",
 				slog.String("trace_id", traceID),
 				slog.Uint64("key_id", uint64(key.ID)),
 			)

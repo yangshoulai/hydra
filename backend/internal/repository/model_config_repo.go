@@ -64,6 +64,46 @@ func (r *ChannelModelConfigRepository) CountByChannelID(ctx context.Context, cha
 	return int(count), err
 }
 
+// ModelConfigStatusCount 模型配置状态统计
+type ModelConfigStatusCount struct {
+	Active   int64 `json:"active"`
+	Disabled int64 `json:"disabled"`
+	NonExist int64 `json:"non_exist"`
+}
+
+// CountByChannelIDAndStatus 统计渠道下各状态模型配置数量
+func (r *ChannelModelConfigRepository) CountByChannelIDAndStatus(ctx context.Context, channelID uint) (*ModelConfigStatusCount, error) {
+	var counts []struct {
+		Status string
+		Count  int64
+	}
+
+	err := r.db.WithContext(ctx).
+		Model(&models.ChannelModelConfig{}).
+		Select("status, COUNT(*) as count").
+		Where("channel_id = ?", channelID).
+		Group("status").
+		Scan(&counts).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ModelConfigStatusCount{}
+	for _, c := range counts {
+		switch c.Status {
+		case "active":
+			result.Active = c.Count
+		case "disabled":
+			result.Disabled = c.Count
+		case "non_exist":
+			result.NonExist = c.Count
+		}
+	}
+
+	return result, nil
+}
+
 // FindByUnifiedModel 根据统一模型名查询所有支持的渠道配置
 func (r *ChannelModelConfigRepository) FindByUnifiedModel(ctx context.Context, unifiedModel string) ([]*models.ChannelModelConfig, error) {
 	var configs []*models.ChannelModelConfig

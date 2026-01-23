@@ -65,6 +65,7 @@ type ChannelListResponse struct {
 type ChannelWithModelCount struct {
 	*models.Channel
 	ModelCount      int                        `json:"model_count"`
+	ModelStats      *repository.ModelConfigStatusCount `json:"model_stats"`
 	KeyStats        *repository.KeyStatusCount `json:"key_stats"`
 }
 
@@ -159,15 +160,16 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 	// 查询每个渠道的模型配置数量和密钥统计
 	result := make([]ChannelWithModelCount, 0, len(channels))
 	for _, channel := range channels {
-		// 查询该渠道的模型配置数量
-		count, err := h.modelConfigRepo.CountByChannelID(c.Request.Context(), channel.ID)
+		// 查询该渠道的模型配置统计
+		modelStats, err := h.modelConfigRepo.CountByChannelIDAndStatus(c.Request.Context(), channel.ID)
 		if err != nil {
-			h.logger.Warn("查询渠道模型数量失败",
+			h.logger.Warn("查询渠道模型统计失败",
 				slog.Uint64("channel_id", uint64(channel.ID)),
 				slog.String("error", err.Error()),
 			)
-			count = 0
+			modelStats = &repository.ModelConfigStatusCount{}
 		}
+		modelCount := int(modelStats.Active + modelStats.Disabled + modelStats.NonExist)
 
 		// 查询该渠道的密钥统计
 		keyStats, err := h.keyRepo.CountByChannelIDAndStatus(c.Request.Context(), channel.ID)
@@ -181,7 +183,8 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 
 		result = append(result, ChannelWithModelCount{
 			Channel:    channel,
-			ModelCount: count,
+			ModelCount: modelCount,
+			ModelStats: modelStats,
 			KeyStats:   keyStats,
 		})
 	}

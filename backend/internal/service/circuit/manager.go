@@ -23,12 +23,13 @@ type Manager struct {
 	logger           *slog.Logger
 	keyRepo          *repository.KeyRepository
 	channelRepo      *repository.ChannelRepository
+	modelConfigRepo  *repository.ChannelModelConfigRepository
 	settingService   *config.SettingService // 配置服务，用于获取最新配置
 	failureThreshold int
 	coolingDuration  time.Duration
 
-	keyBreakers     map[uint]*KeyBreaker
-	channelBreakers map[uint]*ChannelBreaker
+	keyBreakers         map[uint]*KeyBreaker
+	modelConfigBreakers map[uint]*ModelConfigBreaker
 
 	probeInterval      time.Duration // 探测间隔
 	probeMaxConcurrent int           // 最大并发探测数
@@ -43,25 +44,27 @@ func NewManager(
 	logger *slog.Logger,
 	keyRepo *repository.KeyRepository,
 	channelRepo *repository.ChannelRepository,
+	modelConfigRepo *repository.ChannelModelConfigRepository,
 	settingService *config.SettingService,
 	failureThreshold int,
 	coolingDuration time.Duration,
 	probeInterval time.Duration,
 ) *Manager {
 	return &Manager{
-		db:                 db,
-		logger:             logger,
-		keyRepo:            keyRepo,
-		channelRepo:        channelRepo,
-		settingService:     settingService,
-		failureThreshold:   failureThreshold,
-		coolingDuration:    coolingDuration,
-		probeInterval:      probeInterval,
-		probeMaxConcurrent: 10, // 默认值
-		keyBreakers:        make(map[uint]*KeyBreaker),
-		channelBreakers:    make(map[uint]*ChannelBreaker),
-		stopChan:           make(chan struct{}),
-		restartChan:        make(chan struct{}),
+		db:                  db,
+		logger:              logger,
+		keyRepo:             keyRepo,
+		channelRepo:         channelRepo,
+		modelConfigRepo:     modelConfigRepo,
+		settingService:      settingService,
+		failureThreshold:    failureThreshold,
+		coolingDuration:     coolingDuration,
+		probeInterval:       probeInterval,
+		probeMaxConcurrent:  10, // 默认值
+		keyBreakers:         make(map[uint]*KeyBreaker),
+		modelConfigBreakers: make(map[uint]*ModelConfigBreaker),
+		stopChan:            make(chan struct{}),
+		restartChan:         make(chan struct{}),
 	}
 }
 
@@ -138,29 +141,28 @@ func (m *Manager) GetKeyBreaker(keyID uint) *KeyBreaker {
 	return breaker
 }
 
-// GetChannelBreaker 获取或创建 Channel 熔断器
-func (m *Manager) GetChannelBreaker(channelID uint) *ChannelBreaker {
+// GetModelConfigBreaker 获取或创建模型配置熔断器
+func (m *Manager) GetModelConfigBreaker(modelConfigID uint, channelID uint) *ModelConfigBreaker {
 	m.mu.RLock()
-	breaker, exists := m.channelBreakers[channelID]
+	breaker, exists := m.modelConfigBreakers[modelConfigID]
 	m.mu.RUnlock()
 
 	if exists {
 		return breaker
 	}
 
-	// 创建新的熔断器
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 双重检查
-	if breaker, exists := m.channelBreakers[channelID]; exists {
+	if breaker, exists := m.modelConfigBreakers[modelConfigID]; exists {
 		return breaker
 	}
 
-	breaker = NewChannelBreaker(channelID, m.failureThreshold, m.coolingDuration)
-	m.channelBreakers[channelID] = breaker
+	breaker = NewModelConfigBreaker(modelConfigID, channelID, m.failureThreshold, m.coolingDuration)
+	m.modelConfigBreakers[modelConfigID] = breaker
 
-	m.logger.Debug("创建渠道熔断器",
+	m.logger.Debug("创建模型配置熔断器",
+		slog.Uint64("model_config_id", uint64(modelConfigID)),
 		slog.Uint64("channel_id", uint64(channelID)),
 	)
 
@@ -171,9 +173,6 @@ func (m *Manager) GetChannelBreaker(channelID uint) *ChannelBreaker {
 func (m *Manager) RecordKeySuccess(keyID uint, channelID uint) {
 	keyBreaker := m.GetKeyBreaker(keyID)
 	keyBreaker.RecordSuccess()
-
-	channelBreaker := m.GetChannelBreaker(channelID)
-	channelBreaker.RecordSuccess()
 
 	// 异步更新数据库，如果之前在 cooling 状态，需要清除 cooling_at
 	go m.exitKeyCooling(keyID)
@@ -205,14 +204,6 @@ func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName s
 		slog.String("channel_name", channelName),
 	)
 
-	channelBreaker := m.GetChannelBreaker(channelID)
-	channelBreaker.RecordFailure()
-	m.logger.Warn("渠道连续["+strconv.Itoa(channelBreaker.failureCount)+"]次失败",
-		slog.Uint64("key_id", uint64(keyID)),
-		slog.Uint64("channel_id", uint64(channelID)),
-		slog.String("channel_name", channelName),
-	)
-
 	// 如果进入冷却状态,更新数据库
 	if keyBreaker.GetState() == KeyStateCooling {
 		m.logger.Warn("密钥进入冷却状态",
@@ -225,15 +216,54 @@ func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName s
 	}
 }
 
+// RecordModelConfigSuccess 记录模型配置成功
+func (m *Manager) RecordModelConfigSuccess(modelConfigID uint, channelID uint) {
+	breaker := m.GetModelConfigBreaker(modelConfigID, channelID)
+	breaker.RecordSuccess()
+}
+
+// RecordModelConfigFailure 记录模型配置失败（统一模型到上游模型的映射调用失败）
+func (m *Manager) RecordModelConfigFailure(modelConfigID uint, channelID uint, channelName string, unifiedModel string, upstreamModel string, errMsg string) {
+	breaker := m.GetModelConfigBreaker(modelConfigID, channelID)
+	breaker.RecordFailure()
+
+	m.logger.Warn("模型配置连续["+strconv.Itoa(breaker.failureCount)+"]次失败",
+		slog.Uint64("model_config_id", uint64(modelConfigID)),
+		slog.Uint64("channel_id", uint64(channelID)),
+		slog.String("channel_name", channelName),
+		slog.String("unified_model", unifiedModel),
+		slog.String("upstream_model", upstreamModel),
+		slog.String("errMsg", errMsg),
+	)
+
+	if breaker.GetState() == ModelConfigStateCooling {
+		m.logger.Warn("模型配置进入冷却状态",
+			slog.Uint64("model_config_id", uint64(modelConfigID)),
+			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("channel_name", channelName),
+			slog.String("unified_model", unifiedModel),
+			slog.String("upstream_model", upstreamModel),
+		)
+	}
+}
+
 // IsKeyAvailable 检查 Key 是否可用
 func (m *Manager) IsKeyAvailable(keyID uint) bool {
 	breaker := m.GetKeyBreaker(keyID)
 	return breaker.IsAvailable()
 }
 
-// IsChannelAvailable 检查 Channel 是否可用
-func (m *Manager) IsChannelAvailable(channelID uint) bool {
-	breaker := m.GetChannelBreaker(channelID)
+// IsModelConfigAvailable 检查模型配置是否可用
+func (m *Manager) IsModelConfigAvailable(modelConfigID uint) bool {
+	m.mu.RLock()
+	breaker, exists := m.modelConfigBreakers[modelConfigID]
+	m.mu.RUnlock()
+
+	// 没有记录过失败的配置默认可用
+	if !exists {
+		return true
+	}
+
 	return breaker.IsAvailable()
 }
 
@@ -471,14 +501,14 @@ func (m *Manager) GetAllStats() map[string]interface{} {
 		keyStats = append(keyStats, breaker.GetStats())
 	}
 
-	channelStats := make([]map[string]interface{}, 0, len(m.channelBreakers))
-	for _, breaker := range m.channelBreakers {
-		channelStats = append(channelStats, breaker.GetStats())
+	modelConfigStats := make([]map[string]interface{}, 0, len(m.modelConfigBreakers))
+	for _, breaker := range m.modelConfigBreakers {
+		modelConfigStats = append(modelConfigStats, breaker.GetStats())
 	}
 
 	return map[string]interface{}{
-		"keys":     keyStats,
-		"channels": channelStats,
+		"keys":          keyStats,
+		"model_configs": modelConfigStats,
 	}
 }
 
@@ -511,7 +541,7 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 	for _, breaker := range m.keyBreakers {
 		breaker.UpdateConfig(failureThreshold, coolingDuration)
 	}
-	for _, breaker := range m.channelBreakers {
+	for _, breaker := range m.modelConfigBreakers {
 		breaker.UpdateConfig(failureThreshold, coolingDuration)
 	}
 
@@ -552,31 +582,23 @@ func (m *Manager) RemoveKeyBreaker(keyID uint) {
 	}
 }
 
-// RemoveChannelBreaker 移除 Channel 熔断器
-func (m *Manager) RemoveChannelBreaker(channelID uint) {
+// RemoveModelConfigBreaker 移除模型配置熔断器
+func (m *Manager) RemoveModelConfigBreaker(modelConfigID uint) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.channelBreakers[channelID]; exists {
-		delete(m.channelBreakers, channelID)
-		m.logger.Info("移除渠道熔断器",
-			slog.Uint64("channel_id", uint64(channelID)),
+	if _, exists := m.modelConfigBreakers[modelConfigID]; exists {
+		delete(m.modelConfigBreakers, modelConfigID)
+		m.logger.Info("移除模型配置熔断器",
+			slog.Uint64("model_config_id", uint64(modelConfigID)),
 		)
 	}
 }
 
-// RemoveChannelBreakersAndKeys 移除渠道及其所有密钥的熔断器
+// RemoveChannelBreakersAndKeys 移除渠道相关的熔断器（密钥 + 模型配置）
 func (m *Manager) RemoveChannelBreakersAndKeys(channelID uint) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	// 移除渠道熔断器
-	if _, exists := m.channelBreakers[channelID]; exists {
-		delete(m.channelBreakers, channelID)
-		m.logger.Info("移除渠道熔断器",
-			slog.Uint64("channel_id", uint64(channelID)),
-		)
-	}
 
 	// 查询该渠道下的所有密钥
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -606,16 +628,41 @@ func (m *Manager) RemoveChannelBreakersAndKeys(channelID uint) {
 			slog.Int("count", removedCount),
 		)
 	}
+
+	// 移除该渠道下所有模型配置熔断器
+	configs, err := m.modelConfigRepo.FindByChannelID(ctx, channelID)
+	if err != nil {
+		m.logger.Error("查询渠道模型配置失败",
+			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+
+	removedModelConfigCount := 0
+	for _, cfg := range configs {
+		if _, exists := m.modelConfigBreakers[cfg.ID]; exists {
+			delete(m.modelConfigBreakers, cfg.ID)
+			removedModelConfigCount++
+		}
+	}
+
+	if removedModelConfigCount > 0 {
+		m.logger.Info("移除渠道下模型配置熔断器",
+			slog.Uint64("channel_id", uint64(channelID)),
+			slog.Int("count", removedModelConfigCount),
+		)
+	}
 }
 
-// CleanupOrphanBreakers 清理孤儿熔断器（数据库中不存在的渠道或密钥的熔断器）
+// CleanupOrphanBreakers 清理孤儿熔断器（数据库中不存在的密钥或模型配置）
 func (m *Manager) CleanupOrphanBreakers(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 获取数据库中所有的密钥和渠道ID（不限制状态）
+	// 获取数据库中所有的密钥、模型配置ID（不限制状态）
 	existingKeyIDs := make(map[uint]bool)
-	existingChannelIDs := make(map[uint]bool)
+	existingModelConfigIDs := make(map[uint]bool)
 
 	// 查询所有密钥（不限制状态）
 	keys, err := m.keyRepo.FindAll(ctx)
@@ -627,23 +674,22 @@ func (m *Manager) CleanupOrphanBreakers(ctx context.Context) {
 	}
 	for _, key := range keys {
 		existingKeyIDs[key.ID] = true
-		existingChannelIDs[key.ChannelID] = true
 	}
 
-	// 查询所有渠道（不限制状态）
-	channels, err := m.channelRepo.FindAll(ctx)
-	if err != nil {
-		m.logger.Error("查询渠道失败",
+	// 查询所有模型配置ID（不限制状态）
+	var modelConfigIDs []uint
+	if err := m.db.WithContext(ctx).Model(&models.ChannelModelConfig{}).Pluck("id", &modelConfigIDs).Error; err != nil {
+		m.logger.Error("查询模型配置失败",
 			slog.String("error", err.Error()),
 		)
 		return
 	}
-	for _, channel := range channels {
-		existingChannelIDs[channel.ID] = true
+	for _, id := range modelConfigIDs {
+		existingModelConfigIDs[id] = true
 	}
 
 	// 清理孤儿密钥熔断器（数据库中不存在的密钥）
-	var removedKeyBreakers, removedChannelBreakers int
+	var removedKeyBreakers, removedModelConfigBreakers int
 
 	for keyID := range m.keyBreakers {
 		if !existingKeyIDs[keyID] {
@@ -655,23 +701,23 @@ func (m *Manager) CleanupOrphanBreakers(ctx context.Context) {
 		}
 	}
 
-	// 清理孤儿渠道熔断器（数据库中不存在的渠道）
-	for channelID := range m.channelBreakers {
-		if !existingChannelIDs[channelID] {
-			delete(m.channelBreakers, channelID)
-			removedChannelBreakers++
-			m.logger.Debug("清理孤儿渠道熔断器",
-				slog.Uint64("channel_id", uint64(channelID)),
+	// 清理孤儿模型配置熔断器（数据库中不存在的模型配置）
+	for cfgID := range m.modelConfigBreakers {
+		if !existingModelConfigIDs[cfgID] {
+			delete(m.modelConfigBreakers, cfgID)
+			removedModelConfigBreakers++
+			m.logger.Debug("清理孤儿模型配置熔断器",
+				slog.Uint64("model_config_id", uint64(cfgID)),
 			)
 		}
 	}
 
-	if removedKeyBreakers > 0 || removedChannelBreakers > 0 {
+	if removedKeyBreakers > 0 || removedModelConfigBreakers > 0 {
 		m.logger.Info("清理孤儿熔断器完成",
 			slog.Int("removed_key_breakers", removedKeyBreakers),
-			slog.Int("removed_channel_breakers", removedChannelBreakers),
+			slog.Int("removed_model_config_breakers", removedModelConfigBreakers),
 			slog.Int("remaining_key_breakers", len(m.keyBreakers)),
-			slog.Int("remaining_channel_breakers", len(m.channelBreakers)),
+			slog.Int("remaining_model_config_breakers", len(m.modelConfigBreakers)),
 		)
 	}
 }

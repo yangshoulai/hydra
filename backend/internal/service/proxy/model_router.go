@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 
 	"github.com/yangshoulai/hydra/internal/models"
+	"github.com/yangshoulai/hydra/internal/service/circuit"
 )
 
 var (
@@ -13,17 +14,21 @@ var (
 	ErrModelNotFound = errors.New("model not found in channel")
 	// ErrNoModelMapping 无模型映射配置
 	ErrNoModelMapping = errors.New("no model mapping configuration")
+	// ErrNoAvailableModelConfig 模型配置全部处于冷却
+	ErrNoAvailableModelConfig = errors.New("no available model config")
 )
 
 // ModelRouter 模型路由器,负责统一模型名到上游模型名的映射
 type ModelRouter struct {
-	logger *slog.Logger
+	logger         *slog.Logger
+	circuitManager *circuit.Manager
 }
 
 // NewModelRouter 创建模型路由器
-func NewModelRouter(logger *slog.Logger) *ModelRouter {
+func NewModelRouter(logger *slog.Logger, circuitManager *circuit.Manager) *ModelRouter {
 	return &ModelRouter{
-		logger: logger,
+		logger:         logger,
+		circuitManager: circuitManager,
 	}
 }
 
@@ -32,10 +37,10 @@ func NewModelRouter(logger *slog.Logger) *ModelRouter {
 // channel: 选定的渠道
 // endpointType: 端点类型(如 openai, openai-response, anthropic)
 // traceID: 请求追踪ID
-// 返回: 上游真实模型名(如 gpt-4-0613)
-func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, endpointType string, traceID string) (string, error) {
+// 返回: 匹配的模型配置
+func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, endpointType string, traceID string) (*models.ChannelModelConfig, error) {
 	if channel == nil {
-		return "", errors.New("渠道为空")
+		return nil, errors.New("渠道为空")
 	}
 
 	if len(channel.ModelConfigs) == 0 {
@@ -44,14 +49,33 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 		)
-		return "", ErrNoModelMapping
+		return nil, ErrNoModelMapping
 	}
 
 	// 查找匹配的模型配置
-	var matchedConfigs []models.ChannelModelConfig
-	for _, config := range channel.ModelConfigs {
+	var matchedConfigs []*models.ChannelModelConfig
+	var availableConfigs []*models.ChannelModelConfig
+	for i := range channel.ModelConfigs {
+		config := &channel.ModelConfigs[i]
 		if config.UnifiedModel == unifiedModel && config.IsActive() && mr.hasEndpointType(config.EndpointTypes, endpointType) {
 			matchedConfigs = append(matchedConfigs, config)
+			// endpointType 为空通常用于管理侧查询，避免被熔断状态影响展示/解析结果
+			if endpointType == "" {
+				availableConfigs = append(availableConfigs, config)
+				continue
+			}
+
+			if mr.circuitManager == nil || mr.circuitManager.IsModelConfigAvailable(config.ID) {
+				availableConfigs = append(availableConfigs, config)
+				continue
+			}
+			mr.logger.Debug("模型配置处于冷却状态",
+				slog.String("trace_id", traceID),
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.Uint64("model_config_id", uint64(config.ID)),
+				slog.String("unified_model", unifiedModel),
+				slog.String("upstream_model", config.UpstreamModel),
+			)
 		}
 	}
 
@@ -62,17 +86,27 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 			slog.String("channel_name", channel.Name),
 			slog.String("unified_model", unifiedModel),
 		)
-		return "", ErrModelNotFound
+		return nil, ErrModelNotFound
+	}
+
+	if len(availableConfigs) == 0 {
+		mr.logger.Debug("渠道匹配的模型配置均在冷却中",
+			slog.String("trace_id", traceID),
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_name", channel.Name),
+			slog.String("unified_model", unifiedModel),
+		)
+		return nil, ErrNoAvailableModelConfig
 	}
 
 	// 如果有多个配置,随机选择一个实现负载均衡
-	selectedConfig := matchedConfigs[rand.IntN(len(matchedConfigs))]
-	if len(matchedConfigs) > 1 {
+	selectedConfig := availableConfigs[rand.IntN(len(availableConfigs))]
+	if len(availableConfigs) > 1 {
 		mr.logger.Debug("渠道有多个模型匹配, 随机选择一个",
 			slog.String("trace_id", traceID),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("unified_model", unifiedModel),
-			slog.Int("count", len(matchedConfigs)),
+			slog.Int("count", len(availableConfigs)),
 		)
 	}
 
@@ -84,7 +118,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 		slog.String("upstream_model", selectedConfig.UpstreamModel),
 	)
 
-	return selectedConfig.UpstreamModel, nil
+	return selectedConfig, nil
 }
 
 // ReverseRoute 反向路由,将上游模型名映射回统一模型名
