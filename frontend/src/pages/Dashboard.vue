@@ -7,7 +7,7 @@
     <!--    </div>-->
 
     <!-- 顶部统计卡片 -->
-    <n-grid :cols="5" :x-gap="16" :y-gap="16" responsive="screen" class="stats-grid">
+    <n-grid :cols="6" :x-gap="16" :y-gap="16" responsive="screen" class="stats-grid">
       <!-- 当前 QPS -->
       <n-grid-item>
         <div class="metric-card metric-card--blue">
@@ -112,7 +112,7 @@
       </n-grid-item>
 
       <!-- Token 统计 -->
-      <n-grid-item>
+      <n-grid-item :span="2">
         <div class="metric-card metric-card--amber">
           <div class="metric-card__header">
             <div class="metric-card__icon">
@@ -128,7 +128,7 @@
               近24小时
             </n-tag>
           </div>
-          <div class="metric-card__value metric-card__value--compact">
+          <div class="metric-card__value">
             {{ formatNumber(metrics?.total_prompt_tokens || 0) }}
             <span class="metric-card__divider">/</span>
             {{ formatNumber(metrics?.total_completion_tokens || 0) }}
@@ -155,7 +155,7 @@
 
     <!-- 渠道统计概览 -->
     <n-card
-        title="渠道统计（近 24小时）"
+        title="渠道统计（近24小时）"
         size="small"
         :bordered="false"
         class="channel-stats-card">
@@ -175,7 +175,7 @@
 
     <!-- 模型统计 -->
     <n-card
-        title="模型统计（近 24小时）"
+        title="模型统计（近24小时）"
         size="small"
         :bordered="false"
         class="model-stats-card"
@@ -452,7 +452,6 @@ onMounted(() => {
 /* 统计网格 */
 .stats-grid {
   margin-bottom: 24px;
-  max-width: 1280px;
 }
 
 /* 卡片间距 */
@@ -540,10 +539,6 @@ onMounted(() => {
   line-height: 1;
   margin-bottom: 8px;
   letter-spacing: -1px;
-}
-
-.metric-card__value--compact {
-  font-size: 26px;
 }
 
 .metric-card__divider {

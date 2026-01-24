@@ -6,16 +6,18 @@ Hydra（九头蛇）是一个高可用的大模型聚合网关，实现细粒度
 
 ## 核心特性
 
-- ✅ **细粒度熔断**: Key 级别和 Channel 级别独立维护健康状态
-- ✅ **智能清洗**: 识别并拦截"假 200"响应，自动重试
-- ✅ **负载均衡**: 支持优先级和权重的多渠道流量分配
+- ✅ **细粒度熔断**: Key 级别 + 模型配置级别独立维护健康状态
+- ✅ **智能清洗**: 识别流式/非流式“假 200”响应并自动重试
+- ✅ **负载均衡**: 优先级 + 权重 + Key 轮询的多渠道流量分配
 - ✅ **自动重试**: 透明的故障转移，对用户无感知
-- ✅ **完整日志**: 审计日志（数据库）+ 调试日志（文件）
-- ✅ **实时监控**: TraceID 全链路追踪
+- ✅ **完整日志**: 主/明细审计日志 + Token 使用量统计
+- ✅ **实时监控**: QPS、成功率、渠道健康与 Token 统计
 
 ## 前置要求
 
-- Go 1.21+
+- Go 1.25+
+- Node.js 20+
+- pnpm
 - SQLite 3（或 PostgreSQL）
 
 ## 快速启动
@@ -34,13 +36,17 @@ make install-deps
 cp configs/config.example.yaml configs/config.yaml
 ```
 
-编辑 `configs/config.yaml` 根据需要调整配置。
+编辑 `configs/config.yaml` 根据需要调整配置（示例默认 PostgreSQL，可切换为 SQLite）。
 
 ### 3. 启动服务
 
 ```bash
-# 开发模式（使用 go run）
+# 开发模式（默认使用 configs/config.example.yaml）
 make dev
+
+# 或使用自定义配置运行
+cd backend
+go run cmd/hydra/main.go -config ../configs/config.yaml
 
 # 或者编译后运行
 make run
@@ -63,13 +69,15 @@ curl http://localhost:8080/health
 
 ## 默认账户
 
-- **管理员账户**: admin / admin123
+- **管理员账户**: hydra / 123456
 
 ## API 端点
 
 ### 代理 API（需要 Access Token）
 
-- `POST /v1/chat/completions` - Chat Completions（兼容 OpenAI API）
+- `POST /v1/chat/completions` - OpenAI Chat Completions
+- `POST /v1/responses` - OpenAI Responses
+- `POST /v1/messages` - Anthropic Messages
 - `GET /v1/models` - 获取可用模型列表
 
 ### 使用示例
@@ -82,6 +90,8 @@ export ACCESS_TOKEN="your-access-token"
 curl -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
+  # 或使用 X-Api-Key
+  # -H "X-Api-Key: $ACCESS_TOKEN" \
   -d '{
     "model": "gpt-4",
     "messages": [
@@ -114,20 +124,22 @@ hydra/
 │   │   │   └── sniffer/     # 响应嗅探
 │   │   └── migration/       # 数据库迁移
 │   └── tests/               # 测试
+├── frontend/                # Vue 3 前端
 ├── configs/                 # 配置文件
-├── logs/                    # 日志目录
-└── Makefile                 # 构建脚本
+├── data/                    # 运行时数据（日志、SQLite）
+├── deployments/             # 部署文件
+│   └── Dockerfile
+├── Makefile                 # 构建脚本
+└── QUICKSTART.md            # 快速启动文档
 ```
 
 ## 主要概念
 
 ### 熔断器（Circuit Breaker）
 
-- **Key 级别**: 单个 API Key 失败不影响同渠道其他 Key
-- **Channel 级别**: 整个渠道的健康状态
-- **状态转换**: Active → Cooling → Half-Open → Active
-- **硬故障**: 401/403/429 quota exceeded → 永久禁用
-- **软故障**: 5xx/timeout → 熔断后可恢复
+- **Key 级别**: 认证/额度/限流问题仅影响当前 Key
+- **模型配置级别**: 404/5xx/网络异常只熔断对应模型配置，不影响同渠道其他模型
+- **自动恢复**: 冷却时间到期后自动重新参与路由
 
 ### 响应嗅探器（Response Sniffer）
 
@@ -147,43 +159,32 @@ hydra/
 
 ### 日志系统
 
-- **审计日志**: 写入数据库，记录请求元数据（TraceID、模型、耗时、状态）
+- **审计日志**: 主/明细日志写入数据库，记录 TraceID、模型、耗时、Token 使用量
 - **调试日志**: 写入文件，记录完整 Request/Response Body（可配置）
 - **日志轮转**: 自动切割和压缩日志文件
 
 ## 配置说明
 
-### 熔断器配置
+Hydra 同时支持「配置文件」和「系统设置」两类配置来源：
+
+- 配置文件：主要包含 server / database / log 等基础启动项
+- 系统设置：运行时参数（熔断阈值、冷却时长、探测间隔、重试次数、请求超时、错误关键词、日志保留天数等），可在管理后台配置并热更新
+
+最小配置示例：
 
 ```yaml
-circuit_breaker:
-  failure_threshold: 3      # 连续失败次数阈值
-  cooling_duration_sec: 60  # 冷却时长(秒)
-  max_retry: 3              # 单个请求最大重试次数
-```
+server:
+  port: 8080
 
-### 日志配置
+database:
+  type: sqlite
+  sqlite_path: ./data/hydra.db
 
-```yaml
 log:
-  level: info               # debug, info, warn, error
-  retention_days: 30        # 审计日志保留天数
-  debug_enabled: false      # 是否记录完整 Body
+  level: info
   file:
     enabled: true
-    path: ./logs/hydra.log
-    max_size: 100           # MB
-    max_backups: 10
-    compress: true
-```
-
-### 代理配置
-
-```yaml
-proxy:
-  request_timeout: 60s      # 上游请求超时
-  max_response_size: 10485760  # 10MB
-  max_concurrent: 1000      # 最大并发请求数
+    path: ./data/logs/hydra.log
 ```
 
 ## 数据库
@@ -193,7 +194,7 @@ proxy:
 ```yaml
 database:
   type: sqlite
-  sqlite_path: ./hydra.db
+  sqlite_path: ./data/hydra.db
 ```
 
 ### PostgreSQL
@@ -209,7 +210,10 @@ database:
 - `channels` - 渠道配置
 - `keys` - API Key 配置
 - `channel_model_configs` - 模型映射配置
-- `request_logs` - 请求审计日志
+- `request_logs_main` - 请求主日志
+- `request_logs_detail` - 请求明细日志
+- `providers` - 厂商配置
+- `models` - 模型配置
 - `system_settings` - 系统设置
 - `access_tokens` - 访问令牌
 - `admin_users` - 管理员用户
@@ -249,15 +253,15 @@ make clean
 make logs
 
 # 或直接查看文件
-tail -f logs/hydra.log
+tail -f data/logs/hydra.log
 ```
 
 ### 检查数据库
 
 ```bash
 # SQLite
-sqlite3 hydra.db "SELECT * FROM channels;"
-sqlite3 hydra.db "SELECT * FROM keys;"
+sqlite3 data/hydra.db "SELECT * FROM channels;"
+sqlite3 data/hydra.db "SELECT * FROM keys;"
 ```
 
 ### 查看熔断器状态
@@ -265,7 +269,7 @@ sqlite3 hydra.db "SELECT * FROM keys;"
 查看日志中的熔断器状态变化：
 
 ```bash
-grep "circuit breaker" logs/hydra.log
+grep "circuit breaker" data/logs/hydra.log
 ```
 
 ## 生产部署
@@ -273,22 +277,25 @@ grep "circuit breaker" logs/hydra.log
 ### 安全建议
 
 1. **修改默认密码**: 首次登录后立即修改 admin 密码
-2. **修改 Session Secret**: 在配置文件中设置强随机字符串
-3. **启用 HTTPS**: 使用反向代理（Nginx/Caddy）
-4. **限制访问**: 配置防火墙规则
-5. **备份数据库**: 定期备份 hydra.db
+2. **启用 HTTPS**: 使用反向代理（Nginx/Caddy）
+3. **限制访问**: 配置防火墙规则
+4. **备份数据库**: 定期备份 data/hydra.db
 
 ### Docker 部署
 
 ```bash
 # 构建镜像
-make docker-build
+docker build -t hydra:local -f deployments/Dockerfile .
 
-# 启动容器
-make docker-run
+# 运行（挂载配置和数据目录）
+docker run -d --name hydra \
+  -p 8080:8080 \
+  -v "$(pwd)/configs/config.yaml:/app/configs/config.yaml" \
+  -v "$(pwd)/data:/app/data" \
+  hydra:local
 
 # 停止容器
-make docker-stop
+docker rm -f hydra
 ```
 
 ## License

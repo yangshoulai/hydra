@@ -1,25 +1,55 @@
 # Hydra - 高可用大模型聚合网关
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.25-blue)](https://go.dev/)
 [![Vue Version](https://img.shields.io/badge/vue-3.x-green)](https://vuejs.org/)
 
-Hydra 是一个企业级大模型 API 聚合网关,提供多渠道自动切换、熔断保护、假 200 识别等高可用特性,支持 OpenAI 兼容接口。
+Hydra 是一个企业级大模型 API 聚合网关，提供多渠道自动切换、细粒度熔断保护、假 200 识别等高可用特性，支持 OpenAI / Anthropic 兼容接口。
 
 ## 核心特性
 
-- 🔄 **多渠道自动切换**: 按优先级和权重自动路由请求到可用渠道
-- ⚡ **双层熔断保护**: Key 级别和 Channel 级别熔断,自动探测恢复
-- 🔍 **假 200 响应识别**: 智能识别错误响应并自动重试其他渠道
-- 📊 **实时监控仪表盘**: QPS 波形图、成功率统计、渠道健康墙
-- 🎯 **模型名统一映射**: 一个模型名对应多个上游模型,自动负载均衡
-- 📝 **完整审计日志**: TraceID 追踪,完整请求链路记录
-- 🛠️ **低成本运维**: Web 管理界面,一键模型同步和测活
-- 🐳 **开箱即用**: 单二进制部署,支持 SQLite 和 PostgreSQL
+- 🔄 **多渠道自动切换**: 按优先级和权重自动路由到可用渠道
+- ⚡ **双层熔断保护**: Key 级别 + 模型配置级别熔断，自动冷却恢复
+- 🔍 **假 200 响应识别**: 支持流式/非流式错误嗅探并自动重试
+- 🎯 **模型名统一映射**: 统一模型名映射多个上游模型，自动负载均衡
+- 📝 **完整审计日志**: 主/明细日志、TraceID、耗时、Token 使用量
+- 📊 **实时监控仪表盘**: QPS、成功率、渠道健康、Token 统计
+- 🛠️ **低成本运维**: Web 管理界面，一键模型同步和测活
+- 🐳 **开箱即用**: 单二进制 + Docker，支持 SQLite 和 PostgreSQL
+
+## 界面预览
+
+### 仪表盘
+
+![仪表盘](images/仪表盘.png)
+
+### 渠道管理
+
+![渠道管理](images/渠道管理.png)
+
+### 模型管理
+
+![模型管理](images/模型管理.png)
+
+### 厂商管理
+
+![厂商管理](images/厂商管理.png)
+
+### 访问令牌
+
+![访问令牌](images/访问令牌.png)
+
+### 日志查询
+
+![日志查询](images/日志查询.png)
+
+### 系统设置
+
+![系统设置](images/系统设置.png)
 
 ## 快速开始
 
-### 方式 1: Docker Compose(推荐)
+### 方式 1: Docker(推荐)
 
 ```bash
 # 克隆仓库
@@ -29,26 +59,29 @@ cd hydra
 # 复制配置文件
 cp configs/config.example.yaml configs/config.yaml
 
-# 编辑配置(可选)
+# 编辑配置(按需调整 database.type / postgres_dsn / sqlite_path)
 vim configs/config.yaml
 
-# 启动服务(SQLite 模式)
-cd deployments
-docker-compose up -d
+# 构建镜像
+docker build -t hydra:local -f deployments/Dockerfile .
 
-# 或启动 PostgreSQL 模式
-docker-compose --profile postgres up -d
+# 运行（挂载配置和数据目录）
+docker run -d --name hydra \
+  -p 8080:8080 \
+  -v "$(pwd)/configs/config.yaml:/app/configs/config.yaml" \
+  -v "$(pwd)/data:/app/data" \
+  hydra:local
 ```
 
 服务启动后:
 - API 端点: http://localhost:8080
 - 管理后台: http://localhost:8080/admin
-- 默认管理员账号: admin / admin123
+- 默认管理员账号: hydra / 123456
 
 ### 方式 2: 本地开发
 
 **前置要求:**
-- Go 1.21+
+- Go 1.25+
 - Node.js 20+
 - pnpm (前端包管理器)
 - SQLite 3 或 PostgreSQL 12+
@@ -58,7 +91,7 @@ docker-compose --profile postgres up -d
 ```bash
 cd backend
 go mod download
-go run cmd/hydra/main.go -c ../configs/config.yaml
+go run cmd/hydra/main.go -config ../configs/config.yaml
 ```
 
 **前端:**
@@ -73,8 +106,8 @@ pnpm run dev
 ```bash
 # 构建前端
 cd frontend
-npm install
-npm run build
+pnpm install
+pnpm run build
 
 # 构建后端(嵌入静态文件)
 cd ../backend
@@ -82,7 +115,7 @@ cp -r ../frontend/dist ./static
 go build -o hydra cmd/hydra/main.go
 
 # 运行
-./hydra -c ../configs/config.yaml
+./hydra -config ../configs/config.yaml
 ```
 
 ## 配置说明
@@ -95,13 +128,18 @@ server:
 
 database:
   type: sqlite
-  sqlite_path: ./hydra.db
+  sqlite_path: ./data/hydra.db
 
-admin:
-  session_secret: "your-secret-key-change-me"
+log:
+  level: info
+  file:
+    enabled: true
+    path: ./data/logs/hydra.log
 ```
 
-完整配置请参考 [configs/config.example.yaml](configs/config.example.yaml)。
+完整配置请参考 [configs/config.example.yaml](configs/config.example.yaml)，示例默认使用 PostgreSQL，可按需切换为 SQLite。
+
+系统运行参数（熔断阈值、重试次数、请求超时、日志保留天数、错误关键词等）在管理后台的「系统设置」中配置，并支持热更新。
 
 支持环境变量覆盖,格式为 `HYDRA_` 前缀:
 
@@ -137,7 +175,7 @@ export HYDRA_DATABASE_POSTGRES_DSN="postgres://user:pass@localhost:5432/hydra"
 ### 4. 生成访问令牌
 
 设置管理 -> 访问令牌 -> 创建令牌:
-- 输入备注信息
+- 输入令牌名称
 - 复制生成的 Token(仅显示一次)
 
 ### 5. 调用 API
@@ -145,6 +183,8 @@ export HYDRA_DATABASE_POSTGRES_DSN="postgres://user:pass@localhost:5432/hydra"
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  # 或使用 X-Api-Key
+  # -H "X-Api-Key: YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4",
@@ -155,12 +195,18 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   }'
 ```
 
+支持的核心端点:
+- `POST /v1/chat/completions` (OpenAI Chat Completions)
+- `POST /v1/responses` (OpenAI Responses)
+- `POST /v1/messages` (Anthropic Messages)
+- `GET /v1/models` (可用模型列表)
+
 ### 6. 查看日志
 
 管理后台 -> 日志查询:
 - 按 TraceID、模型名、状态码筛选
 - 查看完整请求元数据和错误信息
-- 支持时间范围查询
+- 支持时间范围查询与 Token 使用量查看
 
 ## 项目结构
 
@@ -185,27 +231,44 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 │   │   ├── stores/       # Pinia 状态
 │   │   └── router/       # 路由配置
 ├── configs/              # 配置文件
+├── data/                 # 运行时数据（日志、SQLite）
 ├── deployments/          # 部署文件
-│   ├── Dockerfile
-│   └── docker-compose.yml
-└── specs/                # 需求文档
+│   └── Dockerfile
+└── QUICKSTART.md         # 快速启动文档
 ```
 
 ## 技术栈
 
-- **后端**: Go 1.21+, Gin, GORM, Slog, Viper
+- **后端**: Go 1.25+, Gin, GORM, Slog, Viper
 - **前端**: Vue 3, Naive UI, TypeScript, Vite, Pinia
 - **数据库**: SQLite(默认) / PostgreSQL
-- **部署**: Docker, Docker Compose
+- **部署**: Docker
+
+## 运行与构建
+
+本项目推荐使用 Makefile：
+
+```bash
+# 安装依赖
+make install-deps
+
+# 开发模式（前后端并行）
+make dev
+
+# 完整构建（前端静态文件嵌入后端）
+make build
+
+# 运行（使用 configs/config.example.yaml 作为默认配置路径）
+make run
+```
+
+说明：
+- 后端启动参数为 `-config`（不是 `-c`）。
+- `configs/config.example.yaml` 仅用于示例，生产环境建议复制为 `configs/config.yaml` 并自行管理。
 
 ## 文档
 
-- [功能需求](specs/001-api-gateway-system/spec.md)
-- [技术方案](specs/001-api-gateway-system/plan.md)
-- [数据模型](specs/001-api-gateway-system/data-model.md)
-- [API 契约](specs/001-api-gateway-system/contracts/)
-- [部署指南](specs/001-api-gateway-system/quickstart.md)
-- [任务清单](specs/001-api-gateway-system/tasks.md)
+- [快速启动](QUICKSTART.md)
 
 ## 开发指南
 
@@ -226,16 +289,9 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 ### 运行测试
 
 ```bash
-# 单元测试
+# 后端测试
 cd backend
 go test ./...
-
-# 集成测试
-go test ./tests/integration/...
-
-# 前端测试
-cd frontend
-npm run test
 ```
 
 ### 代码检查
@@ -243,61 +299,42 @@ npm run test
 ```bash
 # Go 代码检查
 golangci-lint run
-
-# 前端检查
-npm run lint
 ```
 
 ### 数据库迁移
 
-系统启动时自动执行迁移。手动迁移:
-
-```bash
-# 查看迁移状态
-go run cmd/hydra/main.go -migrate-status
-
-# 回滚迁移
-go run cmd/hydra/main.go -migrate-rollback
-```
+系统启动时自动执行迁移。需要重置 SQLite 数据库时可删除 `data/hydra.db` 后重启服务。
 
 ## 常见问题
 
 **Q: 如何备份数据?**
 
-SQLite 模式: 直接复制 `hydra.db` 文件
+SQLite 模式: 直接复制 `data/hydra.db` 文件
 PostgreSQL 模式: 使用 `pg_dump` 工具
 
 **Q: 如何升级系统?**
 
 ```bash
-# 停止服务
-docker-compose down
-
 # 拉取新版本
 git pull
 
-# 重新构建
-docker-compose up -d --build
+# 重新构建并重启（示例）
+docker stop hydra && docker rm hydra
+docker build -t hydra:local -f deployments/Dockerfile .
+docker run -d --name hydra \
+  -p 8080:8080 \
+  -v "$(pwd)/configs/config.yaml:/app/configs/config.yaml" \
+  -v "$(pwd)/data:/app/data" \
+  hydra:local
 ```
 
 **Q: 日志占用空间过大?**
 
-系统会自动清理过期日志(默认保留 30 天)。可在配置文件中调整:
-
-```yaml
-log:
-  retention_days: 7  # 修改为 7 天
-```
+系统会自动清理过期日志（默认保留 30 天）。可在管理后台「系统设置」中调整日志保留天数和调试日志开关。
 
 **Q: 如何重置管理员密码?**
 
-```bash
-# 进入容器
-docker exec -it hydra sh
-
-# 运行密码重置命令
-./hydra -reset-admin-password
-```
+在管理后台使用「修改密码」功能（需要登录）。如需离线重置，可通过数据库直接更新 `admin_users.password_hash`（bcrypt）或重新初始化数据库（会丢失数据）。
 
 ## 许可证
 
@@ -315,6 +352,6 @@ docker exec -it hydra sh
 ---
 
 **⚠️ 注意事项:**
-- 生产环境请务必修改 `admin.session_secret`
-- 建议启用 HTTPS 并设置 `admin.cookie_secure: true`
+- 生产环境请务必修改默认管理员密码
+- 建议启用 HTTPS 并设置反向代理
 - PostgreSQL 模式推荐用于高并发场景
