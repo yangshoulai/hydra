@@ -49,6 +49,8 @@ type DashboardMetrics struct {
 	ActiveModels       int                     `json:"active_models"`
 	ActiveChannels     int                     `json:"active_channels"`
 	TotalChannels      int                     `json:"total_channels"`
+	TotalPromptTokens  int64                   `json:"total_prompt_tokens"`
+	TotalCompletionTokens int64                `json:"total_completion_tokens"`
 	ModelStats         *ModelStats             `json:"model_stats"`
 	QPSTrend           []QPSDataPoint          `json:"qps_trend"`
 	ChannelHealthList  []ChannelHealthMetrics  `json:"channel_health_list"`
@@ -62,13 +64,16 @@ func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, e
 		return nil, err
 	}
 
-	successRateStats, err := s.successRateCalculator.CalculateTodaySuccessRate(ctx)
+	startTime := s.getLast24HoursStartTime()
+	endTime := s.getCurrentTime()
+
+	successRateStats, err := s.successRateCalculator.CalculateSuccessRateByTimeRange(ctx, startTime, endTime)
 	if err != nil {
 		s.logger.Error("failed to calculate success rate", slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	modelStats, err := s.modelStatsAggregator.GetTodayModelStats(ctx)
+	modelStats, err := s.modelStatsAggregator.GetModelStatsByTimeRange(ctx, startTime, endTime)
 	if err != nil {
 		s.logger.Error("failed to get model stats", slog.String("error", err.Error()))
 		return nil, err
@@ -98,6 +103,12 @@ func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, e
 		return nil, err
 	}
 
+	tokenUsage, err := s.requestLogRepo.SumTokenUsageByTimeRange(ctx, startTime, endTime)
+	if err != nil {
+		s.logger.Error("failed to get token usage", slog.String("error", err.Error()))
+		return nil, err
+	}
+
 	return &DashboardMetrics{
 		CurrentQPS:        qps,
 		SuccessRate:       successRateStats.SuccessRate,
@@ -105,6 +116,8 @@ func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, e
 		ActiveModels:      modelStats.ActiveModels,
 		ActiveChannels:    len(activeChannels),
 		TotalChannels:     len(allChannels),
+		TotalPromptTokens: tokenUsage.PromptTokens,
+		TotalCompletionTokens: tokenUsage.CompletionTokens,
 		ModelStats:        modelStats,
 		QPSTrend:          qpsTrend,
 		ChannelHealthList: channelStats,
@@ -118,7 +131,7 @@ func (s *DashboardService) GetQPSMetrics(ctx context.Context) ([]QPSDataPoint, e
 
 // GetSuccessRateMetrics 获取成功率指标
 func (s *DashboardService) GetSuccessRateMetrics(ctx context.Context) (*SuccessRateStats, error) {
-	return s.successRateCalculator.CalculateTodaySuccessRate(ctx)
+	return s.successRateCalculator.CalculateSuccessRateByTimeRange(ctx, s.getLast24HoursStartTime(), s.getCurrentTime())
 }
 
 // ChannelHealthMetrics 渠道健康指标
@@ -130,6 +143,8 @@ type ChannelHealthMetrics struct {
 	SuccessRequests  int     `json:"success_requests"`
 	FailedRequests   int     `json:"failed_requests"`
 	SuccessRate      float64 `json:"success_rate"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
 	HealthyKeys      int     `json:"healthy_keys"`
 	TotalKeys        int     `json:"total_keys"`
 	HealthPercentage float64 `json:"health_percentage"`
@@ -145,10 +160,19 @@ func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]Chann
 		return nil, err
 	}
 
+	startTime := s.getLast24HoursStartTime()
+	endTime := s.getCurrentTime()
+
 	channelStatsMap, err := s.successRateCalculator.CalculateSuccessRateByChannel(ctx,
-		s.getTodayStartTime(), s.getCurrentTime())
+		startTime, endTime)
 	if err != nil {
 		s.logger.Error("failed to calculate channel success rate", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	tokenUsageMap, err := s.requestLogRepo.SumTokenUsageByChannel(ctx, startTime, endTime)
+	if err != nil {
+		s.logger.Error("failed to get channel token usage", slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -182,6 +206,11 @@ func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]Chann
 			healthPercentage = float64(healthyKeys) / float64(len(keys)) * 100
 		}
 
+		tokenUsage := tokenUsageMap[channel.ID]
+		if tokenUsage == nil {
+			tokenUsage = &repository.TokenUsageSummary{}
+		}
+
 		metrics = append(metrics, ChannelHealthMetrics{
 			ChannelID:        channel.ID,
 			ChannelName:      channel.Name,
@@ -190,6 +219,8 @@ func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]Chann
 			SuccessRequests:  stats.SuccessRequests,
 			FailedRequests:   stats.FailedRequests,
 			SuccessRate:      stats.SuccessRate,
+			PromptTokens:     tokenUsage.PromptTokens,
+			CompletionTokens: tokenUsage.CompletionTokens,
 			HealthyKeys:      healthyKeys,
 			TotalKeys:        len(keys),
 			HealthPercentage: healthPercentage,
@@ -201,9 +232,9 @@ func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]Chann
 	return metrics, nil
 }
 
-func (s *DashboardService) getTodayStartTime() time.Time {
+func (s *DashboardService) getLast24HoursStartTime() time.Time {
 	now := time.Now().UTC()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return now.Add(-24 * time.Hour)
 }
 
 func (s *DashboardService) getCurrentTime() time.Time {

@@ -120,6 +120,17 @@ func (r *ChannelModelConfigRepository) Update(ctx context.Context, config *model
 	return r.db.WithContext(ctx).Save(config).Error
 }
 
+// IncrementTokenUsage 累加模型配置的 token 使用量
+func (r *ChannelModelConfigRepository) IncrementTokenUsage(ctx context.Context, id uint, promptTokens, completionTokens int64) error {
+	return r.db.WithContext(ctx).
+		Model(&models.ChannelModelConfig{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", promptTokens),
+			"completion_tokens": gorm.Expr("completion_tokens + ?", completionTokens),
+		}).Error
+}
+
 // Delete 删除模型配置
 func (r *ChannelModelConfigRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&models.ChannelModelConfig{}, id).Error

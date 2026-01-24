@@ -44,7 +44,7 @@
             <n-gi>
               <n-statistic label="状态">
                 <template #prefix>
-                  <n-icon color="#10b981">
+                  <n-icon :color="log.is_success ? '#10b981' :'#d03050'">
                     <GlobeOutline/>
                   </n-icon>
                 </template>
@@ -119,6 +119,12 @@
               <n-descriptions-item label="耗时">
                 <n-text :type="log.duration <= 5000 ? 'success': (log.duration <= 10000 ? 'warning' : 'error')">{{ (log.duration / 1000).toFixed(2) }} 秒
                 </n-text>
+              </n-descriptions-item>
+              <n-descriptions-item label="输入 Tokens">
+                <n-text>{{ formatNumber(log.prompt_tokens || 0) }}</n-text>
+              </n-descriptions-item>
+              <n-descriptions-item label="输出 Tokens">
+                <n-text>{{ formatNumber(log.completion_tokens || 0) }}</n-text>
               </n-descriptions-item>
               <n-descriptions-item label="流式">
                 <n-text :type="log.is_stream ? 'info' : 'default'" size="small">
@@ -454,6 +460,10 @@ function formatBytes(bytes: number) {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i]
+}
+
+function formatNumber(value: number) {
+  return value.toLocaleString()
 }
 
 // 格式化 JSON

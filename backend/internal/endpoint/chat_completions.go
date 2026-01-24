@@ -64,6 +64,13 @@ func (e *ChatCompletionsEndpoint) ValidateResponse(statusCode int, body []byte) 
 	return true, ""
 }
 
+func (e *ChatCompletionsEndpoint) ParseTokenUsage(_ []byte, responseBody string, isStream bool) (int64, int64) {
+	if isStream {
+		return parseTokenUsageFromStream(responseBody, "prompt_tokens", "completion_tokens")
+	}
+	return parseTokenUsageFromJSON(responseBody, "prompt_tokens", "completion_tokens")
+}
+
 func (e *ChatCompletionsEndpoint) ConfigureRequest(req *http.Request, apiKey string) {
 	// OpenAI 端点的标准配置
 	req.Header.Set("Authorization", "Bearer "+apiKey)

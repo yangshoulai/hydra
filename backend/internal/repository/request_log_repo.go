@@ -33,6 +33,33 @@ func (r *RequestLogRepository) CreateDetail(ctx context.Context, detail *models.
 	return r.db.WithContext(ctx).Create(detail).Error
 }
 
+// UpdateMainTokenUsageByTraceID 更新主日志的 token 使用量
+func (r *RequestLogRepository) UpdateMainTokenUsageByTraceID(ctx context.Context, traceID string, promptTokens, completionTokens int64) error {
+	return r.db.WithContext(ctx).
+		Model(&models.RequestLogMain{}).
+		Where("trace_id = ?", traceID).
+		Updates(map[string]interface{}{
+			"prompt_tokens":     promptTokens,
+			"completion_tokens": completionTokens,
+		}).Error
+}
+
+// UpdateDetailTokenUsageByTraceIDAndRetryIndex 更新明细日志的 token 使用量
+func (r *RequestLogRepository) UpdateDetailTokenUsageByTraceIDAndRetryIndex(
+	ctx context.Context,
+	traceID string,
+	retryIndex int,
+	promptTokens, completionTokens int64,
+) error {
+	return r.db.WithContext(ctx).Exec(`
+		UPDATE request_logs_detail
+		SET prompt_tokens = ?, completion_tokens = ?
+		WHERE main_log_id = (
+			SELECT id FROM request_logs_main WHERE trace_id = ? LIMIT 1
+		) AND retry_index = ?
+	`, promptTokens, completionTokens, traceID, retryIndex).Error
+}
+
 // FindMainByTraceID 根据 TraceID 查询主日志记录
 func (r *RequestLogRepository) FindMainByTraceID(ctx context.Context, traceID string) (*models.RequestLogMain, error) {
 	var log models.RequestLogMain
@@ -210,4 +237,54 @@ func (r *RequestLogRepository) GetStatistics(ctx context.Context, startTime, end
 	stats.AvgDuration = avgDuration
 
 	return &stats, nil
+}
+
+// TokenUsageSummary token 使用量统计
+type TokenUsageSummary struct {
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+}
+
+// SumTokenUsageByTimeRange 统计时间范围内的 token 使用量
+func (r *RequestLogRepository) SumTokenUsageByTimeRange(ctx context.Context, startTime, endTime time.Time) (*TokenUsageSummary, error) {
+	var result TokenUsageSummary
+	err := r.db.WithContext(ctx).
+		Model(&models.RequestLogMain{}).
+		Select("COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, COALESCE(SUM(completion_tokens), 0) AS completion_tokens").
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
+		Scan(&result).Error
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// SumTokenUsageByChannel 统计时间范围内各渠道的 token 使用量
+func (r *RequestLogRepository) SumTokenUsageByChannel(ctx context.Context, startTime, endTime time.Time) (map[uint]*TokenUsageSummary, error) {
+	type channelTokenUsage struct {
+		ChannelID        uint  `gorm:"column:channel_id"`
+		PromptTokens     int64 `gorm:"column:prompt_tokens"`
+		CompletionTokens int64 `gorm:"column:completion_tokens"`
+	}
+
+	var rows []channelTokenUsage
+	err := r.db.WithContext(ctx).
+		Model(&models.RequestLogMain{}).
+		Select("last_channel_id AS channel_id, COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, COALESCE(SUM(completion_tokens), 0) AS completion_tokens").
+		Where("last_channel_id IS NOT NULL").
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
+		Group("last_channel_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[uint]*TokenUsageSummary, len(rows))
+	for _, row := range rows {
+		result[row.ChannelID] = &TokenUsageSummary{
+			PromptTokens:     row.PromptTokens,
+			CompletionTokens: row.CompletionTokens,
+		}
+	}
+	return result, nil
 }

@@ -37,6 +37,10 @@ type RequestLogMain struct {
 	RetryCount int  `gorm:"not null;default:0" json:"retry_count"`
 	IsStream   bool `gorm:"not null;default:false;index" json:"is_stream"`
 
+	// Token 统计信息
+	PromptTokens     int64 `gorm:"not null;default:0" json:"prompt_tokens"`
+	CompletionTokens int64 `gorm:"not null;default:0" json:"completion_tokens"`
+
 	// 最后成功/失败的渠道信息
 	LastChannelID   *uint  `gorm:"index" json:"last_channel_id,omitempty"`
 	LastChannelName string `gorm:"type:varchar(100)" json:"last_channel_name,omitempty"`
@@ -89,6 +93,10 @@ type RequestLogDetail struct {
 	IsSuccess  bool   `gorm:"not null" json:"is_success"`
 	Status     string `gorm:"type:varchar(50)" json:"status"`                       // success, failed, timeout, etc.
 	RetryIndex int    `gorm:"not null;index:idx_main_log_retry" json:"retry_index"` // 第几次重试（0表示首次尝试）
+
+	// Token 统计信息
+	PromptTokens     int64 `gorm:"not null;default:0" json:"prompt_tokens"`
+	CompletionTokens int64 `gorm:"not null;default:0" json:"completion_tokens"`
 
 	// 流式响应信息
 	IsStream             bool `gorm:"not null;default:false" json:"is_stream"`

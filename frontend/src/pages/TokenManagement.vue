@@ -75,7 +75,7 @@
         :columns="columns"
         :data="tokens"
         :pagination="false"
-        :scroll-x="1480"
+        :scroll-x="1760"
         :single-line="false"
         striped
         :loading="isLoading"
@@ -409,6 +409,10 @@ const formatDateTime = (timestamp: number) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
+const formatNumber = (value: number) => {
+  return value.toLocaleString()
+}
+
 // 表格列定义（使用 computed 响应式更新排序状态）
 const columns = computed<DataTableColumns<Token>>(() => {
   const getSortOrder = (key: string) => {
@@ -440,6 +444,20 @@ const columns = computed<DataTableColumns<Token>>(() => {
       render: (row) => {
         return h(NText, {code: true}, {default: () => row.token_preview})
       },
+    },
+    {
+      title: '输入 Tokens',
+      key: 'prompt_tokens',
+      width: 140,
+      align: 'right',
+      render: (row) => formatNumber(row.prompt_tokens)
+    },
+    {
+      title: '输出 Tokens',
+      key: 'completion_tokens',
+      width: 140,
+      align: 'right',
+      render: (row) => formatNumber(row.completion_tokens)
     },
     {
       title: '状态',

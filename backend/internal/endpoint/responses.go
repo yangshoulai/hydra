@@ -67,6 +67,13 @@ func (e *ResponsesEndpoint) ValidateResponse(statusCode int, body []byte) (bool,
 	return true, ""
 }
 
+func (e *ResponsesEndpoint) ParseTokenUsage(_ []byte, responseBody string, isStream bool) (int64, int64) {
+	if isStream {
+		return parseTokenUsageFromStream(responseBody, "input_tokens", "output_tokens")
+	}
+	return parseTokenUsageFromJSON(responseBody, "input_tokens", "output_tokens")
+}
+
 func (e *ResponsesEndpoint) ConfigureRequest(req *http.Request, apiKey string) {
 	// OpenAI Response 端点的标准配置
 	req.Header.Set("Authorization", "Bearer "+apiKey)

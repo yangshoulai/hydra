@@ -30,10 +30,24 @@ func RegisterRoutes(
 	// 创建 repositories
 	channelRepo := repository.NewChannelRepository(db)
 	modelRepo := repository.NewModelRepository(db, logger)
+	requestLogRepo := repository.NewRequestLogRepository(db)
+	keyRepo := repository.NewKeyRepository(db)
+	modelConfigRepo := repository.NewChannelModelConfigRepository(db)
 	accessTokenRepo := repository.NewAccessTokenRepository(db)
 
 	// 创建代理服务（传入 settingService 以支持配置热更新）
-	proxySvc := proxy.NewProxyService(logger, channelRepo, circuitManager, auditLogger, proxyServiceConfig, settingService)
+	proxySvc := proxy.NewProxyService(
+		logger,
+		channelRepo,
+		requestLogRepo,
+		keyRepo,
+		modelConfigRepo,
+		accessTokenRepo,
+		circuitManager,
+		auditLogger,
+		proxyServiceConfig,
+		settingService,
+	)
 
 	// 注册 ProxyService 为配置监听器
 	settingService.RegisterListener(proxySvc)

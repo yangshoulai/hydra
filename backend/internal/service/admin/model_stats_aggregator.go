@@ -51,14 +51,19 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	nowUTC := now.UTC()
 	startOfDayUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 
+	return m.GetModelStatsByTimeRange(ctx, startOfDayUTC, nowUTC)
+}
+
+// GetModelStatsByTimeRange 获取指定时间范围的模型统计
+func (m *ModelStatsAggregator) GetModelStatsByTimeRange(ctx context.Context, startTime, endTime time.Time) (*ModelStats, error) {
 	db := m.requestLogRepo.GetDB().WithContext(ctx)
 
 	stats := &ModelStats{}
 
-	// 统计活跃模型数（今日有请求的不同模型数）
+	// 统计活跃模型数（时间范围内有请求的不同模型数）
 	var activeModels int64
 	if err := db.Model(&models.RequestLogMain{}).
-		Where("start_time >= ?", startOfDayUTC).
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
 		Where("requested_model != ''").
 		Distinct("requested_model").
 		Count(&activeModels).Error; err != nil {
@@ -67,10 +72,10 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	}
 	stats.ActiveModels = int(activeModels)
 
-	// 统计今日模型请求总数
+	// 统计时间范围内模型请求总数
 	var totalRequests int64
 	if err := db.Model(&models.RequestLogMain{}).
-		Where("start_time >= ?", startOfDayUTC).
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
 		Where("requested_model != ''").
 		Count(&totalRequests).Error; err != nil {
 		m.logger.Error("failed to count total requests", slog.String("error", err.Error()))
@@ -78,10 +83,10 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	}
 	stats.TotalRequests = int(totalRequests)
 
-	// 统计成功请求数
+	// 统计时间范围内成功请求数
 	var successRequests int64
 	if err := db.Model(&models.RequestLogMain{}).
-		Where("start_time >= ?", startOfDayUTC).
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
 		Where("requested_model != ''").
 		Where("is_success = ?", true).
 		Count(&successRequests).Error; err != nil {
@@ -102,7 +107,7 @@ func (m *ModelStatsAggregator) GetTodayModelStats(ctx context.Context) (*ModelSt
 	var modelStats []modelStat
 	if err := db.Model(&models.RequestLogMain{}).
 		Select("requested_model as model_name, COUNT(*) as total_requests, SUM(CASE WHEN is_success = true THEN 1 ELSE 0 END) as success_requests").
-		Where("start_time >= ?", startOfDayUTC).
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
 		Where("requested_model != ''").
 		Group("requested_model").
 		Order("total_requests DESC").

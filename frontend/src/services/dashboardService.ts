@@ -21,6 +21,8 @@ export interface ChannelHealthInfo {
     success_rate: number
     success_requests: number
     total_requests: number
+    prompt_tokens: number
+    completion_tokens: number
     healthy_keys: number
     total_keys: number
     health_percentage: number
@@ -63,6 +65,8 @@ export interface DashboardMetrics {
     total_channels: number
     total_keys: number
     active_channels: number
+    total_prompt_tokens: number
+    total_completion_tokens: number
     generated_at: string,
     success_rate: number
 }

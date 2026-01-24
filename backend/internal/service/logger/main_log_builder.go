@@ -93,6 +93,16 @@ func (b *MainLogBuilder) IsStream(stream bool) *MainLogBuilder {
 	return b
 }
 
+func (b *MainLogBuilder) PromptTokens(tokens int64) *MainLogBuilder {
+	b.main.PromptTokens = tokens
+	return b
+}
+
+func (b *MainLogBuilder) CompletionTokens(tokens int64) *MainLogBuilder {
+	b.main.CompletionTokens = tokens
+	return b
+}
+
 func (b *MainLogBuilder) LastChannelID(id uint) *MainLogBuilder {
 	b.main.LastChannelID = &id
 	return b

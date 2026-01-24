@@ -159,6 +159,17 @@ func (r *AccessTokenRepository) Update(ctx context.Context, token *models.Access
 	return r.db.WithContext(ctx).Save(token).Error
 }
 
+// IncrementTokenUsage 累加访问令牌的 token 使用量
+func (r *AccessTokenRepository) IncrementTokenUsage(ctx context.Context, id uint, promptTokens, completionTokens int64) error {
+	return r.db.WithContext(ctx).
+		Model(&models.AccessToken{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", promptTokens),
+			"completion_tokens": gorm.Expr("completion_tokens + ?", completionTokens),
+		}).Error
+}
+
 // UpdateLastUsed 更新最后使用时间
 func (r *AccessTokenRepository) UpdateLastUsed(ctx context.Context, id uint) error {
 	now := time.Now()

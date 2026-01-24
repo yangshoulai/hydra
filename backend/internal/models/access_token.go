@@ -18,6 +18,10 @@ type AccessToken struct {
 	Name         string     `gorm:"type:varchar(20);not null;uniqueIndex" json:"name"`        // 令牌名称
 	LastUsedAt   *time.Time `json:"last_used_at"`
 	ExpiresAt    *time.Time `json:"expires_at"` // 过期时间，nil 表示永不过期
+
+	// Token 统计
+	PromptTokens     int64 `gorm:"not null;default:0" json:"prompt_tokens"`
+	CompletionTokens int64 `gorm:"not null;default:0" json:"completion_tokens"`
 }
 
 // TableName 指定表名

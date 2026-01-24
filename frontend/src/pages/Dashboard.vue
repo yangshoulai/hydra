@@ -7,7 +7,7 @@
     <!--    </div>-->
 
     <!-- 顶部统计卡片 -->
-    <n-grid :cols="4" :x-gap="16" :y-gap="16" responsive="screen" class="stats-grid">
+    <n-grid :cols="5" :x-gap="16" :y-gap="16" responsive="screen" class="stats-grid">
       <!-- 当前 QPS -->
       <n-grid-item>
         <div class="metric-card metric-card--blue">
@@ -32,7 +32,7 @@
         </div>
       </n-grid-item>
 
-      <!-- 今日请求 -->
+      <!-- 近24小时请求 -->
       <n-grid-item>
         <div class="metric-card metric-card--green">
           <div class="metric-card__header">
@@ -41,11 +41,18 @@
                 <TrendingUpIcon/>
               </n-icon>
             </div>
+            <n-tag
+                :bordered="false"
+                :type="'info'"
+                size="small"
+            >
+              近24小时
+            </n-tag>
           </div>
           <div class="metric-card__value">
             {{ formatNumber(metrics?.total_requests || 0) }}
           </div>
-          <div class="metric-card__label">今日请求总数</div>
+          <div class="metric-card__label">请求总数</div>
         </div>
       </n-grid-item>
 
@@ -60,10 +67,10 @@
             </div>
             <n-tag
                 :bordered="false"
-                :type="(metrics?.success_rate || 0) >= 90 ? 'success' : 'warning'"
+                :type="'info'"
                 size="small"
             >
-              {{ (metrics?.success_rate || 0).toFixed(1) }}%
+              近24小时
             </n-tag>
           </div>
           <div class="metric-card__value">
@@ -75,7 +82,7 @@
             />
             <span class="metric-card__unit">%</span>
           </div>
-          <div class="metric-card__label">今日成功率</div>
+          <div class="metric-card__label">成功率</div>
         </div>
       </n-grid-item>
 
@@ -88,12 +95,45 @@
                 <ServerIcon/>
               </n-icon>
             </div>
+            <n-tag
+                :bordered="false"
+                :type="'info'"
+                size="small"
+            >
+              近24小时
+            </n-tag>
           </div>
           <div class="metric-card__value">
             {{ metrics?.active_channels || 0 }}
             <span class="metric-card__unit">/ {{ metrics?.total_channels || 0 }}</span>
           </div>
           <div class="metric-card__label">活跃渠道</div>
+        </div>
+      </n-grid-item>
+
+      <!-- Token 统计 -->
+      <n-grid-item>
+        <div class="metric-card metric-card--amber">
+          <div class="metric-card__header">
+            <div class="metric-card__icon">
+              <n-icon size="20">
+                <StatsChartIcon/>
+              </n-icon>
+            </div>
+            <n-tag
+                :bordered="false"
+                :type="'info'"
+                size="small"
+            >
+              近24小时
+            </n-tag>
+          </div>
+          <div class="metric-card__value metric-card__value--compact">
+            {{ formatNumber(metrics?.total_prompt_tokens || 0) }}
+            <span class="metric-card__divider">/</span>
+            {{ formatNumber(metrics?.total_completion_tokens || 0) }}
+          </div>
+          <div class="metric-card__label">输入 / 输出 Tokens</div>
         </div>
       </n-grid-item>
     </n-grid>
@@ -115,7 +155,7 @@
 
     <!-- 渠道统计概览 -->
     <n-card
-        title="渠道统计"
+        title="渠道统计（近 24小时）"
         size="small"
         :bordered="false"
         class="channel-stats-card">
@@ -128,14 +168,14 @@
             :single-line="true"
             striped
             size="small"
-            :scroll-x="700"
+            :scroll-x="940"
         />
       </n-space>
     </n-card>
 
     <!-- 模型统计 -->
     <n-card
-        title="模型统计"
+        title="模型统计（近 24小时）"
         size="small"
         :bordered="false"
         class="model-stats-card"
@@ -267,6 +307,22 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
     sorter: (a, b) => a.total_requests - b.total_requests
   },
   {
+    title: '输入 Tokens',
+    key: 'prompt_tokens',
+    width: 110,
+    align: 'right',
+    render: (row) => formatNumber(row.prompt_tokens),
+    sorter: (a, b) => a.prompt_tokens - b.prompt_tokens
+  },
+  {
+    title: '输出 Tokens',
+    key: 'completion_tokens',
+    width: 110,
+    align: 'right',
+    render: (row) => formatNumber(row.completion_tokens),
+    sorter: (a, b) => a.completion_tokens - b.completion_tokens
+  },
+  {
     title: '成功率',
     key: 'success_rate',
     align: 'center',
@@ -396,7 +452,7 @@ onMounted(() => {
 /* 统计网格 */
 .stats-grid {
   margin-bottom: 24px;
-  max-width: 1040px;
+  max-width: 1280px;
 }
 
 /* 卡片间距 */
@@ -454,6 +510,11 @@ onMounted(() => {
   --card-color-light: #a78bfa;
 }
 
+.metric-card--amber {
+  --card-color: #f59e0b;
+  --card-color-light: #fbbf24;
+}
+
 .metric-card__header {
   display: flex;
   justify-content: space-between;
@@ -479,6 +540,17 @@ onMounted(() => {
   line-height: 1;
   margin-bottom: 8px;
   letter-spacing: -1px;
+}
+
+.metric-card__value--compact {
+  font-size: 26px;
+}
+
+.metric-card__divider {
+  font-size: 18px;
+  font-weight: 600;
+  color: #64748b;
+  margin: 0 6px;
 }
 
 .metric-card__unit {

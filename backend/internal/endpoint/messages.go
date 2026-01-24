@@ -65,6 +65,13 @@ func (e *MessagesEndpoint) ValidateResponse(statusCode int, body []byte) (bool, 
 	return true, ""
 }
 
+func (e *MessagesEndpoint) ParseTokenUsage(_ []byte, responseBody string, isStream bool) (int64, int64) {
+	if isStream {
+		return parseTokenUsageFromStream(responseBody, "input_tokens", "output_tokens")
+	}
+	return parseTokenUsageFromJSON(responseBody, "input_tokens", "output_tokens")
+}
+
 func (e *MessagesEndpoint) ConfigureRequest(req *http.Request, apiKey string) {
 	// Anthropic 端点的特定配置
 	req.Header.Set("Authorization", "Bearer "+apiKey)

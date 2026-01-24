@@ -24,6 +24,13 @@ type Endpoint interface {
 	// 返回 (是否有效, 错误信息)
 	ValidateResponse(statusCode int, body []byte) (bool, string)
 
+	// ParseTokenUsage 解析响应中的 token 使用量
+	// requestBody: 请求体（原始字节）
+	// responseBody: 响应体字符串（已完整读取）
+	// isStream: 是否为流式响应
+	// 返回 (输入 tokens, 输出 tokens)，解析失败返回 0
+	ParseTokenUsage(requestBody []byte, responseBody string, isStream bool) (int64, int64)
+
 	// GetDescription 获取端点描述
 	GetDescription() string
 

@@ -61,6 +61,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_8_0_AddChannelSyncFields(tx)
 			},
 		},
+		// v1.9.0 添加 token 统计字段
+		{
+			ID: "v1.9.0_add_token_usage",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_9_0_AddTokenUsage(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

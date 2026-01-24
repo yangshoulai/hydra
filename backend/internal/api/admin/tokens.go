@@ -32,14 +32,16 @@ func NewTokensHandler(
 
 // TokenListResponse 令牌列表响应
 type TokenListResponse struct {
-	ID           uint    `json:"id"`
-	Name         string  `json:"name"`
-	Token        string  `json:"token"`          // 明文令牌（用于复制）
-	TokenPreview string  `json:"token_preview"` // 脱敏令牌（前8位+***+后4位）
-	Status       string  `json:"status"`
-	CreatedAt    string  `json:"created_at"`
-	LastUsedAt   *string `json:"last_used_at,omitempty"`
-	ExpiresAt    *string `json:"expires_at,omitempty"` // 过期时间
+	ID               uint    `json:"id"`
+	Name             string  `json:"name"`
+	Token            string  `json:"token"`          // 明文令牌（用于复制）
+	TokenPreview     string  `json:"token_preview"` // 脱敏令牌（前8位+***+后4位）
+	Status           string  `json:"status"`
+	CreatedAt        string  `json:"created_at"`
+	LastUsedAt       *string `json:"last_used_at,omitempty"`
+	ExpiresAt        *string `json:"expires_at,omitempty"` // 过期时间
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
 }
 
 // TokenListRequest 令牌列表请求
@@ -150,14 +152,16 @@ func (h *TokensHandler) GetTokens(c *gin.Context) {
 		}
 
 		items = append(items, TokenListResponse{
-			ID:           token.ID,
-			Name:         token.Name,
-			Token:        token.Token,
-			TokenPreview: token.TokenPreview,
-			Status:       token.Status,
-			CreatedAt:    token.CreatedAt.Format("2006-01-02 15:04:05"),
-			LastUsedAt:   lastUsedAt,
-			ExpiresAt:    expiresAt,
+			ID:               token.ID,
+			Name:             token.Name,
+			Token:            token.Token,
+			TokenPreview:     token.TokenPreview,
+			Status:           token.Status,
+			CreatedAt:        token.CreatedAt.Format("2006-01-02 15:04:05"),
+			LastUsedAt:       lastUsedAt,
+			ExpiresAt:        expiresAt,
+			PromptTokens:     token.PromptTokens,
+			CompletionTokens: token.CompletionTokens,
 		})
 	}
 

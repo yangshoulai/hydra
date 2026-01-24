@@ -15,6 +15,10 @@ type Key struct {
 	CoolingAt *time.Time     `gorm:"index" json:"cooling_at"`
 	Remark    string         `gorm:"type:varchar(200)" json:"remark"`
 
+	// Token 统计
+	PromptTokens     int64 `gorm:"not null;default:0" json:"prompt_tokens"`
+	CompletionTokens int64 `gorm:"not null;default:0" json:"completion_tokens"`
+
 	// 关联
 	Channel *Channel `gorm:"foreignKey:ChannelID" json:"channel,omitempty"`
 }

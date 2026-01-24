@@ -73,6 +73,16 @@ func (b *DetailLogBuilder) RetryIndex(index int) *DetailLogBuilder {
 	return b
 }
 
+func (b *DetailLogBuilder) PromptTokens(tokens int64) *DetailLogBuilder {
+	b.detail.PromptTokens = tokens
+	return b
+}
+
+func (b *DetailLogBuilder) CompletionTokens(tokens int64) *DetailLogBuilder {
+	b.detail.CompletionTokens = tokens
+	return b
+}
+
 func (b *DetailLogBuilder) IsStream(stream bool) *DetailLogBuilder {
 	b.detail.IsStream = stream
 	return b

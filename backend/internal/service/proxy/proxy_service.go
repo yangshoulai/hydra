@@ -32,6 +32,10 @@ type ProxyService struct {
 	retryCoordinator        *RetryCoordinator
 	circuitManager          *circuit.Manager
 	auditLogger             *logger.AuditLogger // 审计日志记录器
+	requestLogRepo          *repository.RequestLogRepository
+	keyRepo                 *repository.KeyRepository
+	modelConfigRepo         *repository.ChannelModelConfigRepository
+	accessTokenRepo         *repository.AccessTokenRepository
 	settingService          *configService.SettingService
 	sseForwarderWithSniffer *SSEForwarderWithSniffer // 支持嗅探的SSE转发器
 }
@@ -47,6 +51,10 @@ type ProxyServiceConfig struct {
 func NewProxyService(
 	logger *slog.Logger,
 	channelRepo *repository.ChannelRepository,
+	requestLogRepo *repository.RequestLogRepository,
+	keyRepo *repository.KeyRepository,
+	modelConfigRepo *repository.ChannelModelConfigRepository,
+	accessTokenRepo *repository.AccessTokenRepository,
 	circuitManager *circuit.Manager,
 	auditLogger *logger.AuditLogger,
 	config *ProxyServiceConfig,
@@ -83,6 +91,10 @@ func NewProxyService(
 		retryCoordinator:        NewRetryCoordinator(logger, maxRetries, retryDelay),
 		circuitManager:          circuitManager,
 		auditLogger:             auditLogger,
+		requestLogRepo:          requestLogRepo,
+		keyRepo:                 keyRepo,
+		modelConfigRepo:         modelConfigRepo,
+		accessTokenRepo:         accessTokenRepo,
 		settingService:          settingService,
 		sseForwarderWithSniffer: NewSSEForwarderWithSniffer(logger, settingService, 1000),
 	}
@@ -330,10 +342,18 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 				slog.String("error", errorMsg),
 			)
 		}
+
 		detailLog.ResponseBody(responseBodyStr).StreamChunks(streamChunks).StreamFirstChunkTime(firstChunkTime).
 			IsSuccess(forwardErr == nil).
 			Status("failed").
 			ErrorMessage(errorMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
+
+		if forwardErr == nil {
+			promptTokens, completionTokens := ps.parseTokenUsage(endpointType, bodyBytes, responseBodyStr, isStream, traceID)
+			detailLog.PromptTokens(promptTokens).CompletionTokens(completionTokens)
+			mainLog.PromptTokens(promptTokens).CompletionTokens(completionTokens)
+			ps.recordTokenUsageAsync(routeResult, getAccessTokenIDFromContext(c), promptTokens, completionTokens, traceID)
+		}
 
 		mainLog.AddDetail(detailLog)
 		statusCode := upstreamResp.StatusCode
@@ -395,6 +415,45 @@ func (ps *ProxyService) recordSuccess(routeResult *RouteResult) {
 	if routeResult.ModelConfigID != 0 {
 		ps.circuitManager.RecordModelConfigSuccess(routeResult.ModelConfigID, routeResult.Channel.ID)
 	}
+}
+
+func (ps *ProxyService) parseTokenUsage(endpointType string, requestBody []byte, responseBody string, isStream bool, traceID string) (int64, int64) {
+	ep, err := endpoint.Get(endpointType)
+	if err != nil {
+		ps.logWarnWithTrace("解析 token 失败，端点类型不存在", traceID, slog.String("endpoint_type", endpointType))
+		return 0, 0
+	}
+
+	return ep.ParseTokenUsage(requestBody, responseBody, isStream)
+}
+
+func (ps *ProxyService) recordTokenUsageAsync(routeResult *RouteResult, accessTokenID uint, promptTokens, completionTokens int64, traceID string) {
+	if promptTokens == 0 && completionTokens == 0 {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if ps.modelConfigRepo != nil && routeResult.ModelConfigID != 0 {
+			if err := ps.modelConfigRepo.IncrementTokenUsage(ctx, routeResult.ModelConfigID, promptTokens, completionTokens); err != nil {
+				ps.logWarnWithTrace("更新模型配置 token 统计失败", traceID, slog.String("error", err.Error()))
+			}
+		}
+
+		if ps.keyRepo != nil && routeResult.Key != nil {
+			if err := ps.keyRepo.IncrementTokenUsage(ctx, routeResult.Key.ID, promptTokens, completionTokens); err != nil {
+				ps.logWarnWithTrace("更新密钥 token 统计失败", traceID, slog.String("error", err.Error()))
+			}
+		}
+
+		if ps.accessTokenRepo != nil && accessTokenID != 0 {
+			if err := ps.accessTokenRepo.IncrementTokenUsage(ctx, accessTokenID, promptTokens, completionTokens); err != nil {
+				ps.logWarnWithTrace("更新访问令牌 token 统计失败", traceID, slog.String("error", err.Error()))
+			}
+		}
+	}()
 }
 
 // UpdateSnifferKeywords 更新嗅探器的明文错误关键词
@@ -461,6 +520,15 @@ func getAccessTokenFromContext(c *gin.Context) string {
 		return token.(string)
 	}
 	return ""
+}
+
+func getAccessTokenIDFromContext(c *gin.Context) uint {
+	if tokenID, exists := c.Get("access_token_id"); exists {
+		if id, ok := tokenID.(uint); ok {
+			return id
+		}
+	}
+	return 0
 }
 
 // headersToJSON 将 HTTP 头转换为 JSON 字符串

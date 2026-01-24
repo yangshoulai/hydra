@@ -32,6 +32,10 @@ export interface RequestLogMain {
     retry_count: number
     is_stream: boolean
 
+    // Token 统计
+    prompt_tokens: number
+    completion_tokens: number
+
     // 最后成功/失败的渠道信息
     last_channel_id?: number
     last_channel_name?: string
@@ -71,6 +75,10 @@ export interface RequestLogDetail {
     is_success: boolean
     status: string // success, failed, timeout, etc.
     retry_index: number // 第几次重试（0表示首次尝试）
+
+    // Token 统计
+    prompt_tokens: number
+    completion_tokens: number
 
     // 流式响应信息
     is_stream: boolean

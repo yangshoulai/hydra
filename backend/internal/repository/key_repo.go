@@ -62,6 +62,17 @@ func (r *KeyRepository) Update(ctx context.Context, key *models.Key) error {
 	return r.db.WithContext(ctx).Save(key).Error
 }
 
+// IncrementTokenUsage 累加 Key 的 token 使用量
+func (r *KeyRepository) IncrementTokenUsage(ctx context.Context, id uint, promptTokens, completionTokens int64) error {
+	return r.db.WithContext(ctx).
+		Model(&models.Key{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", promptTokens),
+			"completion_tokens": gorm.Expr("completion_tokens + ?", completionTokens),
+		}).Error
+}
+
 // UpdateStatus 更新 Key 状态
 func (r *KeyRepository) UpdateStatus(ctx context.Context, id uint, status string) error {
 	return r.db.WithContext(ctx).
