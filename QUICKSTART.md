@@ -7,6 +7,7 @@ Hydra（九头蛇）是一个高可用的大模型聚合网关，实现细粒度
 ## 核心特性
 
 - ✅ **细粒度熔断**: Key 级别 + 模型配置级别独立维护健康状态
+- ✅ **密钥分组**: Key 可按分组管理，模型配置绑定分组路由
 - ✅ **智能清洗**: 识别流式/非流式“假 200”响应并自动重试
 - ✅ **负载均衡**: 优先级 + 权重 + Key 轮询的多渠道流量分配
 - ✅ **自动重试**: 透明的故障转移，对用户无感知
@@ -79,6 +80,9 @@ curl http://localhost:8080/health
 - `POST /v1/responses` - OpenAI Responses
 - `POST /v1/messages` - Anthropic Messages
 - `GET /v1/models` - 获取可用模型列表
+- `POST /v1beta/models/{model}:generateContent` - Google Gemini Generate Content（路径保持 Gemini 官方格式）
+- `POST /v1beta/models/{model}:streamGenerateContent` - Google Gemini Stream Generate Content
+- `GET /v1beta/models` - 获取 Gemini 可用模型列表（Gemini API 结构）
 
 ### 使用示例
 
@@ -103,6 +107,25 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 # 获取模型列表
 curl http://localhost:8080/v1/models \
   -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# 获取 Gemini 模型列表（Gemini API 结构）
+curl http://localhost:8080/v1beta/models \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# 调用 Gemini Generate Content（注意：model 在 URL 中）
+curl -X POST "http://localhost:8080/v1beta/models/gemini-1.5-pro:generateContent" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {"text": "Hello Gemini!"}
+        ]
+      }
+    ]
+  }'
 ```
 
 ## 项目结构
@@ -156,6 +179,12 @@ hydra/
 1. **优先级**: 先选择高优先级的渠道
 2. **权重**: 同优先级内按权重分配流量
 3. **轮询**: 渠道内的 Key 使用轮询策略
+
+### 密钥分组（Key Group）
+
+- **Key 分组**: 每个 Key 必须属于一个分组（默认 `Default`）
+- **模型绑定分组**: 模型配置可选择多个分组，路由时仅使用匹配分组的 Key
+- **解决的问题**: 上游可能存在“不同 Key 可访问不同模型”的情况，分组可避免为每个分组重复创建渠道
 
 ### 日志系统
 

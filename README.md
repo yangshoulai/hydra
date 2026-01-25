@@ -4,7 +4,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.25-blue)](https://go.dev/)
 [![Vue Version](https://img.shields.io/badge/vue-3.x-green)](https://vuejs.org/)
 
-Hydra 是一个企业级大模型 API 聚合网关，提供多渠道自动切换、细粒度熔断保护、假 200 识别等高可用特性，支持 OpenAI / Anthropic 兼容接口。
+Hydra 是一个企业级大模型 API 聚合网关，提供多渠道自动切换、细粒度熔断保护、假 200 识别等高可用特性，支持 OpenAI / Anthropic / Google Gemini 接口。
 
 ## 核心特性
 
@@ -12,6 +12,7 @@ Hydra 是一个企业级大模型 API 聚合网关，提供多渠道自动切换
 - ⚡ **双层熔断保护**: Key 级别 + 模型配置级别熔断，自动冷却恢复
 - 🔍 **假 200 响应识别**: 支持流式/非流式错误嗅探并自动重试
 - 🎯 **模型名统一映射**: 统一模型名映射多个上游模型，自动负载均衡
+- 🧩 **密钥分组**: Key 支持分组；模型配置可绑定多个分组，路由时只使用匹配分组的 Key
 - 📝 **完整审计日志**: 主/明细日志、TraceID、耗时、Token 使用量
 - 📊 **实时监控仪表盘**: QPS、成功率、渠道健康、Token 统计
 - 🛠️ **低成本运维**: Web 管理界面，一键模型同步和测活
@@ -74,8 +75,8 @@ docker run -d --name hydra \
 ```
 
 服务启动后:
-- API 端点: http://localhost:8080
-- 管理后台: http://localhost:8080/admin
+- API 端点: http://localhost:8080/v1
+- 管理后台: http://localhost:8080
 - 默认管理员账号: hydra / 123456
 
 ### 方式 2: 本地开发
@@ -163,12 +164,14 @@ export HYDRA_DATABASE_POSTGRES_DSN="postgres://user:pass@localhost:5432/hydra"
 
 在渠道详情页 -> 添加 Key:
 - 输入 API Key
+- 选择密钥分组（默认 `Default`；一个 Key 只能属于一个分组）
 - 点击"立即测活"验证可用性
 
 ### 3. 同步模型
 
 在渠道详情页 -> 同步模型:
 - 系统自动调用上游 `/v1/models` 获取模型列表
+- 若渠道存在多个密钥分组，系统会分别用每个分组内的一个 Key 查询上游模型列表并合并去重
 - 查看 Diff 视图,配置模型映射关系
 - 设置统一模型名(如 `gpt-4` 映射到上游 `gpt-4-turbo`)
 
@@ -200,6 +203,9 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 - `POST /v1/responses` (OpenAI Responses)
 - `POST /v1/messages` (Anthropic Messages)
 - `GET /v1/models` (可用模型列表)
+- `POST /v1beta/models/{model}:generateContent` (Google Gemini Generate Content)
+- `POST /v1beta/models/{model}:streamGenerateContent` (Google Gemini Stream Generate Content)
+- `GET /v1beta/models` (Gemini 可用模型列表，Gemini API 结构)
 
 ### 6. 查看日志
 
@@ -347,7 +353,7 @@ docker run -d --name hydra \
 ## 联系方式
 
 - GitHub: https://github.com/yangshoulai/hydra
-- Email: yangshoulai@example.com
+- Email: shoulai.yang@gmail.com
 
 ---
 
