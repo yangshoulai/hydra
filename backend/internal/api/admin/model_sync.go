@@ -320,8 +320,15 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 		return false, "无法创建测试请求", "", err
 	}
 
-	// 使用端点的配置方法设置请求头
-	ep.ConfigureRequest(req, apiKey)
+	// 使用端点的配置方法设置请求头和请求体
+	updatedBody, err := ep.ConfigureRequest(req, apiKey, upstreamModel, jsonData)
+	if err != nil {
+		return false, "配置测试请求异常", "", err
+	}
+	if updatedBody != nil {
+		req.Body = io.NopCloser(bytes.NewBuffer(updatedBody))
+		req.ContentLength = int64(len(updatedBody))
+	}
 
 	// 记录开始时间
 	startTime := time.Now()

@@ -67,32 +67,50 @@ func RegisterRoutes(
 
 	// 创建 v1 路由组
 	v1 := router.Group("/v1")
+	v1beta := router.Group("/v1beta")
 	{
 		// 应用中间件
 		v1.Use(middleware.TraceID())
 		v1.Use(middleware.RequestLogger(logger))
 		v1.Use(middleware.Auth(accessTokenRepo, logger)) // 访问令牌认证
 
+		v1beta.Use(middleware.TraceID())
+		v1beta.Use(middleware.RequestLogger(logger))
+		v1beta.Use(middleware.Auth(accessTokenRepo, logger)) // 访问令牌认证
+
 		// 从端点注册中心动态注册路由
 		registry := endpoint.GetGlobalRegistry()
 		for _, ep := range registry.GetAll() {
 			epPath := ep.GetPath()
-			// 去掉 /v1 前缀，因为已经在路由组中
-			routePath := strings.TrimPrefix(epPath, "/v1")
 
 			// 创建通用 handler
 			handler := NewGenericHandler(logger, proxySvc, epPath, ep.GetName())
+
+			if strings.HasPrefix(epPath, "/v1beta/") {
+				routePath := strings.TrimPrefix(epPath, "/v1beta")
+				v1beta.POST(routePath, handler.Handle)
+				logger.Info("注册端点路由",
+					slog.String("name", ep.GetName()),
+					slog.String("type", ep.GetType()),
+					slog.String("path", "/v1beta"+routePath),
+				)
+				continue
+			}
+
+			// 去掉 /v1 前缀，因为已经在路由组中
+			routePath := strings.TrimPrefix(epPath, "/v1")
 			v1.POST(routePath, handler.Handle)
 
 			logger.Info("注册端点路由",
 				slog.String("name", ep.GetName()),
 				slog.String("type", ep.GetType()),
-				slog.String("path", routePath),
+				slog.String("path", "/v1"+routePath),
 			)
 		}
 
 		// 注册 /models 端点
 		v1.GET("/models", modelsHandler.Handle)
+		v1beta.GET("/models", modelsHandler.HandleV1Beta)
 	}
 
 	logger.Info("代理路由注册成功", slog.String("prefix", "/v1"))

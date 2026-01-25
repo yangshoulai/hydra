@@ -16,6 +16,7 @@ func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.
 
 		xApiKeyValue := c.GetHeader("X-Api-Key")
 		authorizationValue := c.GetHeader("Authorization")
+		googleApiKey := c.GetHeader("x-goog-api-key")
 		if authorizationValue != "" {
 			// 解析 Bearer token
 			parts := strings.SplitN(authorizationValue, " ", 2)
@@ -25,8 +26,10 @@ func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.
 				return
 			}
 			tokenValue = parts[1]
-		} else {
+		} else if xApiKeyValue != "" {
 			tokenValue = xApiKeyValue
+		} else {
+			tokenValue = googleApiKey
 		}
 		if tokenValue == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization header"})

@@ -5,4 +5,5 @@ func init() {
 	Register(&ChatCompletionsEndpoint{})
 	Register(&ResponsesEndpoint{})
 	Register(&MessagesEndpoint{})
+	Register(&GeminiEndpoint{})
 }

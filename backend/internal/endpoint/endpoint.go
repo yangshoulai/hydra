@@ -34,9 +34,12 @@ type Endpoint interface {
 	// GetDescription 获取端点描述
 	GetDescription() string
 
-	// ConfigureRequest 配置请求（设置特定的请求头等）
+	// ConfigureRequest 配置请求（设置特定的请求头、请求体或 URL）
 	// 在发送请求前调用，允许端点定制化配置
-	ConfigureRequest(req *http.Request, apiKey string)
+	// modelName: 上游模型名称
+	// requestBody: 原始请求体
+	// 返回新的请求体（如无需修改可返回原请求体）
+	ConfigureRequest(req *http.Request, apiKey string, modelName string, requestBody []byte) ([]byte, error)
 
 	// GetColor 获取端点颜色（用于前端展示）
 	GetColor() string

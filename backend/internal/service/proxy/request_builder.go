@@ -60,30 +60,14 @@ func (rb *RequestBuilder) BuildProxyRequest(
 
 	// 根据 Content-Type 处理请求
 	contentType := c.GetHeader("Content-Type")
-	var modifiedBody []byte
-
-	if strings.Contains(contentType, "application/json") {
-		// 解析 JSON 并替换模型名
-		var reqData map[string]interface{}
-		if err := json.Unmarshal(originalBody, &reqData); err != nil {
-			return nil, originalBody, err
-		}
-
-		// 替换模型名
-		reqData["model"] = routeResult.UpstreamModel
-
-		// 序列化回 JSON
-		modifiedBody, err = json.Marshal(reqData)
-		if err != nil {
-			return nil, originalBody, err
-		}
-	} else {
-		// 非 JSON 请求,直接使用原始 Body
-		modifiedBody = originalBody
-	}
+	modifiedBody := originalBody
 
 	// 构建上游 URL
-	upstreamURL := strings.TrimRight(routeResult.Channel.BaseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	requestPath := strings.TrimLeft(c.Request.URL.Path, "/")
+	upstreamURL := strings.TrimRight(routeResult.Channel.BaseURL, "/") + "/" + requestPath
+	if c.Request.URL.RawQuery != "" {
+		upstreamURL += "?" + c.Request.URL.RawQuery
+	}
 
 	// 创建新请求
 	req, err := http.NewRequest(c.Request.Method, upstreamURL, bytes.NewBuffer(modifiedBody))
@@ -101,10 +85,18 @@ func (rb *RequestBuilder) BuildProxyRequest(
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	// 使用端点的配置方法设置请求头
+	// 使用端点的配置方法设置请求头和请求体
 	ep, err := rb.getEndpointByPath(endpoint)
 	if err == nil {
-		ep.ConfigureRequest(req, routeResult.Key.KeyValue)
+		updatedBody, err := ep.ConfigureRequest(req, routeResult.Key.KeyValue, routeResult.UpstreamModel, modifiedBody)
+		if err != nil {
+			return nil, originalBody, err
+		}
+		if updatedBody != nil {
+			modifiedBody = updatedBody
+			req.Body = io.NopCloser(bytes.NewBuffer(modifiedBody))
+			req.ContentLength = int64(len(modifiedBody))
+		}
 	} else {
 		// 如果无法获取端点，使用默认配置
 		req.Header.Set("Authorization", "Bearer "+routeResult.Key.KeyValue)
@@ -152,7 +144,11 @@ func (rb *RequestBuilder) ParseChatCompletionRequest(body []byte) (*ChatCompleti
 }
 
 // IsStreamRequest 判断是否为流式请求
-func (rb *RequestBuilder) IsStreamRequest(body []byte) bool {
+func (rb *RequestBuilder) IsStreamRequest(body []byte, endpointType string, requestPath string) bool {
+	if endpointType == "gemini" {
+		return strings.Contains(requestPath, ":streamGenerateContent")
+	}
+
 	var reqData map[string]interface{}
 	if err := json.Unmarshal(body, &reqData); err != nil {
 		return false
@@ -163,7 +159,18 @@ func (rb *RequestBuilder) IsStreamRequest(body []byte) bool {
 }
 
 // GetModelFromRequest 从请求中提取模型名
-func (rb *RequestBuilder) GetModelFromRequest(body []byte) (string, error) {
+func (rb *RequestBuilder) GetModelFromRequest(body []byte, endpointType string, requestPath string) (string, error) {
+	if endpointType == "gemini" {
+		if model, err := rb.getModelFromGeminiPath(requestPath); err == nil {
+			return model, nil
+		}
+		return rb.getModelFromRequestBody(body)
+	}
+
+	return rb.getModelFromRequestBody(body)
+}
+
+func (rb *RequestBuilder) getModelFromRequestBody(body []byte) (string, error) {
 	var reqData map[string]interface{}
 	if err := json.Unmarshal(body, &reqData); err != nil {
 		return "", err
@@ -171,6 +178,26 @@ func (rb *RequestBuilder) GetModelFromRequest(body []byte) (string, error) {
 
 	model, ok := reqData["model"].(string)
 	if !ok || model == "" {
+		return "", errors.New("model field is missing or invalid")
+	}
+
+	return model, nil
+}
+
+func (rb *RequestBuilder) getModelFromGeminiPath(requestPath string) (string, error) {
+	index := strings.Index(requestPath, "/models/")
+	if index < 0 {
+		return "", errors.New("model field is missing or invalid")
+	}
+
+	raw := requestPath[index+len("/models/"):]
+	if raw == "" {
+		return "", errors.New("model field is missing or invalid")
+	}
+
+	parts := strings.SplitN(raw, ":", 2)
+	model := parts[0]
+	if model == "" {
 		return "", errors.New("model field is missing or invalid")
 	}
 

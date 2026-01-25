@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/middleware"
+	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
 )
 
@@ -37,16 +38,47 @@ type ModelsResponse struct {
 	Data   []ModelObject `json:"data"`
 }
 
+// GeminiModelsResponse Gemini Models API 响应结构
+type GeminiModelsResponse struct {
+	Models        []GeminiModel `json:"models"`
+	NextPageToken string        `json:"nextPageToken,omitempty"`
+}
+
+// GeminiModel Gemini 模型对象
+type GeminiModel struct {
+	Name                       string   `json:"name"`
+	DisplayName                string   `json:"displayName,omitempty"`
+	Description                string   `json:"description,omitempty"`
+	Version                    string   `json:"version,omitempty"`
+	SupportedGenerationMethods []string `json:"supportedGenerationMethods,omitempty"`
+}
+
 // Handle 处理 GET /v1/models 请求
 // 返回系统中所有可用的统一模型名列表
 func (h *ModelsHandler) Handle(c *gin.Context) {
+	h.handleModelsByEndpointType(c, "")
+}
+
+// HandleV1Beta 处理 GET /v1beta/models 请求
+// 返回系统中所有支持 Gemini 端点的统一模型名列表
+func (h *ModelsHandler) HandleV1Beta(c *gin.Context) {
+	h.handleModelsByEndpointType(c, "gemini")
+}
+
+func (h *ModelsHandler) handleModelsByEndpointType(c *gin.Context, endpointType string) {
 	traceID := middleware.GetTraceID(c)
 	ctx := c.Request.Context()
 
 	h.logger.Debug("收到模型列表请求", slog.String("trace_id", traceID))
 
 	// 查询所有有激活渠道配置的统一模型
-	models, err := h.modelRepo.ListWithActiveChannelConfigs(ctx)
+	var modelList []models.Model
+	var err error
+	if endpointType == "" {
+		modelList, err = h.modelRepo.ListWithActiveChannelConfigs(ctx)
+	} else {
+		modelList, err = h.modelRepo.ListWithActiveChannelConfigsByEndpointType(ctx, endpointType)
+	}
 	if err != nil {
 		h.logger.Error("failed to list enabled models",
 			slog.String("trace_id", traceID),
@@ -62,9 +94,14 @@ func (h *ModelsHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	if endpointType == "gemini" {
+		c.JSON(http.StatusOK, buildGeminiModelsResponse(modelList))
+		return
+	}
+
 	// 构建响应
-	modelObjects := make([]ModelObject, 0, len(models))
-	for _, model := range models {
+	modelObjects := make([]ModelObject, 0, len(modelList))
+	for _, model := range modelList {
 		// 获取厂商名称
 		providerName := "unknown"
 		if model.Provider != nil {
@@ -90,4 +127,21 @@ func (h *ModelsHandler) Handle(c *gin.Context) {
 	)
 
 	c.JSON(http.StatusOK, response)
+}
+
+func buildGeminiModelsResponse(modelList []models.Model) GeminiModelsResponse {
+	modelsData := make([]GeminiModel, 0, len(modelList))
+	for _, model := range modelList {
+		modelsData = append(modelsData, GeminiModel{
+			Name:                       "models/" + model.Name,
+			DisplayName:                model.Name,
+			Description:                model.Name,
+			Version:                    "",
+			SupportedGenerationMethods: []string{"generateContent", "streamGenerateContent"},
+		})
+	}
+
+	return GeminiModelsResponse{
+		Models: modelsData,
+	}
 }

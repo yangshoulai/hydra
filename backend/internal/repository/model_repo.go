@@ -155,9 +155,9 @@ func (r *ModelRepository) ListWithFilter(
 
 		// 验证排序字段，防止 SQL 注入
 		allowedFields := map[string]bool{
-			"id":             true,
-			"name":           true,
-			"channel_count":  true,
+			"id":            true,
+			"name":          true,
+			"channel_count": true,
 		}
 
 		if allowedFields[sortOpts.Field] {
@@ -235,6 +235,29 @@ func (r *ModelRepository) ListWithActiveChannelConfigs(ctx context.Context) ([]m
 		Joins("INNER JOIN channels ON channel_model_configs.channel_id = channels.id").
 		Where("channel_model_configs.status = ?", "active").
 		Where("channels.status = ?", "active").
+		Order("models.created_at DESC").
+		Find(&modelList).Error
+	if err != nil {
+		r.logger.Error("failed to list models with active channel configs",
+			slog.String("error", err.Error()),
+		)
+		return nil, err
+	}
+	return modelList, nil
+}
+
+// ListWithActiveChannelConfigsByEndpointType 查询指定端点类型的统一模型列表
+func (r *ModelRepository) ListWithActiveChannelConfigsByEndpointType(ctx context.Context, endpointType string) ([]models.Model, error) {
+	var modelList []models.Model
+	likePattern := "%\"" + endpointType + "\"%"
+	err := r.db.WithContext(ctx).
+		Distinct("models.*").
+		Table("models").
+		Joins("INNER JOIN channel_model_configs ON channel_model_configs.unified_model = models.name").
+		Joins("INNER JOIN channels ON channel_model_configs.channel_id = channels.id").
+		Where("channel_model_configs.status = ?", "active").
+		Where("channels.status = ?", "active").
+		Where("channel_model_configs.endpoint_types LIKE ?", likePattern).
 		Order("models.created_at DESC").
 		Find(&modelList).Error
 	if err != nil {

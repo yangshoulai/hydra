@@ -711,7 +711,13 @@ const columns: DataTableColumns<ModelDisplayType> = [
         default: () => endpointTypes.map((type: string) => {
           const status = testStatus.value[row.key]?.[type] || 'idle'
           const config = statusMap[status]
-          const typeLabel = type === 'openai' ? 'OpenAI' : type === 'openai-response' ? 'Response' : 'Anthropic'
+          const typeLabelMap: Record<string, string> = {
+            openai: 'OpenAI',
+            'openai-response': 'Response',
+            anthropic: 'Anthropic',
+            gemini: 'Gemini'
+          }
+          const typeLabel = typeLabelMap[type] || type
           return h(NTag, {type: config.type, size: 'small'}, {default: () => `${typeLabel}: ${config.text}`})
         })
       })

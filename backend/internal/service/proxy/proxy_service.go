@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -135,7 +136,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 	requestBodyStr := string(bodyBytes)
 
 	// 2. 解析请求获取模型名
-	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes)
+	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes, endpointType, c.Request.URL.Path)
 	if err != nil {
 		ps.logErrorWithTrace("获取请求模型异常", traceID, slog.String("error", err.Error()))
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Invalid request: "+err.Error(), traceID)
@@ -144,7 +145,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		return err
 	}
 
-	isStream := ps.requestBuilder.IsStreamRequest(bodyBytes)
+	isStream := ps.requestBuilder.IsStreamRequest(bodyBytes, endpointType, c.Request.URL.Path)
 	mainLog.RequestedModel(unifiedModel).IsStream(isStream)
 
 	ps.logWithTrace("处理请求", traceID,
@@ -589,8 +590,15 @@ func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
 func (ps *ProxyService) getEndpointType(endpointPath string) string {
 	// 从端点注册中心查找匹配的端点
 	for _, ep := range endpoint.GetAll() {
-		if ep.GetPath() == endpointPath {
+		epPath := ep.GetPath()
+		if epPath == endpointPath {
 			return ep.GetType()
+		}
+		if strings.Contains(epPath, "*") {
+			prefix := strings.Split(epPath, "*")[0]
+			if prefix != "" && strings.HasPrefix(endpointPath, prefix) {
+				return ep.GetType()
+			}
 		}
 	}
 

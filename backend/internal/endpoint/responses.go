@@ -74,8 +74,9 @@ func (e *ResponsesEndpoint) ParseTokenUsage(_ []byte, responseBody string, isStr
 	return parseTokenUsageFromJSON(responseBody, "input_tokens", "output_tokens")
 }
 
-func (e *ResponsesEndpoint) ConfigureRequest(req *http.Request, apiKey string) {
+func (e *ResponsesEndpoint) ConfigureRequest(req *http.Request, apiKey string, modelName string, requestBody []byte) ([]byte, error) {
 	// OpenAI Response 端点的标准配置
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
+	return replaceRequestModel(requestBody, req.Header.Get("Content-Type"), modelName)
 }
