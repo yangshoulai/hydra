@@ -39,6 +39,7 @@ export interface Key {
   key_value: string
   key_preview?: string  // 脱敏的key（前6位+**********+后4位）
   status: 'active' | 'cooling' | 'disabled'
+  key_group: string
   remark: string
   cooling_at?: string
   created_at: string
@@ -52,6 +53,7 @@ export interface ChannelModelConfig {
   upstream_model: string
   status: 'active' | 'disabled' | 'non_exist'
   endpoint_types?: string[]
+  key_groups?: string[]
   remark: string
   created_at: string
   updated_at: string
@@ -97,6 +99,7 @@ export interface ChannelListParams {
 export interface CreateKeyRequest {
   channel_id: number
   key_value: string
+  key_group: string
   remark?: string
 }
 
@@ -135,6 +138,7 @@ export interface ModelDiffType {
   type: 'added' | 'removed' | 'existing'
   unified_model: string
   upstream_model: string
+  key_groups?: string[]
   existing_config?: ChannelModelConfig
 }
 
@@ -161,6 +165,8 @@ export interface SyncResult {
 export interface ModelConfigItem {
   unified_model: string
   upstream_model: string
+  endpoint_types?: string[]
+  key_groups?: string[]
   remark?: string
 }
 
@@ -168,6 +174,8 @@ export interface ModelConfigUpdateItem {
   id: number
   unified_model: string
   upstream_model: string
+  endpoint_types?: string[]
+  key_groups?: string[]
   remark?: string
 }
 

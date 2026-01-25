@@ -95,21 +95,12 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, mo
 			continue
 		}
 
-		// 检查模型配置熔断状态
-		if !cs.hasAvailableModelConfig(&channel, modelName, endpointType, traceID) {
+		// 检查模型配置熔断状态与密钥分组可用性
+		if cs.getAvailableModelConfig(&channel, modelName, endpointType, traceID) == nil {
 			cs.logger.Debug("渠道没有可用模型配置",
 				slog.String("trace_id", traceID),
 				slog.Uint64("channel_id", uint64(channel.ID)),
 				slog.String("unified_model", modelName),
-			)
-			continue
-		}
-
-		// 检查是否有可用的 Key
-		if cs.keySelector.GetAvailableKeyCount(&channel, traceID) == 0 {
-			cs.logger.Debug("渠道没有可用密钥",
-				slog.String("trace_id", traceID),
-				slog.Uint64("channel_id", uint64(channel.ID)),
 			)
 			continue
 		}
@@ -120,10 +111,10 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, mo
 	return available
 }
 
-// hasAvailableModelConfig 检查渠道是否有可用的模型配置
-func (cs *ChannelSelector) hasAvailableModelConfig(channel *models.Channel, unifiedModel string, endpointType string, traceID string) bool {
+// getAvailableModelConfig 获取渠道可用的模型配置
+func (cs *ChannelSelector) getAvailableModelConfig(channel *models.Channel, unifiedModel string, endpointType string, traceID string) *models.ChannelModelConfig {
 	if channel == nil {
-		return false
+		return nil
 	}
 
 	for i := range channel.ModelConfigs {
@@ -134,20 +125,32 @@ func (cs *ChannelSelector) hasAvailableModelConfig(channel *models.Channel, unif
 		if !cs.hasEndpointType(config.EndpointTypes, endpointType) {
 			continue
 		}
-		if cs.circuitManager == nil || cs.circuitManager.IsModelConfigAvailable(config.ID) {
-			return true
+		if cs.circuitManager != nil && !cs.circuitManager.IsModelConfigAvailable(config.ID) {
+			cs.logger.Debug("model config is cooling",
+				slog.String("trace_id", traceID),
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.Uint64("model_config_id", uint64(config.ID)),
+				slog.String("unified_model", unifiedModel),
+				slog.String("upstream_model", config.UpstreamModel),
+			)
+			continue
 		}
 
-		cs.logger.Debug("model config is cooling",
-			slog.String("trace_id", traceID),
-			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.Uint64("model_config_id", uint64(config.ID)),
-			slog.String("unified_model", unifiedModel),
-			slog.String("upstream_model", config.UpstreamModel),
-		)
+		if cs.keySelector.GetAvailableKeyCount(channel, config.KeyGroups, traceID) == 0 {
+			cs.logger.Debug("模型配置没有可用密钥",
+				slog.String("trace_id", traceID),
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.Uint64("model_config_id", uint64(config.ID)),
+				slog.String("unified_model", unifiedModel),
+				slog.String("upstream_model", config.UpstreamModel),
+			)
+			continue
+		}
+
+		return config
 	}
 
-	return false
+	return nil
 }
 
 // hasEndpointType 检查端点类型是否匹配

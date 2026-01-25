@@ -68,6 +68,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_9_0_AddTokenUsage(tx)
 			},
 		},
+		// v1.10.0 添加密钥分组字段
+		{
+			ID: "v1.10.0_add_key_groups",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_10_0_AddKeyGroups(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

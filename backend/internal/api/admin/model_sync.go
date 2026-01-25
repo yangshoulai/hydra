@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -123,9 +124,10 @@ func (h *ModelSyncHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 // TestModelRequest 测试模型请求
 type TestModelRequest struct {
-	UpstreamModel string `json:"upstream_model" binding:"required"`
-	UnifiedModel  string `json:"unified_model"`
-	EndpointType  string `json:"endpoint_type" binding:"required"`
+	UpstreamModel string   `json:"upstream_model" binding:"required"`
+	UnifiedModel  string   `json:"unified_model"`
+	EndpointType  string   `json:"endpoint_type" binding:"required"`
+	KeyGroups     []string `json:"key_groups"`
 }
 
 // TestModelResponse 测试模型响应
@@ -194,6 +196,20 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 		return
 	}
 
+	// 获取模型配置（用于过滤密钥分组）
+	modelConfig, err := h.modelConfigRepo.FindByChannelAndUpstreamModel(c.Request.Context(), channelID, req.UpstreamModel)
+	if err != nil {
+		h.logger.Error("无法获取渠道模型配置",
+			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("upstream_model", req.UpstreamModel),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get model config",
+		})
+		return
+	}
+
 	// 获取渠道的一个可用key
 	keyRepo := repository.NewKeyRepository(h.db)
 	keys, err := keyRepo.FindActiveByChannelID(c.Request.Context(), channelID)
@@ -207,6 +223,24 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 			"error": "failed to get keys",
 		})
 		return
+	}
+
+	if len(req.KeyGroups) > 0 {
+		keys = filterKeysByGroups(keys, req.KeyGroups)
+		if len(keys) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "no available keys for this model group",
+			})
+			return
+		}
+	} else if modelConfig != nil {
+		keys = filterKeysByGroups(keys, modelConfig.KeyGroups)
+		if len(keys) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "no available keys for this model group",
+			})
+			return
+		}
 	}
 
 	if len(keys) == 0 {
@@ -332,4 +366,31 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 	}
 
 	return false, fmt.Sprintf("模型测试失败: %s (response: %s)", errMsg, string(body)), latency, nil
+}
+
+func filterKeysByGroups(keys []*models.Key, keyGroups []string) []*models.Key {
+	groupSet := make(map[string]struct{})
+	for _, group := range keyGroups {
+		group = strings.TrimSpace(group)
+		if group == "" {
+			continue
+		}
+		groupSet[group] = struct{}{}
+	}
+
+	if len(groupSet) == 0 {
+		groupSet["Default"] = struct{}{}
+	}
+
+	filtered := make([]*models.Key, 0, len(keys))
+	for _, key := range keys {
+		group := strings.TrimSpace(key.KeyGroup)
+		if group == "" {
+			group = "Default"
+		}
+		if _, ok := groupSet[group]; ok {
+			filtered = append(filtered, key)
+		}
+	}
+	return filtered
 }

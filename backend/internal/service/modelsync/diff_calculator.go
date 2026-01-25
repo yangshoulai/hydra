@@ -3,6 +3,7 @@ package modelsync
 import (
 	"log/slog"
 	"sort"
+	"strings"
 
 	"github.com/yangshoulai/hydra/internal/models"
 )
@@ -21,6 +22,7 @@ type ModelDiff struct {
 	Type           ModelDiffType              `json:"type"`
 	UnifiedModel   string                     `json:"unified_model"`
 	UpstreamModel  string                     `json:"upstream_model"`
+	KeyGroups      []string                   `json:"key_groups"`
 	ExistingConfig *models.ChannelModelConfig `json:"existing_config,omitempty"` // 对于存量模型，包含现有配置
 }
 
@@ -52,6 +54,7 @@ func NewDiffCalculator(logger *slog.Logger) *DiffCalculator {
 func (dc *DiffCalculator) Calculate(
 	upstreamModels []string,
 	localConfigs []*models.ChannelModelConfig,
+	upstreamModelGroups map[string][]string,
 ) *SyncDiff {
 	// 构建上游模型集合
 	upstreamSet := make(map[string]bool)
@@ -73,12 +76,15 @@ func (dc *DiffCalculator) Calculate(
 
 	// 查找新增和存量模型
 	for _, upstreamModel := range upstreamModels {
+		keyGroups := resolveKeyGroups(upstreamModelGroups[upstreamModel], nil)
 		if localConfig, exists := localMap[upstreamModel]; exists {
+			keyGroups = resolveKeyGroups(upstreamModelGroups[upstreamModel], localConfig)
 			// 存量模型
 			diff.Diffs = append(diff.Diffs, ModelDiff{
 				Type:           DiffTypeExisting,
 				UnifiedModel:   localConfig.UnifiedModel,
 				UpstreamModel:  upstreamModel,
+				KeyGroups:      keyGroups,
 				ExistingConfig: localConfig,
 			})
 			diff.ExistingCount++
@@ -88,6 +94,7 @@ func (dc *DiffCalculator) Calculate(
 				Type:          DiffTypeAdded,
 				UnifiedModel:  "", // 需要用户手动指定
 				UpstreamModel: upstreamModel,
+				KeyGroups:     keyGroups,
 			})
 			diff.AddedCount++
 		}
@@ -101,6 +108,7 @@ func (dc *DiffCalculator) Calculate(
 				Type:           DiffTypeRemoved,
 				UnifiedModel:   localConfig.UnifiedModel,
 				UpstreamModel:  upstreamModel,
+				KeyGroups:      resolveKeyGroups(nil, localConfig),
 				ExistingConfig: localConfig,
 			})
 			diff.RemovedCount++
@@ -110,6 +118,38 @@ func (dc *DiffCalculator) Calculate(
 	// 排序：按类型和模型名称排序
 	sortDiffs(diff.Diffs)
 	return diff
+}
+
+func resolveKeyGroups(upstreamGroups []string, localConfig *models.ChannelModelConfig) []string {
+	groups := normalizeKeyGroups(upstreamGroups)
+	if len(groups) == 0 && localConfig != nil {
+		groups = normalizeKeyGroups(localConfig.KeyGroups)
+	}
+	if len(groups) == 0 {
+		return []string{"Default"}
+	}
+	return groups
+}
+
+func normalizeKeyGroups(groups []string) []string {
+	if len(groups) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(groups))
+	for _, group := range groups {
+		group = strings.TrimSpace(group)
+		if group == "" {
+			continue
+		}
+		if _, ok := seen[group]; ok {
+			continue
+		}
+		seen[group] = struct{}{}
+		result = append(result, group)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // sortDiffs 排序差异列表

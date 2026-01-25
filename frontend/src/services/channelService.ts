@@ -74,11 +74,12 @@ export const channelApi = {
   /**
    * 批量添加Keys
    */
-  async batchAddKeys(channelId: number, keyValues: string[], remark?: string): Promise<any> {
+  async batchAddKeys(channelId: number, keyValues: string[], remark?: string, keyGroup?: string): Promise<any> {
     const response = await apiClient.post('/admin/api/keys/batch', {
       channel_id: channelId,
       key_values: keyValues,
-      remark: remark || ''
+      remark: remark || '',
+      key_group: keyGroup || 'Default'
     })
     return response.data
   },
@@ -143,7 +144,8 @@ export const channelApi = {
     channelId: number,
     unifiedModel: string,
     upstreamModel: string,
-    endpointTypes?: string[]
+    endpointTypes?: string[],
+    keyGroups?: string[]
   ): Promise<ChannelModelConfig> {
     const response = await apiClient.post<ChannelModelConfig>(
       '/admin/api/channel-models',
@@ -151,7 +153,8 @@ export const channelApi = {
         channel_id: channelId,
         unified_model: unifiedModel,
         upstream_model: upstreamModel,
-        endpoint_types: endpointTypes || ['openai']
+        endpoint_types: endpointTypes || ['openai'],
+        key_groups: keyGroups || ['Default']
       }
     )
     return response.data
@@ -192,13 +195,20 @@ export const channelApi = {
   /**
    * 测试单个模型
    */
-  async testModel(channelId: number, upstreamModel: string, unifiedModel: string, endpointType: string): Promise<any> {
+  async testModel(
+    channelId: number,
+    upstreamModel: string,
+    unifiedModel: string,
+    endpointType: string,
+    keyGroups?: string[]
+  ): Promise<any> {
     const response = await apiClient.post(
       `/admin/api/channels/${channelId}/test-model`,
       {
         upstream_model: upstreamModel,
         unified_model: unifiedModel,
-        endpoint_type: endpointType
+        endpoint_type: endpointType,
+        key_groups: keyGroups || []
       }
     )
     return response.data

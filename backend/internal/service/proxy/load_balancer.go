@@ -22,6 +22,7 @@ type RouteResult struct {
 	ModelConfigID uint            // 选中的模型配置ID
 	UpstreamModel string          // 上游模型名
 	UnifiedModel  string          // 统一模型名
+	KeyGroups     []string        // 模型配置对应的密钥分组
 }
 
 // LoadBalancer 负载均衡器,协调多渠道流量分配
@@ -40,7 +41,7 @@ func NewLoadBalancer(
 ) *LoadBalancer {
 	keySelector := NewKeySelector(logger, circuitManager)
 	channelSelector := NewChannelSelector(logger, channelRepo, keySelector, circuitManager)
-	modelRouter := NewModelRouter(logger, circuitManager)
+	modelRouter := NewModelRouter(logger, circuitManager, keySelector)
 
 	return &LoadBalancer{
 		logger:          logger,
@@ -62,20 +63,20 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 		return nil, err
 	}
 
-	// 2. 选择 Key
-	key, err := lb.keySelector.SelectKey(channel, traceID)
+	// 2. 路由模型
+	selectedConfig, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType, traceID)
 	if err != nil {
-		// 如果是没有可用的 key，返回 ErrNoAvailableChannel 让上层尝试其他 channel
-		if errors.Is(err, ErrNoAvailableKey) {
+		if errors.Is(err, ErrModelNotFound) || errors.Is(err, ErrNoModelMapping) || errors.Is(err, ErrNoAvailableModelConfig) {
 			return nil, ErrNoAvailableChannel
 		}
 		return nil, err
 	}
 
-	// 3. 路由模型
-	selectedConfig, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType, traceID)
+	// 3. 选择 Key
+	key, err := lb.keySelector.SelectKey(channel, selectedConfig.KeyGroups, traceID)
 	if err != nil {
-		if errors.Is(err, ErrModelNotFound) || errors.Is(err, ErrNoModelMapping) || errors.Is(err, ErrNoAvailableModelConfig) {
+		// 如果是没有可用的 key，返回 ErrNoAvailableChannel 让上层尝试其他 channel
+		if errors.Is(err, ErrNoAvailableKey) {
 			return nil, ErrNoAvailableChannel
 		}
 		return nil, err
@@ -87,6 +88,7 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 		ModelConfigID: selectedConfig.ID,
 		UpstreamModel: selectedConfig.UpstreamModel,
 		UnifiedModel:  unifiedModel,
+		KeyGroups:     selectedConfig.KeyGroups,
 	}
 	return result, nil
 }

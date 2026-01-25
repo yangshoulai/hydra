@@ -44,6 +44,21 @@ func (r *ChannelModelConfigRepository) FindByID(ctx context.Context, id uint) (*
 	return &config, nil
 }
 
+// FindByChannelAndUpstreamModel 根据渠道ID和上游模型名查询模型配置
+func (r *ChannelModelConfigRepository) FindByChannelAndUpstreamModel(ctx context.Context, channelID uint, upstreamModel string) (*models.ChannelModelConfig, error) {
+	var config models.ChannelModelConfig
+	err := r.db.WithContext(ctx).
+		Where("channel_id = ? AND upstream_model = ?", channelID, upstreamModel).
+		First(&config).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &config, nil
+}
+
 // FindByChannelID 根据渠道ID查询所有模型配置
 func (r *ChannelModelConfigRepository) FindByChannelID(ctx context.Context, channelID uint) ([]*models.ChannelModelConfig, error) {
 	var configs []*models.ChannelModelConfig

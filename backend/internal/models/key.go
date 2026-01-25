@@ -6,14 +6,15 @@ import (
 
 // Key API Key 模型
 type Key struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	ChannelID uint      `gorm:"not null;index" json:"channel_id"`
-	KeyValue  string         `gorm:"type:varchar(500);not null" json:"key_value"`
-	Status    string         `gorm:"type:varchar(20);not null;default:'active'" json:"status"` // active, cooling, disabled
-	CoolingAt *time.Time     `gorm:"index" json:"cooling_at"`
-	Remark    string         `gorm:"type:varchar(200)" json:"remark"`
+	ID        uint       `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	ChannelID uint       `gorm:"not null;index" json:"channel_id"`
+	KeyValue  string     `gorm:"type:varchar(500);not null" json:"key_value"`
+	Status    string     `gorm:"type:varchar(20);not null;default:'active'" json:"status"` // active, cooling, disabled
+	CoolingAt *time.Time `gorm:"index" json:"cooling_at"`
+	KeyGroup  string     `gorm:"column:key_group;type:varchar(100);not null;default:'Default'" json:"key_group"`
+	Remark    string     `gorm:"type:varchar(200)" json:"remark"`
 
 	// Token 统计
 	PromptTokens     int64 `gorm:"not null;default:0" json:"prompt_tokens"`

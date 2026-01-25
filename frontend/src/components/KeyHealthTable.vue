@@ -9,6 +9,7 @@
         size="small"
         :bordered="true"
         :striped="true"
+        :scroll-x="960"
         :single-line="false"
     />
   </div>
@@ -37,6 +38,7 @@ interface KeyHealthRow {
   key_remark: string
   key_value: string
   key_preview: string
+  key_group: string
   status: 'active' | 'cooling' | 'disabled' | 'dead'
   test_status?: 'healthy' | 'unhealthy' | 'error' | 'testing'
   test_message?: string
@@ -81,13 +83,14 @@ function calculateCoolingTime(coolingAt?: string): string | undefined {
 
 // 计算显示数据
 const displayData = computed<KeyHealthRow[]>(() => {
-  return channel.value?.keys?.map((key) => {
+  const rows = channel.value?.keys?.map((key) => {
     const testResult = testResults.value.get(key.id)
     return {
       key_id: key.id,
       key_remark: key.remark,
       key_value: key.key_value,
       key_preview: key.key_preview || maskKey(key.key_value),
+      key_group: key.key_group || 'Default',
       status: key.status,
       test_status: testingKeys.value.has(key.id) ? 'testing' : testResult?.status,
       test_message: testResult?.message,
@@ -97,6 +100,12 @@ const displayData = computed<KeyHealthRow[]>(() => {
       key
     }
   }) || []
+
+  return rows.sort((a, b) => {
+    const groupDiff = a.key_group.localeCompare(b.key_group)
+    if (groupDiff !== 0) return groupDiff
+    return a.key_id - b.key_id
+  })
 })
 
 // 分页
@@ -111,6 +120,15 @@ const columns: DataTableColumns<KeyHealthRow> = [
     key: 'key_id',
     width: 80,
     align: 'right'
+  },
+  {
+    title: '分组',
+    key: 'key_group',
+    width: 80,
+    align: 'center',
+    render(row) {
+      return h(NTag, {size: 'small', type: 'info'}, {default: () => row.key_group || 'Default'})
+    }
   },
   {
     title: '密钥',
@@ -197,7 +215,7 @@ const columns: DataTableColumns<KeyHealthRow> = [
   {
     title: '备注',
     key: 'key_remark',
-    width: 120,
+    width: 80,
     ellipsis: {
       tooltip: true
     }
@@ -206,7 +224,7 @@ const columns: DataTableColumns<KeyHealthRow> = [
     title: '测试状态',
     key: 'test_status',
     align: 'center',
-    width: 120,
+    width: 80,
     render(row) {
       // 如果正在测试
       if (testingKeys.value.has(row.key_id)) {

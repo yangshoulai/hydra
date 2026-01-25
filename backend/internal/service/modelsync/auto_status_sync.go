@@ -29,7 +29,7 @@ func (s *SyncService) AutoSyncChannelModelStatuses(ctx context.Context, channel 
 		return nil, fmt.Errorf("channel is nil")
 	}
 
-	upstreamModels, err := s.fetchUpstreamModels(ctx, channel)
+	upstreamModels, _, err := s.fetchUpstreamModels(ctx, channel)
 	if err != nil {
 		return nil, err
 	}

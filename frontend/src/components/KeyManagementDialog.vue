@@ -111,6 +111,19 @@
             </template>
           </n-form-item>
 
+          <n-form-item label="密钥分组" path="key_group">
+            <n-select
+                v-model:value="keyForm.key_group"
+                :options="keyGroupOptions"
+                placeholder="请选择或输入分组"
+                filterable
+                tag
+            />
+            <template #feedback>
+              密钥分组用于限制可访问的模型范围，默认分组为 Default
+            </template>
+          </n-form-item>
+
           <n-form-item label="备注" path="remark">
             <n-input
                 v-model:value="keyForm.remark"
@@ -179,6 +192,7 @@ import {
   NIcon,
   NInput,
   NModal,
+  NSelect,
   NSpace,
   NTag,
   NText
@@ -220,7 +234,8 @@ const keyHealthTableRef = ref<InstanceType<typeof KeyHealthTable> | null>(null)
 // Key表单
 const keyForm = reactive({
   key_value: '',
-  remark: ''
+  remark: '',
+  key_group: 'Default'
 })
 
 // 计算密钥行数（用于显示添加数量）
@@ -238,8 +253,17 @@ const keyRules = {
     required: true,
     message: '请输入密钥值',
     trigger: ['blur', 'input']
+  },
+  key_group: {
+    required: true,
+    message: '请选择密钥分组',
+    trigger: ['blur', 'change']
   }
 }
+
+const keyGroupOptions = ref<{ label: string; value: string }[]>([
+  { label: 'Default', value: 'Default' }
+])
 
 // 关闭对话框
 function handleClose() {
@@ -287,6 +311,8 @@ async function handleAddKey() {
     return
   }
 
+  const keyGroup = keyForm.key_group.trim() || 'Default'
+
   // 分割多行密钥，去除空行
   const keys = keyForm.key_value
       .split('\n')
@@ -305,7 +331,8 @@ async function handleAddKey() {
     const result = await channelApi.batchAddKeys(
         props.channelId,
         keys,
-        keyForm.remark
+        keyForm.remark,
+        keyGroup
     )
 
     // 显示结果
@@ -314,6 +341,7 @@ async function handleAddKey() {
       showAddKeyDialog.value = false
       keyForm.key_value = ''
       keyForm.remark = ''
+      keyForm.key_group = 'Default'
 
       // 刷新Key列表
       await keyHealthTableRef.value?.refresh()
@@ -328,6 +356,7 @@ async function handleAddKey() {
       showAddKeyDialog.value = false
       keyForm.key_value = ''
       keyForm.remark = ''
+      keyForm.key_group = 'Default'
 
       // 刷新Key列表
       await keyHealthTableRef.value?.refresh()
@@ -348,8 +377,30 @@ watch(() => props.modelValue, (newVal) => {
   if (newVal) {
     // 对话框打开时，刷新健康检查结果
     healthResult.value = undefined
+    loadKeyGroups()
   }
 })
+
+async function loadKeyGroups() {
+  try {
+    const channel = await channelApi.get(props.channelId)
+    const groups = new Set<string>()
+    channel.keys?.forEach((key) => {
+      if (key.key_group) {
+        groups.add(key.key_group)
+      }
+    })
+    if (groups.size === 0) {
+      groups.add('Default')
+    }
+    keyGroupOptions.value = Array.from(groups).sort().map((group) => ({
+      label: group,
+      value: group
+    }))
+  } catch (error) {
+    keyGroupOptions.value = [{ label: 'Default', value: 'Default' }]
+  }
+}
 </script>
 
 <style scoped>

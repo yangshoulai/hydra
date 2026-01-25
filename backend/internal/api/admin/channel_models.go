@@ -36,6 +36,7 @@ type CreateModelConfigRequest struct {
 	UnifiedModel  string   `json:"unified_model" binding:"required,max=100"`
 	UpstreamModel string   `json:"upstream_model" binding:"required,max=100"`
 	EndpointTypes []string `json:"endpoint_types" binding:"omitempty"`
+	KeyGroups     []string `json:"key_groups" binding:"omitempty"`
 	Remark        string   `json:"remark" binding:"omitempty,max=200"`
 }
 
@@ -44,6 +45,7 @@ type UpdateModelConfigRequest struct {
 	UnifiedModel  string   `json:"unified_model" binding:"omitempty,max=100"`
 	UpstreamModel string   `json:"upstream_model" binding:"omitempty,max=100"`
 	EndpointTypes []string `json:"endpoint_types" binding:"omitempty"`
+	KeyGroups     []string `json:"key_groups" binding:"omitempty"`
 	Status        string   `json:"status" binding:"omitempty,oneof=active disabled"`
 	Remark        string   `json:"remark" binding:"omitempty,max=200"`
 }
@@ -96,12 +98,17 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	if len(endpointTypes) == 0 {
 		endpointTypes = []string{"openai"}
 	}
+	keyGroups := req.KeyGroups
+	if len(keyGroups) == 0 {
+		keyGroups = []string{"Default"}
+	}
 
 	modelConfig := &models.ChannelModelConfig{
 		ChannelID:     req.ChannelID,
 		UnifiedModel:  req.UnifiedModel,
 		UpstreamModel: req.UpstreamModel,
 		EndpointTypes: endpointTypes,
+		KeyGroups:     models.KeyGroups(keyGroups),
 		Status:        "active",
 		Remark:        req.Remark,
 	}
@@ -193,6 +200,9 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 	}
 	if len(req.EndpointTypes) > 0 {
 		modelConfig.EndpointTypes = req.EndpointTypes
+	}
+	if len(req.KeyGroups) > 0 {
+		modelConfig.KeyGroups = models.KeyGroups(req.KeyGroups)
 	}
 	if req.Status != "" {
 		modelConfig.Status = req.Status

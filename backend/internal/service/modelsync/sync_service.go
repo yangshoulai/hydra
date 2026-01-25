@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
@@ -72,7 +74,7 @@ type SyncResult struct {
 // SyncChannelModels 同步渠道模型
 func (s *SyncService) SyncChannelModels(ctx context.Context, channel *models.Channel) (*SyncResult, error) {
 	// 调用上游 /v1/models 接口
-	upstreamModels, err := s.fetchUpstreamModels(ctx, channel)
+	upstreamModels, upstreamModelGroups, err := s.fetchUpstreamModels(ctx, channel)
 	if err != nil {
 		s.logger.Error("查询渠道模型列表异常",
 			slog.Uint64("channel_id", uint64(channel.ID)),
@@ -93,7 +95,7 @@ func (s *SyncService) SyncChannelModels(ctx context.Context, channel *models.Cha
 	}
 
 	// 计算差异
-	diff := s.diffCalculator.Calculate(upstreamModels, localConfigs)
+	diff := s.diffCalculator.Calculate(upstreamModels, localConfigs, upstreamModelGroups)
 
 	result := &SyncResult{
 		Success:        true,
@@ -119,7 +121,90 @@ func (s *SyncService) SyncChannelModels(ctx context.Context, channel *models.Cha
 }
 
 // fetchUpstreamModels 调用上游 /v1/models 接口
-func (s *SyncService) fetchUpstreamModels(ctx context.Context, channel *models.Channel) ([]string, error) {
+func (s *SyncService) fetchUpstreamModels(ctx context.Context, channel *models.Channel) ([]string, map[string][]string, error) {
+	modelGroups := make(map[string][]string)
+	modelSet := make(map[string]struct{})
+
+	keys, err := s.keyRepo.FindActiveByChannelID(ctx, channel.ID)
+	if err != nil {
+		s.logger.Warn("查询渠道可用密钥异常",
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_ nane", channel.Name),
+			slog.String("error", err.Error()),
+		)
+	}
+
+	groupKeys := make(map[string]string)
+	for _, key := range keys {
+		group := strings.TrimSpace(key.KeyGroup)
+		if group == "" {
+			group = "Default"
+		}
+		if _, exists := groupKeys[group]; !exists {
+			groupKeys[group] = key.KeyValue
+		}
+	}
+
+	if len(groupKeys) == 0 {
+		s.logger.Debug("渠道没有可用密钥，查询将以无认证的方式进行",
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.String("channel_ nane", channel.Name),
+		)
+		groupKeys["Default"] = ""
+	}
+
+	var lastErr error
+	successCount := 0
+	for group, apiKey := range groupKeys {
+		upstreamModels, err := s.fetchUpstreamModelsByKey(ctx, channel, apiKey)
+		if err != nil {
+			lastErr = err
+			s.logger.Warn("查询上游模型列表失败",
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.String("channel_name", channel.Name),
+				slog.String("key_group", group),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+		successCount++
+		for _, model := range upstreamModels {
+			modelSet[model] = struct{}{}
+			modelGroups[model] = append(modelGroups[model], group)
+		}
+	}
+
+	if successCount == 0 {
+		if lastErr != nil {
+			return nil, nil, lastErr
+		}
+		return nil, nil, fmt.Errorf("no available keys for upstream models")
+	}
+
+	mergedModels := make([]string, 0, len(modelSet))
+	for model := range modelSet {
+		mergedModels = append(mergedModels, model)
+	}
+	sort.Strings(mergedModels)
+
+	for model, groups := range modelGroups {
+		uniqueGroups := make(map[string]struct{})
+		result := make([]string, 0, len(groups))
+		for _, group := range groups {
+			if _, exists := uniqueGroups[group]; exists {
+				continue
+			}
+			uniqueGroups[group] = struct{}{}
+			result = append(result, group)
+		}
+		sort.Strings(result)
+		modelGroups[model] = result
+	}
+
+	return mergedModels, modelGroups, nil
+}
+
+func (s *SyncService) fetchUpstreamModelsByKey(ctx context.Context, channel *models.Channel, apiKey string) ([]string, error) {
 	// 构建请求URL
 	url := fmt.Sprintf("%s/v1/models", channel.BaseURL)
 
@@ -133,26 +218,8 @@ func (s *SyncService) fetchUpstreamModels(ctx context.Context, channel *models.C
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36")
 
-	// 查询渠道的活跃密钥
-	keys, err := s.keyRepo.FindActiveByChannelID(ctx, channel.ID)
-	if err != nil {
-		s.logger.Warn("查询渠道可用密钥异常",
-			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.String("channel_ nane", channel.Name),
-			slog.String("error", err.Error()),
-		)
-	}
-
-	// 如果有可用密钥，选择第一个并添加到认证头
-	if len(keys) > 0 {
-		selectedKey := keys[0]
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", selectedKey.KeyValue))
-
-	} else {
-		s.logger.Debug("渠道没有可用密钥，查询将以无认证的方式进行",
-			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.String("channel_ nane", channel.Name),
-		)
+	if apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	}
 
 	// 发送请求

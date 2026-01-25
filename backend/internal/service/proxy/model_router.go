@@ -22,13 +22,15 @@ var (
 type ModelRouter struct {
 	logger         *slog.Logger
 	circuitManager *circuit.Manager
+	keySelector    *KeySelector
 }
 
 // NewModelRouter 创建模型路由器
-func NewModelRouter(logger *slog.Logger, circuitManager *circuit.Manager) *ModelRouter {
+func NewModelRouter(logger *slog.Logger, circuitManager *circuit.Manager, keySelector *KeySelector) *ModelRouter {
 	return &ModelRouter{
 		logger:         logger,
 		circuitManager: circuitManager,
+		keySelector:    keySelector,
 	}
 }
 
@@ -66,6 +68,16 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 			}
 
 			if mr.circuitManager == nil || mr.circuitManager.IsModelConfigAvailable(config.ID) {
+				if mr.keySelector != nil && mr.keySelector.GetAvailableKeyCount(channel, config.KeyGroups, traceID) == 0 {
+					mr.logger.Debug("模型配置没有可用密钥",
+						slog.String("trace_id", traceID),
+						slog.Uint64("channel_id", uint64(channel.ID)),
+						slog.Uint64("model_config_id", uint64(config.ID)),
+						slog.String("unified_model", unifiedModel),
+						slog.String("upstream_model", config.UpstreamModel),
+					)
+					continue
+				}
 				availableConfigs = append(availableConfigs, config)
 				continue
 			}

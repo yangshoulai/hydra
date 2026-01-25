@@ -24,6 +24,7 @@ type ModelConfigItem struct {
 	UnifiedModel  string   `json:"unified_model"`
 	UpstreamModel string   `json:"upstream_model" binding:"required"`
 	EndpointTypes []string `json:"endpoint_types"`
+	KeyGroups     []string `json:"key_groups"`
 	Remark        string   `json:"remark"`
 }
 
@@ -33,6 +34,7 @@ type ModelConfigUpdateItem struct {
 	UnifiedModel  string   `json:"unified_model"`
 	UpstreamModel string   `json:"upstream_model" binding:"required"`
 	EndpointTypes []string `json:"endpoint_types"`
+	KeyGroups     []string `json:"key_groups"`
 	Remark        string   `json:"remark"`
 }
 
@@ -97,12 +99,17 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		if len(endpointTypes) == 0 {
 			endpointTypes = []string{"openai"}
 		}
+		keyGroups := item.KeyGroups
+		if len(keyGroups) == 0 {
+			keyGroups = []string{"Default"}
+		}
 
 		config := &models.ChannelModelConfig{
 			ChannelID:     channelID,
 			UnifiedModel:  unifiedModel,
 			UpstreamModel: item.UpstreamModel,
 			EndpointTypes: models.EndpointTypes(endpointTypes),
+			KeyGroups:     models.KeyGroups(keyGroups),
 			Status:        "active",
 			Remark:        item.Remark,
 		}
@@ -163,6 +170,9 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		// 更新端点类型，如果提供了的话
 		if len(item.EndpointTypes) > 0 {
 			config.EndpointTypes = models.EndpointTypes(item.EndpointTypes)
+		}
+		if len(item.KeyGroups) > 0 {
+			config.KeyGroups = models.KeyGroups(item.KeyGroups)
 		}
 
 		if err := h.modelConfigRepo.Update(c.Request.Context(), config); err != nil {

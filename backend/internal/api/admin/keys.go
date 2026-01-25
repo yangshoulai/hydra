@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/models"
@@ -43,6 +44,7 @@ type CreateKeyRequest struct {
 	ChannelID uint   `json:"channel_id" binding:"required"`
 	KeyValue  string `json:"key_value" binding:"required,max=500"`
 	Remark    string `json:"remark" binding:"omitempty,max=200"`
+	KeyGroup  string `json:"key_group" binding:"omitempty,max=100"`
 }
 
 // BatchCreateKeysRequest 批量创建 Key 请求
@@ -50,6 +52,7 @@ type BatchCreateKeysRequest struct {
 	ChannelID uint     `json:"channel_id" binding:"required"`
 	KeyValues []string `json:"key_values" binding:"required,min=1,max=100"`
 	Remark    string   `json:"remark" binding:"omitempty,max=200"`
+	KeyGroup  string   `json:"key_group" binding:"omitempty,max=100"`
 }
 
 // BatchCreateKeysResponse 批量创建 Key 响应
@@ -104,10 +107,15 @@ func (h *KeyHandler) CreateKey(c *gin.Context) {
 	}
 
 	// 创建 Key 对象
+	keyGroup := strings.TrimSpace(req.KeyGroup)
+	if keyGroup == "" {
+		keyGroup = "Default"
+	}
 	key := &models.Key{
 		ChannelID: req.ChannelID,
 		KeyValue:  req.KeyValue,
 		Status:    "active",
+		KeyGroup:  keyGroup,
 		Remark:    req.Remark,
 	}
 
@@ -181,6 +189,11 @@ func (h *KeyHandler) BatchCreateKeys(c *gin.Context) {
 		FailedKeys:   []string{},
 	}
 
+	keyGroup := strings.TrimSpace(req.KeyGroup)
+	if keyGroup == "" {
+		keyGroup = "Default"
+	}
+
 	// 批量创建 Keys
 	for _, keyValue := range req.KeyValues {
 		// 创建 Key 对象
@@ -188,6 +201,7 @@ func (h *KeyHandler) BatchCreateKeys(c *gin.Context) {
 			ChannelID: req.ChannelID,
 			KeyValue:  keyValue,
 			Status:    "active",
+			KeyGroup:  keyGroup,
 			Remark:    req.Remark,
 		}
 

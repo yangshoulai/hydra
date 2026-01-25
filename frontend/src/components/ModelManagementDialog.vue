@@ -184,7 +184,7 @@
           size="small"
           v-model:checked-row-keys="checkedKeys"
           :bordered="true"
-          :scroll-x="1080"
+          :scroll-x="1260"
       />
 
       <!-- 操作按钮 -->
@@ -280,6 +280,19 @@
             />
             <template #feedback>
               选择该模型支持的端点类型，可多选
+            </template>
+          </n-form-item>
+
+          <n-form-item label="密钥分组" path="key_groups">
+            <n-select
+                v-model:value="modelForm.key_groups"
+                :options="keyGroupOptions"
+                placeholder="请选择密钥分组"
+                multiple
+                :input-props="{autocomplete: 'off'}"
+            />
+            <template #feedback>
+              选择该模型可用的密钥分组
             </template>
           </n-form-item>
         </n-form>
@@ -386,11 +399,19 @@ const editMap = ref<Record<string, string>>({})
 // 端点类型编辑状态：key -> endpoint_types
 const endpointTypesEditMap = ref<Record<string, string[]>>({})
 
+// 密钥分组编辑状态：key -> key_groups
+const keyGroupsEditMap = ref<Record<string, string[]>>({})
+
+const keyGroupOptions = ref<{ label: string; value: string }[]>([
+  { label: 'Default', value: 'Default' }
+])
+
 // 表单
 const modelForm = reactive({
   upstream_model: '',
   unified_model: '',
-  endpoint_types: ['openai']
+  endpoint_types: ['openai'],
+  key_groups: ['Default']
 })
 const modelRules = {
   upstream_model: {
@@ -408,6 +429,12 @@ const modelRules = {
     type: 'array',
     message: '请选择至少一个端点类型',
     trigger: ['blur', 'change']
+  },
+  key_groups: {
+    required: true,
+    type: 'array',
+    message: '请选择至少一个密钥分组',
+    trigger: ['blur', 'change']
   }
 }
 
@@ -424,7 +451,7 @@ async function loadEndpoints() {
 // 端点类型选项
 const endpointTypeOptions = computed(() => {
   return endpoints.value.map(ep => ({
-    label: `${ep.name} (${ep.path})`,
+    label: `${ep.name}`,
     value: ep.type
   }))
 })
@@ -465,6 +492,7 @@ interface ModelDisplayType {
   upstream_model: string
   unified_model: string
   endpoint_types: string[]
+  key_groups: string[]
   status: 'configured' | 'to_add' | 'to_remove'
   disabled: boolean
   channel_status: 'active' | 'disabled' | 'non_exist' | 'unconfigured'
@@ -479,6 +507,7 @@ const displayModels = computed<ModelDisplayType[]>(() => {
       upstream_model: config.upstream_model,
       unified_model: config.unified_model,
       endpoint_types: config.endpoint_types || ['openai'],
+      key_groups: config.key_groups || ['Default'],
       status: 'configured' as const,
       disabled: false,
       channel_status: config.status || 'unconfigured'
@@ -503,22 +532,26 @@ const displayModels = computed<ModelDisplayType[]>(() => {
     let status: 'configured' | 'to_add' | 'to_remove'
     let disabled = false
     let endpointTypes = ['openai']
+    let keyGroups = ['Default']
     let channelStatus: 'active' | 'disabled' | 'non_exist' | 'unconfigured' = 'unconfigured'
 
     if (d.type === 'existing') {
       status = 'configured'
       disabled = false
       endpointTypes = d.existing_config?.endpoint_types || ['openai']
+      keyGroups = d.key_groups || d.existing_config?.key_groups || ['Default']
       channelStatus = d.existing_config?.status || 'unconfigured'
     } else if (d.type === 'added') {
       status = 'to_add'
       disabled = false
       endpointTypes = ['openai']
+      keyGroups = d.key_groups || ['Default']
       channelStatus = 'unconfigured'
     } else {
       status = 'to_remove'
       disabled = true // 待删除的模型默认选中且禁用
       endpointTypes = d.existing_config?.endpoint_types || ['openai']
+      keyGroups = d.existing_config?.key_groups || ['Default']
       channelStatus = d.existing_config?.status || 'unconfigured'
     }
 
@@ -527,6 +560,7 @@ const displayModels = computed<ModelDisplayType[]>(() => {
       upstream_model: d.upstream_model,
       unified_model: unifiedModel,
       endpoint_types: endpointTypes,
+      key_groups: keyGroups,
       status,
       disabled,
       channel_status: channelStatus
@@ -567,7 +601,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '上游模型',
     key: 'upstream_model',
-    width: 240,
+    width: 200,
     render(row) {
       return h(NText, {code: true}, {default: () => row.upstream_model})
     }
@@ -594,7 +628,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '端点类型',
     key: 'endpoint_types',
-    width: 200,
+    width: 120,
     render(row) {
       const value = endpointTypesEditMap.value[row.key] || row.endpoint_types
       return h(NSelect, {
@@ -605,6 +639,24 @@ const columns: DataTableColumns<ModelDisplayType> = [
         size: 'small',
         onUpdateValue: (val: string[]) => {
           endpointTypesEditMap.value[row.key] = val
+        }
+      })
+    }
+  },
+  {
+    title: '密钥分组',
+    key: 'key_groups',
+    width: 200,
+    render(row) {
+      const value = keyGroupsEditMap.value[row.key] || row.key_groups
+      return h(NSelect, {
+        value: value,
+        options: keyGroupOptions.value,
+        placeholder: '请选择密钥分组',
+        multiple: true,
+        size: 'small',
+        onUpdateValue: (val: string[]) => {
+          keyGroupsEditMap.value[row.key] = val
         }
       })
     }
@@ -693,6 +745,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
 function initEditMap() {
   editMap.value = {}
   endpointTypesEditMap.value = {}
+  keyGroupsEditMap.value = {}
   const defaultChecked: string[] = []
 
   if (hasSynced.value && !syncFailed.value && syncResult.value) {
@@ -701,14 +754,17 @@ function initEditMap() {
       if (d.type === 'existing' && d.existing_config) {
         editMap.value[d.upstream_model] = d.existing_config.unified_model
         endpointTypesEditMap.value[d.upstream_model] = d.existing_config.endpoint_types || ['openai']
+        keyGroupsEditMap.value[d.upstream_model] = d.key_groups || d.existing_config.key_groups || ['Default']
         defaultChecked.push(d.upstream_model)
       } else if (d.type === 'added') {
         editMap.value[d.upstream_model] = d.upstream_model
         endpointTypesEditMap.value[d.upstream_model] = ['openai']
+        keyGroupsEditMap.value[d.upstream_model] = d.key_groups || ['Default']
         // 新增的模型默认不选中
       } else if (d.type === 'removed') {
         editMap.value[d.upstream_model] = d.existing_config?.unified_model || d.upstream_model
         endpointTypesEditMap.value[d.upstream_model] = d.existing_config?.endpoint_types || ['openai']
+        keyGroupsEditMap.value[d.upstream_model] = d.existing_config?.key_groups || ['Default']
         // 删除的模型默认选中
         defaultChecked.push(d.upstream_model)
       }
@@ -718,6 +774,7 @@ function initEditMap() {
     localConfigs.value.forEach(config => {
       editMap.value[config.upstream_model] = config.unified_model
       endpointTypesEditMap.value[config.upstream_model] = config.endpoint_types || ['openai']
+      keyGroupsEditMap.value[config.upstream_model] = config.key_groups || ['Default']
       defaultChecked.push(config.upstream_model)
     })
   }
@@ -731,6 +788,19 @@ async function loadLocalConfigs() {
   try {
     const channel = await channelApi.get(props.channelId)
     localConfigs.value = channel.model_configs || []
+    const groups = new Set<string>()
+    channel.keys?.forEach((key) => {
+      if (key.key_group) {
+        groups.add(key.key_group)
+      }
+    })
+    if (groups.size === 0) {
+      groups.add('Default')
+    }
+    keyGroupOptions.value = Array.from(groups).sort().map((group) => ({
+      label: group,
+      value: group
+    }))
   } catch (error: any) {
     console.error('Failed to load local configs:', error)
     window.$message?.error('加载本地配置失败')
@@ -798,13 +868,15 @@ async function handleAddModel() {
         props.channelId,
         modelForm.unified_model,
         modelForm.upstream_model,
-        modelForm.endpoint_types
+        modelForm.endpoint_types,
+        modelForm.key_groups
     )
     window.$message?.success('添加成功')
     showAddModelDialog.value = false
     modelForm.upstream_model = ''
     modelForm.unified_model = ''
     modelForm.endpoint_types = ['openai']
+    modelForm.key_groups = ['Default']
     await loadLocalConfigs()
     initEditMap()
     emit('refresh')
@@ -829,11 +901,17 @@ async function handleSave() {
         const isChecked = checkedKeys.value.includes(config.upstream_model)
         const currentUnifiedModel = editMap.value[config.upstream_model]
         const currentEndpointTypes = endpointTypesEditMap.value[config.upstream_model]
+        const currentKeyGroups = keyGroupsEditMap.value[config.upstream_model] || config.key_groups || ['Default']
 
         if (isChecked) {
           // 验证端点类型
           if (!currentEndpointTypes || currentEndpointTypes.length === 0) {
             window.$message?.error(`模型 "${config.upstream_model}" 必须选择至少一个端点类型`)
+            saving.value = false
+            return
+          }
+          if (!currentKeyGroups || currentKeyGroups.length === 0) {
+            window.$message?.error(`模型 "${config.upstream_model}" 必须选择至少一个密钥分组`)
             saving.value = false
             return
           }
@@ -847,14 +925,26 @@ async function handleSave() {
           updatePromises.push(
               channelApi.updateModelConfig(config.id, {
                 unified_model: currentUnifiedModel,
-                endpoint_types: currentEndpointTypes
+                endpoint_types: currentEndpointTypes,
+                key_groups: currentKeyGroups
               })
           )
-        } else if (currentEndpointTypes && JSON.stringify(currentEndpointTypes) !== JSON.stringify(config.endpoint_types)) {
+        } else if (
+          currentEndpointTypes && JSON.stringify(currentEndpointTypes) !== JSON.stringify(config.endpoint_types)
+        ) {
           // 选中且端点类型有修改，更新配置
           updatePromises.push(
               channelApi.updateModelConfig(config.id, {
-                endpoint_types: currentEndpointTypes
+                endpoint_types: currentEndpointTypes,
+                key_groups: currentKeyGroups
+              })
+          )
+        } else if (
+          currentKeyGroups && JSON.stringify(currentKeyGroups) !== JSON.stringify(config.key_groups || ['Default'])
+        ) {
+          updatePromises.push(
+              channelApi.updateModelConfig(config.id, {
+                key_groups: currentKeyGroups
               })
           )
         }
@@ -873,6 +963,7 @@ async function handleSave() {
       for (const key of checkedKeys.value) {
         const unifiedModel = editMap.value[key]
         const endpointTypes = endpointTypesEditMap.value[key]
+        const keyGroups = keyGroupsEditMap.value[key]
 
         if (!unifiedModel) {
           window.$message?.error(`请为上游模型 ${key} 选择统一模型`)
@@ -882,6 +973,12 @@ async function handleSave() {
 
         if (!endpointTypes || endpointTypes.length === 0) {
           window.$message?.error(`请为上游模型 ${key} 选择至少一个端点类型`)
+          saving.value = false
+          return
+        }
+
+        if (!keyGroups || keyGroups.length === 0) {
+          window.$message?.error(`请为上游模型 ${key} 选择至少一个密钥分组`)
           saving.value = false
           return
         }
@@ -896,19 +993,26 @@ async function handleSave() {
         const isChecked = checkedKeys.value.includes(d.upstream_model)
         const currentUnifiedModel = editMap.value[d.upstream_model]
         const currentEndpointTypes = endpointTypesEditMap.value[d.upstream_model]
+        const currentKeyGroups = keyGroupsEditMap.value[d.upstream_model] || d.key_groups || ['Default']
         const existingUnifiedModel = d.existing_config?.unified_model
         const existingEndpointTypes = d.existing_config?.endpoint_types
+        const existingKeyGroups = d.existing_config?.key_groups || ['Default']
 
         if (d.type === 'existing') {
           // 已配置的模型
           if (isChecked) {
             // 选中了，检查是否需要更新
-            if (currentUnifiedModel !== existingUnifiedModel || JSON.stringify(currentEndpointTypes) !== JSON.stringify(existingEndpointTypes)) {
+            if (
+              currentUnifiedModel !== existingUnifiedModel
+              || JSON.stringify(currentEndpointTypes) !== JSON.stringify(existingEndpointTypes)
+              || JSON.stringify(currentKeyGroups) !== JSON.stringify(existingKeyGroups)
+            ) {
               updateModels.push({
                 id: d.existing_config!.id,
                 unified_model: currentUnifiedModel,
                 upstream_model: d.upstream_model,
-                endpoint_types: currentEndpointTypes
+                endpoint_types: currentEndpointTypes,
+                key_groups: currentKeyGroups
               })
             }
           } else {
@@ -921,7 +1025,8 @@ async function handleSave() {
             addModels.push({
               unified_model: currentUnifiedModel,
               upstream_model: d.upstream_model,
-              endpoint_types: currentEndpointTypes
+              endpoint_types: currentEndpointTypes,
+              key_groups: currentKeyGroups
             })
           }
         } else if (d.type === 'removed') {
@@ -957,14 +1062,19 @@ async function handleSave() {
 
 // 测试模型
 async function handleTest(row: ModelDisplayType) {
-  // 获取当前选择的端点类型
-  const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
+      // 获取当前选择的端点类型
+      const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
+      const keyGroups = keyGroupsEditMap.value[row.key] || row.key_groups
 
-  // 验证是否选择了端点类型
-  if (!endpointTypes || endpointTypes.length === 0) {
-    window.$message?.error('请先选择至少一个端点类型')
-    return
-  }
+      // 验证是否选择了端点类型
+      if (!endpointTypes || endpointTypes.length === 0) {
+        window.$message?.error('请先选择至少一个端点类型')
+        return
+      }
+      if (!keyGroups || keyGroups.length === 0) {
+        window.$message?.error('请先选择至少一个密钥分组')
+        return
+      }
 
   // 获取当前选择的统一模型
   const unifiedModel = editMap.value[row.key] || row.unified_model
@@ -980,14 +1090,15 @@ async function handleTest(row: ModelDisplayType) {
   })
 
   // 测试所有端点类型
-  const testPromises = endpointTypes.map(async (endpointType: string) => {
-    try {
-      const result = await channelApi.testModel(
-          props.channelId,
-          row.upstream_model,
-          unifiedModel,
-          endpointType
-      )
+      const testPromises = endpointTypes.map(async (endpointType: string) => {
+        try {
+          const result = await channelApi.testModel(
+              props.channelId,
+              row.upstream_model,
+              unifiedModel,
+              endpointType,
+              keyGroups
+          )
 
       if (result.success) {
         testStatus.value[row.key][endpointType] = 'success'
@@ -1025,6 +1136,7 @@ watch(() => props.modelValue, async (newVal) => {
     hasSynced.value = false
     editMap.value = {}
     endpointTypesEditMap.value = {}
+    keyGroupsEditMap.value = {}
     checkedKeys.value = []
     localConfigs.value = []
     unifiedModels.value = []

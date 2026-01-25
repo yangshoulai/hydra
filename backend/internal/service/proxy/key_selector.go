@@ -3,6 +3,7 @@ package proxy
 import (
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/yangshoulai/hydra/internal/models"
@@ -34,7 +35,7 @@ func NewKeySelector(logger *slog.Logger, circuitManager *circuit.Manager) *KeySe
 
 // SelectKey 从 Channel 的 Key 池中选择一个可用的 Key
 // 使用轮询(Round Robin)策略
-func (ks *KeySelector) SelectKey(channel *models.Channel, traceID string) (*models.Key, error) {
+func (ks *KeySelector) SelectKey(channel *models.Channel, keyGroups []string, traceID string) (*models.Key, error) {
 	if channel == nil {
 		return nil, errors.New("channel is nil")
 	}
@@ -44,7 +45,7 @@ func (ks *KeySelector) SelectKey(channel *models.Channel, traceID string) (*mode
 	}
 
 	// 获取所有可用的 Key
-	availableKeys := ks.getAvailableKeys(channel, traceID)
+	availableKeys := ks.getAvailableKeys(channel, keyGroups, traceID)
 
 	if len(availableKeys) == 0 {
 		return nil, ErrNoAvailableKey
@@ -56,11 +57,30 @@ func (ks *KeySelector) SelectKey(channel *models.Channel, traceID string) (*mode
 }
 
 // getAvailableKeys 获取所有可用的 Key
-func (ks *KeySelector) getAvailableKeys(channel *models.Channel, traceID string) []*models.Key {
+func (ks *KeySelector) getAvailableKeys(channel *models.Channel, keyGroups []string, traceID string) []*models.Key {
 	availableKeys := make([]*models.Key, 0, len(channel.Keys))
+	groupSet := make(map[string]struct{})
+	for _, group := range keyGroups {
+		group = strings.TrimSpace(group)
+		if group == "" {
+			continue
+		}
+		groupSet[group] = struct{}{}
+	}
+	filterByGroup := len(groupSet) > 0
 
 	for i := range channel.Keys {
 		key := &channel.Keys[i]
+
+		if filterByGroup {
+			keyGroup := key.KeyGroup
+			if keyGroup == "" {
+				keyGroup = "Default"
+			}
+			if _, ok := groupSet[keyGroup]; !ok {
+				continue
+			}
+		}
 
 		// 检查 Key 是否被禁用
 		if key.Status == "disabled" {
@@ -120,9 +140,9 @@ func (ks *KeySelector) ResetCounter(channelID uint) {
 }
 
 // GetAvailableKeyCount 获取指定 Channel 的可用 Key 数量
-func (ks *KeySelector) GetAvailableKeyCount(channel *models.Channel, traceID string) int {
+func (ks *KeySelector) GetAvailableKeyCount(channel *models.Channel, keyGroups []string, traceID string) int {
 	if channel == nil {
 		return 0
 	}
-	return len(ks.getAvailableKeys(channel, traceID))
+	return len(ks.getAvailableKeys(channel, keyGroups, traceID))
 }
