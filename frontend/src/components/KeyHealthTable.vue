@@ -85,6 +85,7 @@ function calculateCoolingTime(coolingAt?: string): string | undefined {
 const displayData = computed<KeyHealthRow[]>(() => {
   const rows = channel.value?.keys?.map((key) => {
     const testResult = testResults.value.get(key.id)
+    const testStatus = (testingKeys.value.has(key.id) ? 'testing' : testResult?.status) as KeyHealthRow['test_status']
     return {
       key_id: key.id,
       key_remark: key.remark,
@@ -92,7 +93,7 @@ const displayData = computed<KeyHealthRow[]>(() => {
       key_preview: key.key_preview || maskKey(key.key_value),
       key_group: key.key_group || 'Default',
       status: key.status,
-      test_status: testingKeys.value.has(key.id) ? 'testing' : testResult?.status,
+      test_status: testStatus,
       test_message: testResult?.message,
       message: '',
       latency: testResult?.latency || '',
