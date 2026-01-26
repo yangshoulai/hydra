@@ -403,7 +403,7 @@ const endpointTypesEditMap = ref<Record<string, string[]>>({})
 const keyGroupsEditMap = ref<Record<string, string[]>>({})
 
 const keyGroupOptions = ref<{ label: string; value: string }[]>([
-  { label: 'Default', value: 'Default' }
+  {label: 'Default', value: 'Default'}
 ])
 
 // 表单
@@ -936,7 +936,7 @@ async function handleSave() {
               })
           )
         } else if (
-          currentEndpointTypes && JSON.stringify(currentEndpointTypes) !== JSON.stringify(config.endpoint_types)
+            currentEndpointTypes && JSON.stringify(currentEndpointTypes) !== JSON.stringify(config.endpoint_types)
         ) {
           // 选中且端点类型有修改，更新配置
           updatePromises.push(
@@ -946,7 +946,7 @@ async function handleSave() {
               })
           )
         } else if (
-          currentKeyGroups && JSON.stringify(currentKeyGroups) !== JSON.stringify(config.key_groups || ['Default'])
+            currentKeyGroups && JSON.stringify(currentKeyGroups) !== JSON.stringify(config.key_groups || ['Default'])
         ) {
           updatePromises.push(
               channelApi.updateModelConfig(config.id, {
@@ -1009,9 +1009,9 @@ async function handleSave() {
           if (isChecked) {
             // 选中了，检查是否需要更新
             if (
-              currentUnifiedModel !== existingUnifiedModel
-              || JSON.stringify(currentEndpointTypes) !== JSON.stringify(existingEndpointTypes)
-              || JSON.stringify(currentKeyGroups) !== JSON.stringify(existingKeyGroups)
+                currentUnifiedModel !== existingUnifiedModel
+                || JSON.stringify(currentEndpointTypes) !== JSON.stringify(existingEndpointTypes)
+                || JSON.stringify(currentKeyGroups) !== JSON.stringify(existingKeyGroups)
             ) {
               updateModels.push({
                 id: d.existing_config!.id,
@@ -1068,19 +1068,19 @@ async function handleSave() {
 
 // 测试模型
 async function handleTest(row: ModelDisplayType) {
-      // 获取当前选择的端点类型
-      const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
-      const keyGroups = keyGroupsEditMap.value[row.key] || row.key_groups
+  // 获取当前选择的端点类型
+  const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
+  const keyGroups = keyGroupsEditMap.value[row.key] || row.key_groups
 
-      // 验证是否选择了端点类型
-      if (!endpointTypes || endpointTypes.length === 0) {
-        window.$message?.error('请先选择至少一个端点类型')
-        return
-      }
-      if (!keyGroups || keyGroups.length === 0) {
-        window.$message?.error('请先选择至少一个密钥分组')
-        return
-      }
+  // 验证是否选择了端点类型
+  if (!endpointTypes || endpointTypes.length === 0) {
+    window.$message?.error('请先选择至少一个端点类型')
+    return
+  }
+  if (!keyGroups || keyGroups.length === 0) {
+    window.$message?.error('请先选择至少一个密钥分组')
+    return
+  }
 
   // 获取当前选择的统一模型
   const unifiedModel = editMap.value[row.key] || row.unified_model
@@ -1096,15 +1096,15 @@ async function handleTest(row: ModelDisplayType) {
   })
 
   // 测试所有端点类型
-      const testPromises = endpointTypes.map(async (endpointType: string) => {
-        try {
-          const result = await channelApi.testModel(
-              props.channelId,
-              row.upstream_model,
-              unifiedModel,
-              endpointType,
-              keyGroups
-          )
+  const testPromises = endpointTypes.map(async (endpointType: string) => {
+    try {
+      const result = await channelApi.testModel(
+          props.channelId,
+          row.upstream_model,
+          unifiedModel,
+          endpointType,
+          keyGroups
+      )
 
       if (result.success) {
         testStatus.value[row.key][endpointType] = 'success'

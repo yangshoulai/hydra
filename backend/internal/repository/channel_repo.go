@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"gorm.io/gorm"
@@ -111,10 +112,12 @@ func (r *ChannelRepository) ListWithFilter(ctx context.Context, offset, limit in
 	// 应用过滤条件
 	if filter != nil {
 		if filter.Name != "" {
-			query = query.Where("name LIKE ?", "%"+filter.Name+"%")
+			name := strings.ToLower(filter.Name)
+			query = query.Where("LOWER(name) LIKE ?", "%"+name+"%")
 		}
 		if filter.BaseURL != "" {
-			query = query.Where("base_url LIKE ?", "%"+filter.BaseURL+"%")
+			baseURL := strings.ToLower(filter.BaseURL)
+			query = query.Where("LOWER(base_url) LIKE ?", "%"+baseURL+"%")
 		}
 		if filter.Status != "" {
 			query = query.Where("status = ?", filter.Status)
