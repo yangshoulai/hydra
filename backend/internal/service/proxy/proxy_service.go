@@ -145,6 +145,21 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		return err
 	}
 
+	if ps.modelConfigRepo != nil {
+		supported, validateErr := ps.modelConfigRepo.ExistsActiveUnifiedModel(ctx, unifiedModel, endpointType)
+		if validateErr != nil {
+			ps.logErrorWithTrace("校验模型异常", traceID, slog.String("error", validateErr.Error()))
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusInternalServerError, "Failed to validate model", traceID)
+			mainLog.EndTime(time.Now()).StatusCode(http.StatusInternalServerError).ErrorMessage("校验模型异常: " + validateErr.Error())
+			ps.auditLogger.LogAsync(mainLog.Build())
+			return validateErr
+		}
+		if !supported {
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusNotFound, "Model not found: "+unifiedModel, traceID)
+			return ErrModelNotFound
+		}
+	}
+
 	isStream := ps.requestBuilder.IsStreamRequest(bodyBytes, endpointType, c.Request.URL.Path)
 	mainLog.RequestedModel(unifiedModel).IsStream(isStream)
 

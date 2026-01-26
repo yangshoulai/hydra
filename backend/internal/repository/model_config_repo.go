@@ -184,3 +184,18 @@ func (r *ChannelModelConfigRepository) ListUnifiedModels(ctx context.Context) ([
 
 	return modelNames, err
 }
+
+// ExistsActiveUnifiedModel 检查 models 表中是否存在统一模型
+func (r *ChannelModelConfigRepository) ExistsActiveUnifiedModel(ctx context.Context, unifiedModel string, endpointType string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.Model{}).
+		Where("name = ?", unifiedModel).
+		Limit(1).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}

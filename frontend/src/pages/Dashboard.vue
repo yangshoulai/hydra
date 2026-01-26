@@ -50,7 +50,7 @@
             </n-tag>
           </div>
           <div class="metric-card__value">
-            {{ formatNumber(metrics?.total_requests || 0) }}
+            {{ formatCompactNumber(metrics?.total_requests || 0) }}
           </div>
           <div class="metric-card__label">请求总数</div>
         </div>
@@ -129,9 +129,9 @@
             </n-tag>
           </div>
           <div class="metric-card__value">
-            {{ formatTokenNumber(metrics?.total_prompt_tokens || 0) }}
+            {{ formatCompactNumber(metrics?.total_prompt_tokens || 0) }}
             <span class="metric-card__divider">/</span>
-            {{ formatTokenNumber(metrics?.total_completion_tokens || 0) }}
+            {{ formatCompactNumber(metrics?.total_completion_tokens || 0) }}
           </div>
           <div class="metric-card__label">输入 / 输出 Tokens</div>
         </div>
@@ -203,7 +203,7 @@
                 </n-icon>
               </div>
               <div class="stat-item__content">
-                <div class="stat-item__value">{{ formatNumber(metrics?.model_stats?.total_requests || 0) }}</div>
+                <div class="stat-item__value">{{ formatCompactNumber(metrics?.model_stats?.total_requests || 0) }}</div>
                 <div class="stat-item__label">请求总数</div>
               </div>
             </div>
@@ -216,7 +216,7 @@
                 </n-icon>
               </div>
               <div class="stat-item__content">
-                <div class="stat-item__value">{{ formatNumber(metrics?.model_stats?.success_requests || 0) }}</div>
+                <div class="stat-item__value">{{ formatCompactNumber(metrics?.model_stats?.success_requests || 0) }}</div>
                 <div class="stat-item__label">成功请求</div>
               </div>
             </div>
@@ -229,7 +229,7 @@
                 </n-icon>
               </div>
               <div class="stat-item__content">
-                <div class="stat-item__value">{{ formatNumber(metrics?.model_stats?.failed_requests || 0) }}</div>
+                <div class="stat-item__value">{{ formatCompactNumber(metrics?.model_stats?.failed_requests || 0) }}</div>
                 <div class="stat-item__label">失败请求</div>
               </div>
             </div>
@@ -303,7 +303,7 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
     key: 'total_requests',
     width: 80,
     align: 'right',
-    render: (row) => formatNumber(row.total_requests),
+    render: (row) => formatCompactNumber(row.total_requests),
     sorter: (a, b) => a.total_requests - b.total_requests
   },
   {
@@ -311,7 +311,7 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
     key: 'prompt_tokens',
     width: 110,
     align: 'right',
-    render: (row) => formatTokenNumber(row.prompt_tokens),
+    render: (row) => formatCompactNumber(row.prompt_tokens),
     sorter: (a, b) => a.prompt_tokens - b.prompt_tokens
   },
   {
@@ -319,7 +319,7 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
     key: 'completion_tokens',
     width: 110,
     align: 'right',
-    render: (row) => formatTokenNumber(row.completion_tokens),
+    render: (row) => formatCompactNumber(row.completion_tokens),
     sorter: (a, b) => a.completion_tokens - b.completion_tokens
   },
   {
@@ -390,7 +390,7 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
     key: 'total_requests',
     width: 80,
     align: 'right',
-    render: (row) => formatNumber(row.total_requests),
+    render: (row) => formatCompactNumber(row.total_requests),
     sorter: (a, b) => a.total_requests - b.total_requests
   },
   {
@@ -398,7 +398,7 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
     key: 'success_requests',
     width: 80,
     align: 'right',
-    render: (row) => formatNumber(row.success_requests),
+    render: (row) => formatCompactNumber(row.success_requests),
     sorter: (a, b) => a.success_requests - b.success_requests
   },
   {
@@ -406,7 +406,7 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
     key: 'failed_requests',
     width: 80,
     align: 'right',
-    render: (row) => formatNumber(row.failed_requests),
+    render: (row) => formatCompactNumber(row.failed_requests),
     sorter: (a, b) => a.failed_requests - b.failed_requests
   },
   {
@@ -434,12 +434,7 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
 ]
 
 
-// 格式化数字（添加千分位）
-function formatNumber(value: number): string {
-  return value.toLocaleString()
-}
-
-function formatTokenNumber(value: number): string {
+function formatCompactNumber(value: number): string {
   if (!Number.isFinite(value)) {
     return '0.00'
   }
@@ -460,7 +455,7 @@ function formatTokenNumber(value: number): string {
     }
   }
 
-  return `${sign}${absValue.toFixed(2)}`
+  return `${sign}${Math.round(absValue)}`
 }
 
 

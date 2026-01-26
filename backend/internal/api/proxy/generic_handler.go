@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -47,6 +48,10 @@ func (h *GenericHandler) Handle(c *gin.Context) {
 	duration := time.Since(startTime)
 
 	if err != nil {
+		if errors.Is(err, proxy.ErrModelNotFound) {
+			return
+		}
+
 		h.logger.Error("请求处理失败",
 			slog.String("trace_id", traceID),
 			slog.String("endpoint", h.endpointName),

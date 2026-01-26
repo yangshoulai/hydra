@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	// ErrModelNotFound 模型不存在
-	ErrModelNotFound = errors.New("model not found in channel")
+	// ErrModelNotFoundInChannel 渠道中不存在模型
+	ErrModelNotFoundInChannel = errors.New("model not found in channel")
 	// ErrNoModelMapping 无模型映射配置
 	ErrNoModelMapping = errors.New("no model mapping configuration")
 	// ErrNoAvailableModelConfig 模型配置全部处于冷却
@@ -98,7 +98,7 @@ func (mr *ModelRouter) RouteModel(unifiedModel string, channel *models.Channel, 
 			slog.String("channel_name", channel.Name),
 			slog.String("unified_model", unifiedModel),
 		)
-		return nil, ErrModelNotFound
+		return nil, ErrModelNotFoundInChannel
 	}
 
 	if len(availableConfigs) == 0 {

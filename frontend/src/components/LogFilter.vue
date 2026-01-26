@@ -85,7 +85,7 @@
             <n-date-picker
                 v-model:value="dateRange"
                 type="datetimerange"
-                clearable
+                :clearable="false"
                 @update:value="handleDateChange"
             />
           </n-form-item-gi>
@@ -155,6 +155,8 @@ const formData = reactive<{
 
 // 日期范围
 const dateRange = ref<[number, number] | null>(null)
+const lastValidRange = ref<[number, number] | null>(null)
+const maxRangeMs = 30 * 24 * 60 * 60 * 1000
 
 // 渠道相关
 const loadingChannels = ref(false)
@@ -215,13 +217,25 @@ async function loadModels() {
 
 // 处理日期变化
 function handleDateChange(value: [number, number] | null) {
-  if (value) {
-    formData.start_time = new Date(value[0]).toISOString()
-    formData.end_time = new Date(value[1]).toISOString()
-  } else {
-    formData.start_time = null
-    formData.end_time = null
+  if (!value) {
+    if (lastValidRange.value) {
+      const [start, end] = lastValidRange.value
+      dateRange.value = [start, end]
+      formData.start_time = new Date(start).toISOString()
+      formData.end_time = new Date(end).toISOString()
+    }
+    return
   }
+
+  let [start, end] = value
+  if (end - start > maxRangeMs) {
+    end = start + maxRangeMs
+  }
+
+  dateRange.value = [start, end]
+  lastValidRange.value = [start, end]
+  formData.start_time = new Date(start).toISOString()
+  formData.end_time = new Date(end).toISOString()
 }
 
 // 处理查询
@@ -248,7 +262,6 @@ function handleReset() {
   formData.is_success = null
   formData.start_time = null
   formData.end_time = null
-  dateRange.value = null
   setDefaultDateTime()
 
   // 重置后自动查询
@@ -283,6 +296,7 @@ function setDefaultDateTime() {
   const dayAgo = now - 24 * 60 * 60 * 1000  // 24小时前
   const dayAhead = now + 24 * 60 * 60 * 1000 // 24小时后
   dateRange.value = [dayAgo, dayAhead]
+  lastValidRange.value = [dayAgo, dayAhead]
   formData.start_time = new Date(dayAgo).toISOString()
   formData.end_time = new Date(dayAhead).toISOString()
 }

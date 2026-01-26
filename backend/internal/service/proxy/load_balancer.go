@@ -66,7 +66,7 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 	// 2. 路由模型
 	selectedConfig, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType, traceID)
 	if err != nil {
-		if errors.Is(err, ErrModelNotFound) || errors.Is(err, ErrNoModelMapping) || errors.Is(err, ErrNoAvailableModelConfig) {
+		if errors.Is(err, ErrModelNotFoundInChannel) || errors.Is(err, ErrNoModelMapping) || errors.Is(err, ErrNoAvailableModelConfig) {
 			return nil, ErrNoAvailableChannel
 		}
 		return nil, err
