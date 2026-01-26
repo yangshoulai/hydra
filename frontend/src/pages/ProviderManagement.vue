@@ -540,14 +540,6 @@ const columns: DataTableColumns<Provider> = [
     sorter: (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())
   },
   {
-    title: '备注',
-    key: 'remark',
-    width: 200,
-    ellipsis: {
-      tooltip: true
-    }
-  },
-  {
     title: '创建时间',
     key: 'created_at',
     align: 'center',
@@ -557,9 +549,17 @@ const columns: DataTableColumns<Provider> = [
     }
   },
   {
+    title: '备注',
+    key: 'remark',
+    width: 160,
+    ellipsis: {
+      tooltip: true
+    }
+  },
+  {
     title: '操作',
     key: 'actions',
-    width: 120,
+    width: 160,
     fixed: 'right',
     align: 'center',
     render: (row) => {

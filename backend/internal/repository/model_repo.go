@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"gorm.io/gorm"
@@ -112,7 +113,8 @@ func (r *ModelRepository) ListWithFilter(
 	// 应用过滤条件
 	if filter != nil {
 		if filter.Name != "" {
-			query = query.Where("models.name LIKE ?", "%"+filter.Name+"%")
+			name := strings.ToLower(filter.Name)
+			query = query.Where("LOWER(models.name) LIKE ?", "%"+name+"%")
 		}
 		if filter.ProviderID != "" {
 			query = query.Where("models.provider_id = ?", filter.ProviderID)
@@ -124,7 +126,8 @@ func (r *ModelRepository) ListWithFilter(
 	countQuery := r.db.WithContext(ctx).Table("models")
 	if filter != nil {
 		if filter.Name != "" {
-			countQuery = countQuery.Where("name LIKE ?", "%"+filter.Name+"%")
+			name := strings.ToLower(filter.Name)
+			countQuery = countQuery.Where("LOWER(name) LIKE ?", "%"+name+"%")
 		}
 		if filter.ProviderID != "" {
 			countQuery = countQuery.Where("provider_id = ?", filter.ProviderID)

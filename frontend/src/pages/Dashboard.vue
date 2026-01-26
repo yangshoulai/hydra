@@ -129,9 +129,9 @@
             </n-tag>
           </div>
           <div class="metric-card__value">
-            {{ formatNumber(metrics?.total_prompt_tokens || 0) }}
+            {{ formatTokenNumber(metrics?.total_prompt_tokens || 0) }}
             <span class="metric-card__divider">/</span>
-            {{ formatNumber(metrics?.total_completion_tokens || 0) }}
+            {{ formatTokenNumber(metrics?.total_completion_tokens || 0) }}
           </div>
           <div class="metric-card__label">输入 / 输出 Tokens</div>
         </div>
@@ -311,7 +311,7 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
     key: 'prompt_tokens',
     width: 110,
     align: 'right',
-    render: (row) => formatNumber(row.prompt_tokens),
+    render: (row) => formatTokenNumber(row.prompt_tokens),
     sorter: (a, b) => a.prompt_tokens - b.prompt_tokens
   },
   {
@@ -319,7 +319,7 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
     key: 'completion_tokens',
     width: 110,
     align: 'right',
-    render: (row) => formatNumber(row.completion_tokens),
+    render: (row) => formatTokenNumber(row.completion_tokens),
     sorter: (a, b) => a.completion_tokens - b.completion_tokens
   },
   {
@@ -437,6 +437,30 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
 // 格式化数字（添加千分位）
 function formatNumber(value: number): string {
   return value.toLocaleString()
+}
+
+function formatTokenNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '0.00'
+  }
+
+  const units = [
+    {value: 1e12, symbol: 'T'},
+    {value: 1e9, symbol: 'B'},
+    {value: 1e6, symbol: 'M'},
+    {value: 1e3, symbol: 'K'}
+  ]
+
+  const sign = value < 0 ? '-' : ''
+  const absValue = Math.abs(value)
+
+  for (const unit of units) {
+    if (absValue >= unit.value) {
+      return `${sign}${(absValue / unit.value).toFixed(2)}${unit.symbol}`
+    }
+  }
+
+  return `${sign}${absValue.toFixed(2)}`
 }
 
 

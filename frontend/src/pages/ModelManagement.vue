@@ -4,7 +4,7 @@
     <n-card :bordered="false" class="page-header-card">
       <n-space justify="space-between" align="center">
         <n-space vertical :size="4">
-          <n-text class="page-title">统一模型管理</n-text>
+          <n-text class="page-title">模型管理</n-text>
           <n-text depth="3" class="page-subtitle">
             管理系统中的所有统一模型，用于将不同渠道的模型映射到统一名称
           </n-text>
@@ -72,7 +72,7 @@
         striped
         :single-line="false"
         :loading="loading"
-        :scroll-x="1320"
+        :scroll-x="1160"
         :row-key="(row: Model) => row.id"
         @update:sorter="handleSorterChange"
     />
@@ -465,28 +465,28 @@ const columns = computed<DataTableColumns<Model>>(() => {
       width: 280,
       render: (row) => {
         return h(
-          NTooltip,
-          {},
-          {
-            trigger: () =>
-              h(
-                NButton,
-                {
-                  text: true,
-                  type: 'primary',
-                  onClick: (e: MouseEvent) => handleCopyModelName(row, e)
-                },
-                {
-                  default: () => [
-                    h(NText, {code: true, style: {cursor: 'pointer'}}, {default: () => row.name}),
-                    h(NIcon, {style: {marginLeft: '8px', fontSize: '14px'}}, {
-                      default: () => h(ClipboardOutline)
-                    })
-                  ]
-                }
-              ),
-            default: () => '点击复制模型名称'
-          }
+            NTooltip,
+            {},
+            {
+              trigger: () =>
+                  h(
+                      NButton,
+                      {
+                        text: true,
+                        type: 'primary',
+                        onClick: (e: MouseEvent) => handleCopyModelName(row, e)
+                      },
+                      {
+                        default: () => [
+                          h(NText, {code: true, style: {cursor: 'pointer'}}, {default: () => row.name}),
+                          h(NIcon, {style: {marginLeft: '8px', fontSize: '14px'}}, {
+                            default: () => h(ClipboardOutline)
+                          })
+                        ]
+                      }
+                  ),
+              default: () => '点击复制模型名称'
+            }
         )
       },
       sortable: true,
@@ -496,7 +496,7 @@ const columns = computed<DataTableColumns<Model>>(() => {
     {
       title: '厂商',
       key: 'provider',
-      width: 200,
+      width: 160,
       render: (row) => {
         if (row.provider) {
           return h(NText, {tag: 'strong'}, {default: () => row.provider!.name})
@@ -507,17 +507,9 @@ const columns = computed<DataTableColumns<Model>>(() => {
     {
       title: '渠道数',
       key: 'channel_count',
-      width: 120,
+      width: 80,
       align: 'right',
       render: (row) => row.channel_count || 0
-    },
-    {
-      title: '备注',
-      key: 'remark',
-      width: 200,
-      ellipsis: {
-        tooltip: true
-      }
     },
     {
       title: '创建时间',
@@ -526,6 +518,14 @@ const columns = computed<DataTableColumns<Model>>(() => {
       align: 'center',
       render: (row) => {
         return new Date(row.created_at).toLocaleString('zh-CN')
+      }
+    },
+    {
+      title: '备注',
+      key: 'remark',
+      width: 120,
+      ellipsis: {
+        tooltip: true
       }
     },
     {
