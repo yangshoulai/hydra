@@ -75,6 +75,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_10_0_AddKeyGroups(tx)
 			},
 		},
+		// v1.11.0 添加模型配置冷却字段
+		{
+			ID: "v1.11.0_add_model_config_cooling",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_11_0_AddModelConfigCooling(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

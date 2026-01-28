@@ -29,6 +29,7 @@ export interface KeyStats {
 
 export interface ModelStatusCount {
   active: number
+  cooling: number
   disabled: number
   non_exist: number
 }
@@ -51,10 +52,11 @@ export interface ChannelModelConfig {
   channel_id: number
   unified_model: string
   upstream_model: string
-  status: 'active' | 'disabled' | 'non_exist'
+  status: 'active' | 'cooling' | 'disabled' | 'non_exist'
   endpoint_types?: string[]
   key_groups?: string[]
   remark: string
+  cooling_at?: string
   created_at: string
   updated_at: string
 }

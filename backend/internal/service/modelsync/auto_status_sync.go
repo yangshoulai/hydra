@@ -66,16 +66,21 @@ func (s *SyncService) AutoSyncChannelModelStatuses(ctx context.Context, channel 
 		switch {
 		case !exists && cfg.Status != "non_exist":
 			cfg.Status = "non_exist"
+			cfg.CoolingAt = nil
 			if err := s.modelConfigRepo.Update(ctx, cfg); err != nil {
 				return nil, err
 			}
 			result.UpdatedToNonExist++
+			s.circuitManager.RemoveModelConfigBreaker(cfg.ID)
+
 		case exists && cfg.Status == "non_exist":
 			cfg.Status = "active"
+			cfg.CoolingAt = nil
 			if err := s.modelConfigRepo.Update(ctx, cfg); err != nil {
 				return nil, err
 			}
 			result.UpdatedToActive++
+			s.circuitManager.RemoveModelConfigBreaker(cfg.ID)
 		}
 	}
 

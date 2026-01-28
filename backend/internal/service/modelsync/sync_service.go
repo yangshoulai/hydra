@@ -13,6 +13,7 @@ import (
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
+	"github.com/yangshoulai/hydra/internal/service/circuit"
 )
 
 // SyncService 模型同步服务
@@ -21,6 +22,7 @@ type SyncService struct {
 	channelRepo     *repository.ChannelRepository
 	modelConfigRepo *repository.ChannelModelConfigRepository
 	keyRepo         *repository.KeyRepository
+	circuitManager  *circuit.Manager
 	diffCalculator  *DiffCalculator
 	httpClient      *http.Client
 }
@@ -31,12 +33,14 @@ func NewSyncService(
 	channelRepo *repository.ChannelRepository,
 	modelConfigRepo *repository.ChannelModelConfigRepository,
 	keyRepo *repository.KeyRepository,
+	circuitManager *circuit.Manager,
 ) *SyncService {
 	return &SyncService{
 		logger:          logger,
 		channelRepo:     channelRepo,
 		modelConfigRepo: modelConfigRepo,
 		keyRepo:         keyRepo,
+		circuitManager:  circuitManager,
 		diffCalculator:  NewDiffCalculator(logger),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,

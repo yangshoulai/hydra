@@ -1,18 +1,11 @@
 package proxy
 
 import (
-	"errors"
 	"log/slog"
-	"strings"
 	"sync"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
-)
-
-var (
-	// ErrNoAvailableKey 无可用 Key
-	ErrNoAvailableKey = errors.New("no available key in pool")
 )
 
 // KeySelector Key 选择器,从可用 Key 池中轮询选择
@@ -35,79 +28,14 @@ func NewKeySelector(logger *slog.Logger, circuitManager *circuit.Manager) *KeySe
 
 // SelectKey 从 Channel 的 Key 池中选择一个可用的 Key
 // 使用轮询(Round Robin)策略
-func (ks *KeySelector) SelectKey(channel *models.Channel, keyGroups []string, traceID string) (*models.Key, error) {
-	if channel == nil {
-		return nil, errors.New("channel is nil")
-	}
-
-	if len(channel.Keys) == 0 {
-		return nil, ErrNoAvailableKey
-	}
-
-	// 获取所有可用的 Key
-	availableKeys := ks.getAvailableKeys(channel, keyGroups, traceID)
-
-	if len(availableKeys) == 0 {
-		return nil, ErrNoAvailableKey
-	}
-
+func (ks *KeySelector) SelectKey(channel *models.Channel, availableKeys []models.Key) models.Key {
 	// 使用轮询策略选择 Key
 	selectedKey := ks.selectByRoundRobin(channel.ID, availableKeys)
-	return selectedKey, nil
-}
-
-// getAvailableKeys 获取所有可用的 Key
-func (ks *KeySelector) getAvailableKeys(channel *models.Channel, keyGroups []string, traceID string) []*models.Key {
-	availableKeys := make([]*models.Key, 0, len(channel.Keys))
-	groupSet := make(map[string]struct{})
-	for _, group := range keyGroups {
-		group = strings.TrimSpace(group)
-		if group == "" {
-			continue
-		}
-		groupSet[group] = struct{}{}
-	}
-	filterByGroup := len(groupSet) > 0
-
-	for i := range channel.Keys {
-		key := &channel.Keys[i]
-
-		if filterByGroup {
-			keyGroup := key.KeyGroup
-			if keyGroup == "" {
-				keyGroup = "Default"
-			}
-			if _, ok := groupSet[keyGroup]; !ok {
-				continue
-			}
-		}
-
-		// 检查 Key 是否被禁用
-		if key.Status == "disabled" {
-			ks.logger.Debug("密钥被禁用",
-				slog.String("trace_id", traceID),
-				slog.Uint64("key_id", uint64(key.ID)),
-			)
-			continue
-		}
-
-		// 检查熔断器状态
-		if !ks.circuitManager.IsKeyAvailable(key.ID) {
-			ks.logger.Debug("密钥不可用 (circuit breaker)",
-				slog.String("trace_id", traceID),
-				slog.Uint64("key_id", uint64(key.ID)),
-			)
-			continue
-		}
-
-		availableKeys = append(availableKeys, key)
-	}
-
-	return availableKeys
+	return selectedKey
 }
 
 // selectByRoundRobin 使用轮询策略选择 Key
-func (ks *KeySelector) selectByRoundRobin(channelID uint, availableKeys []*models.Key) *models.Key {
+func (ks *KeySelector) selectByRoundRobin(channelID uint, availableKeys []models.Key) models.Key {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 
@@ -130,19 +58,4 @@ func (ks *KeySelector) selectByRoundRobin(channelID uint, availableKeys []*model
 	}
 
 	return selectedKey
-}
-
-// ResetCounter 重置指定 Channel 的轮询计数器
-func (ks *KeySelector) ResetCounter(channelID uint) {
-	ks.mu.Lock()
-	defer ks.mu.Unlock()
-	delete(ks.roundRobinCounters, channelID)
-}
-
-// GetAvailableKeyCount 获取指定 Channel 的可用 Key 数量
-func (ks *KeySelector) GetAvailableKeyCount(channel *models.Channel, keyGroups []string, traceID string) int {
-	if channel == nil {
-		return 0
-	}
-	return len(ks.getAvailableKeys(channel, keyGroups, traceID))
 }

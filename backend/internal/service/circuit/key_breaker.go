@@ -9,10 +9,9 @@ import (
 type KeyState string
 
 const (
-	KeyStateActive   KeyState = "active"    // 正常状态
-	KeyStateDead     KeyState = "dead"      // 永久禁用(硬故障)
-	KeyStateCooling  KeyState = "cooling"   // 冷却中(软故障)
-	KeyStateHalfOpen KeyState = "half_open" // 半开状态(探测恢复)
+	KeyStateActive  KeyState = "active"  // 正常状态
+	KeyStateDead    KeyState = "dead"    // 永久禁用(硬故障)
+	KeyStateCooling KeyState = "cooling" // 冷却中(软故障)
 )
 
 // KeyBreaker Key 级别熔断器
@@ -30,19 +29,6 @@ type KeyBreaker struct {
 	coolingDuration  time.Duration // 冷却时长
 }
 
-// NewKeyBreaker 创建 Key 熔断器
-func NewKeyBreaker(keyID uint, failureThreshold int, coolingDuration time.Duration) *KeyBreaker {
-	return &KeyBreaker{
-		keyID:            keyID,
-		state:            KeyStateActive,
-		failureCount:     0,
-		lastFailure:      time.Time{},
-		lastSuccess:      time.Time{},
-		failureThreshold: failureThreshold,
-		coolingDuration:  coolingDuration,
-	}
-}
-
 // RecordSuccess 记录成功请求
 func (kb *KeyBreaker) RecordSuccess() {
 	kb.mu.Lock()
@@ -51,10 +37,7 @@ func (kb *KeyBreaker) RecordSuccess() {
 	kb.lastSuccess = time.Now()
 	kb.failureCount = 0
 
-	// 如果处于半开状态,恢复为正常
-	if kb.state == KeyStateHalfOpen {
-		kb.state = KeyStateActive
-	}
+	kb.state = KeyStateActive
 }
 
 // RecordHardFailure 记录硬故障(401/402/403/429 quota exceeded)
@@ -76,52 +59,14 @@ func (kb *KeyBreaker) RecordSoftFailure() {
 
 	// 如果连续失败次数达到阈值,进入冷却状态
 	if kb.failureCount >= kb.failureThreshold {
-		if kb.state == KeyStateHalfOpen {
-			// 半开状态失败,重新进入冷却
-			kb.state = KeyStateCooling
-		} else if kb.state == KeyStateActive {
-			// 正常状态达到阈值,进入冷却
-			kb.state = KeyStateCooling
-		}
+		kb.state = KeyStateCooling
 	}
-}
-
-// GetState 获取当前状态
-func (kb *KeyBreaker) GetState() KeyState {
-	kb.mu.RLock()
-	defer kb.mu.RUnlock()
-
-	// 检查是否可以从冷却状态转换为半开状态
-	if kb.state == KeyStateCooling {
-		if time.Since(kb.lastFailure) >= kb.coolingDuration {
-			kb.mu.RUnlock()
-			kb.mu.Lock()
-			// 双重检查
-			if kb.state == KeyStateCooling && time.Since(kb.lastFailure) >= kb.coolingDuration {
-				kb.state = KeyStateHalfOpen
-				kb.failureCount = 0
-			}
-			kb.mu.Unlock()
-			kb.mu.RLock()
-		}
-	}
-
-	return kb.state
 }
 
 // IsAvailable 检查 Key 是否可用
 func (kb *KeyBreaker) IsAvailable() bool {
-	state := kb.GetState()
-	return state == KeyStateActive || state == KeyStateHalfOpen
-}
-
-// Reset 重置熔断器(管理员手动重置)
-func (kb *KeyBreaker) Reset() {
-	kb.mu.Lock()
-	defer kb.mu.Unlock()
-
-	kb.state = KeyStateActive
-	kb.failureCount = 0
+	state := kb.state
+	return state == KeyStateActive || (state == KeyStateCooling && time.Since(kb.lastFailure) >= kb.coolingDuration)
 }
 
 // GetStats 获取统计信息

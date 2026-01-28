@@ -97,11 +97,6 @@ type ChannelSortOptions struct {
 	Direction string // 排序方向：asc, desc
 }
 
-// List 分页查询渠道列表
-func (r *ChannelRepository) List(ctx context.Context, offset, limit int) ([]*models.Channel, int64, error) {
-	return r.ListWithFilter(ctx, offset, limit, nil, nil)
-}
-
 // ListWithFilter 分页查询渠道列表（带过滤）
 func (r *ChannelRepository) ListWithFilter(ctx context.Context, offset, limit int, filter *ChannelFilter, sortOpts *ChannelSortOptions) ([]*models.Channel, int64, error) {
 	var channels []*models.Channel
@@ -163,52 +158,22 @@ func (r *ChannelRepository) ListWithFilter(ctx context.Context, offset, limit in
 	return channels, total, err
 }
 
-// List 分页查询渠道列表（已废弃，使用 ListWithFilter）
-// func (r *ChannelRepository) List(ctx context.Context, offset, limit int) ([]*models.Channel, int64, error) {
-
 // FindByModel 根据统一模型名查询所有支持该模型的渠道
 func (r *ChannelRepository) FindByModel(ctx context.Context, unifiedModel string) ([]models.Channel, error) {
 	var channels []models.Channel
 
 	// 子查询:找到所有支持该模型的 channel_id
 	err := r.db.WithContext(ctx).
+		Select("DISTINCT channels.*").
 		Joins("INNER JOIN channel_model_configs ON channel_model_configs.channel_id = channels.id").
+		Joins("INNER JOIN keys ON keys.channel_id = channels.id AND keys.status IN ?", []string{"active", "cooling"}).
 		Where("channel_model_configs.unified_model = ?", unifiedModel).
-		Where("channel_model_configs.status = ?", "active").
+		Where("channel_model_configs.status IN ?", []string{"active", "cooling"}).
 		Where("channels.status = ?", "active").
-		Preload("Keys").
-		Preload("ModelConfigs", "unified_model = ? AND status = ?", unifiedModel, "active").
+		Preload("Keys", "status IN ?", []string{"active", "cooling"}).
+		Preload("ModelConfigs", "unified_model = ? AND status IN ?", unifiedModel, []string{"active", "cooling"}).
 		Order("channels.priority DESC, channels.weight DESC").
 		Find(&channels).Error
 
 	return channels, err
-}
-
-// FindByModelAndEndpointType 根据模型名和端点类型查找渠道
-func (r *ChannelRepository) FindByModelAndEndpointType(ctx context.Context, unifiedModel string, endpointType string) ([]models.Channel, error) {
-	// 先查询所有支持该模型的渠道
-	channels, err := r.FindByModel(ctx, unifiedModel)
-	if err != nil {
-		return nil, err
-	}
-
-	// 在内存中过滤出支持目标端点类型的渠道
-	var filteredChannels []models.Channel
-	for _, channel := range channels {
-		// 检查渠道的模型配置是否支持目标端点类型
-		for _, config := range channel.ModelConfigs {
-			if config.UnifiedModel == unifiedModel {
-				// 检查 endpoint_types 数组是否包含目标端点类型
-				for _, et := range config.EndpointTypes {
-					if et == endpointType {
-						filteredChannels = append(filteredChannels, channel)
-						break
-					}
-				}
-				break
-			}
-		}
-	}
-
-	return filteredChannels, nil
 }

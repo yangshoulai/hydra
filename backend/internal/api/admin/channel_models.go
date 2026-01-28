@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
+	"github.com/yangshoulai/hydra/internal/service/circuit"
 )
 
 // ChannelModelHandler 渠道模型配置处理器
@@ -15,6 +16,7 @@ type ChannelModelHandler struct {
 	modelConfigRepo *repository.ChannelModelConfigRepository
 	channelRepo     *repository.ChannelRepository
 	logger          *slog.Logger
+	circuitManager  *circuit.Manager
 }
 
 // NewChannelModelHandler 创建渠道模型处理器
@@ -22,11 +24,13 @@ func NewChannelModelHandler(
 	modelConfigRepo *repository.ChannelModelConfigRepository,
 	channelRepo *repository.ChannelRepository,
 	logger *slog.Logger,
+	circuitManager *circuit.Manager,
 ) *ChannelModelHandler {
 	return &ChannelModelHandler{
 		modelConfigRepo: modelConfigRepo,
 		channelRepo:     channelRepo,
 		logger:          logger,
+		circuitManager:  circuitManager,
 	}
 }
 
@@ -46,7 +50,7 @@ type UpdateModelConfigRequest struct {
 	UpstreamModel string   `json:"upstream_model" binding:"omitempty,max=100"`
 	EndpointTypes []string `json:"endpoint_types" binding:"omitempty"`
 	KeyGroups     []string `json:"key_groups" binding:"omitempty"`
-	Status        string   `json:"status" binding:"omitempty,oneof=active disabled"`
+	Status        string   `json:"status" binding:"omitempty,oneof=active disabled cooling"`
 	Remark        string   `json:"remark" binding:"omitempty,max=200"`
 }
 
@@ -206,6 +210,9 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 	}
 	if req.Status != "" {
 		modelConfig.Status = req.Status
+		if req.Status != "cooling" {
+			modelConfig.CoolingAt = nil
+		}
 	}
 	if req.Remark != "" {
 		modelConfig.Remark = req.Remark
@@ -225,6 +232,8 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 		})
 		return
 	}
+
+	h.circuitManager.RemoveModelConfigBreaker(modelConfig.ID)
 
 	h.logger.Info("模型配置已更新",
 		slog.Uint64("config_id", uint64(modelConfig.ID)),
@@ -293,6 +302,8 @@ func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 		return
 	}
 
+	h.circuitManager.RemoveModelConfigBreaker(modelConfig.ID)
+
 	h.logger.Info("模型配置已删除",
 		slog.Uint64("config_id", id),
 		slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
@@ -350,9 +361,10 @@ func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
 	// 切换状态
 	if modelConfig.Status == "active" {
 		modelConfig.Status = "disabled"
-	} else {
+	} else if modelConfig.Status == "disabled" || modelConfig.Status == "cooling" {
 		modelConfig.Status = "active"
 	}
+	modelConfig.CoolingAt = nil
 
 	// 保存更新
 	if err := h.modelConfigRepo.Update(c.Request.Context(), modelConfig); err != nil {
@@ -368,6 +380,8 @@ func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
 		})
 		return
 	}
+
+	h.circuitManager.RemoveModelConfigBreaker(modelConfig.ID)
 
 	h.logger.Info("模型配置状态已更新",
 		slog.Uint64("config_id", uint64(modelConfig.ID)),

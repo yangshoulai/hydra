@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"gorm.io/gorm"
@@ -82,6 +83,7 @@ func (r *ChannelModelConfigRepository) CountByChannelID(ctx context.Context, cha
 // ModelConfigStatusCount 模型配置状态统计
 type ModelConfigStatusCount struct {
 	Active   int64 `json:"active"`
+	Cooling  int64 `json:"cooling"`
 	Disabled int64 `json:"disabled"`
 	NonExist int64 `json:"non_exist"`
 }
@@ -109,6 +111,8 @@ func (r *ChannelModelConfigRepository) CountByChannelIDAndStatus(ctx context.Con
 		switch c.Status {
 		case "active":
 			result.Active = c.Count
+		case "cooling":
+			result.Cooling = c.Count
 		case "disabled":
 			result.Disabled = c.Count
 		case "non_exist":
@@ -143,6 +147,29 @@ func (r *ChannelModelConfigRepository) IncrementTokenUsage(ctx context.Context, 
 		Updates(map[string]interface{}{
 			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", promptTokens),
 			"completion_tokens": gorm.Expr("completion_tokens + ?", completionTokens),
+		}).Error
+}
+
+// EnterCooling 设置模型配置进入冷却状态
+func (r *ChannelModelConfigRepository) EnterCooling(ctx context.Context, id uint) error {
+	coolingAt := time.Now()
+	return r.db.WithContext(ctx).
+		Model(&models.ChannelModelConfig{}).
+		Where("id = ? AND status = ?", id, "active").
+		Updates(map[string]interface{}{
+			"status":     "cooling",
+			"cooling_at": coolingAt,
+		}).Error
+}
+
+// ExitCooling 退出模型配置冷却状态
+func (r *ChannelModelConfigRepository) ExitCooling(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).
+		Model(&models.ChannelModelConfig{}).
+		Where("id = ? AND status = ?", id, "cooling").
+		Updates(map[string]interface{}{
+			"status":     "active",
+			"cooling_at": nil,
 		}).Error
 }
 

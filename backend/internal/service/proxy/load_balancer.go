@@ -63,28 +63,15 @@ func (lb *LoadBalancer) Route(ctx context.Context, unifiedModel string, endpoint
 		return nil, err
 	}
 
-	// 2. 路由模型
-	selectedConfig, err := lb.modelRouter.RouteModel(unifiedModel, channel, endpointType, traceID)
-	if err != nil {
-		if errors.Is(err, ErrModelNotFoundInChannel) || errors.Is(err, ErrNoModelMapping) || errors.Is(err, ErrNoAvailableModelConfig) {
-			return nil, ErrNoAvailableChannel
-		}
-		return nil, err
-	}
+	// 2. 选择密钥
+	selectedKey := lb.keySelector.SelectKey(channel, channel.Keys)
 
-	// 3. 选择 Key
-	key, err := lb.keySelector.SelectKey(channel, selectedConfig.KeyGroups, traceID)
-	if err != nil {
-		// 如果是没有可用的 key，返回 ErrNoAvailableChannel 让上层尝试其他 channel
-		if errors.Is(err, ErrNoAvailableKey) {
-			return nil, ErrNoAvailableChannel
-		}
-		return nil, err
-	}
+	// 3. 路由模型
+	selectedConfig := lb.modelRouter.RouteModel(channel, channel.ModelConfigs, selectedKey, traceID)
 
 	result := &RouteResult{
 		Channel:       channel,
-		Key:           key,
+		Key:           &selectedKey,
 		ModelConfigID: selectedConfig.ID,
 		UpstreamModel: selectedConfig.UpstreamModel,
 		UnifiedModel:  unifiedModel,
@@ -140,18 +127,4 @@ func (lb *LoadBalancer) RouteWithRetry(
 	lb.logger.Debug("所有重试尝试均失败", slog.String("trace_id", traceID), slog.String("unified_model", unifiedModel), slog.Int("max_retries", maxRetries))
 
 	return nil, ErrNoAvailableRoute
-}
-
-// GetAvailableChannelCount 获取可用渠道数量
-func (lb *LoadBalancer) GetAvailableChannelCount(ctx context.Context, unifiedModel string) (int, error) {
-	return lb.channelSelector.GetAvailableChannelCount(ctx, unifiedModel)
-}
-
-// ValidateModel 验证模型是否存在可用路由
-func (lb *LoadBalancer) ValidateModel(ctx context.Context, unifiedModel string) (bool, error) {
-	count, err := lb.GetAvailableChannelCount(ctx, unifiedModel)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
 }

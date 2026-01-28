@@ -62,7 +62,9 @@ func main() {
 		mainLogger.Error("初始化数据库失败", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	defer config.CloseDatabase(db)
+	defer func(db *gorm.DB) {
+		_ = config.CloseDatabase(db)
+	}(db)
 
 	// 创建系统设置仓储（全局唯一实例）
 	systemSettingRepo := repository.NewSystemSettingRepository(db)
@@ -78,34 +80,15 @@ func main() {
 
 	// 从系统设置加载熔断器配置
 	ctx := context.Background()
-	failureThreshold, coolingDuration := settingService.GetCircuitBreakerConfig(ctx)
-
-	mainLogger.Info("熔断器配置已加载", slog.Int("failure_threshold", failureThreshold), slog.Duration("cooling_duration", coolingDuration))
 
 	// 初始化熔断器管理器（传入 settingService 以支持配置热更新）
-	circuitManager := initCircuitManager(db, mainLogger, settingService, failureThreshold, coolingDuration)
-
-	// 从数据库加载冷却中的密钥到缓存
-	if err := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return circuitManager.LoadCoolingKeys(ctx)
-	}(); err != nil {
-		mainLogger.Error("加载冷却中的密钥失败", slog.String("error", err.Error()))
-		// 不终止程序，只记录错误
-	}
+	circuitManager := initCircuitManager(ctx, db, mainLogger, settingService)
 
 	// 初始化调试模式管理器
 	debugModeManager := loggerService.NewDebugModeManager(mainLogger, settingService)
 	if err := debugModeManager.Initialize(ctx); err != nil {
 		mainLogger.Error("初始化调试模式管理器失败", slog.String("error", err.Error()))
 	}
-
-	// 启动熔断器探测调度器
-	go func() {
-		mainLogger.Info("启动熔断器探测调度器")
-		circuitManager.StartProbeScheduler()
-	}()
 
 	// 初始化定时任务调度器
 	cronScheduler := initCronScheduler(db, mainLogger, settingService, circuitManager)
@@ -121,6 +104,7 @@ func main() {
 		channelRepo,
 		modelConfigRepo,
 		keyRepo,
+		circuitManager,
 	)
 	channelSyncScheduler.Initialize(ctx)
 
@@ -233,18 +217,17 @@ func initSystemSettings(systemSettingRepo *repository.SystemSettingRepository, l
 }
 
 // initCircuitManager 初始化熔断器管理器
-func initCircuitManager(
+func initCircuitManager(ctx context.Context,
 	db *gorm.DB,
 	logger *slog.Logger,
 	settingService *configService.SettingService,
-	failureThreshold int,
-	coolingDuration time.Duration,
 ) *circuit.Manager {
 	keyRepo := repository.NewKeyRepository(db)
 	channelRepo := repository.NewChannelRepository(db)
 	modelConfigRepo := repository.NewChannelModelConfigRepository(db)
 
 	probeInterval := 90 * time.Second // 探测间隔 90 秒
+	failureThreshold, coolingDuration := settingService.GetCircuitBreakerConfig(ctx)
 
 	return circuit.NewManager(
 		db,

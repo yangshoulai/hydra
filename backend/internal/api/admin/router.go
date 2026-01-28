@@ -37,7 +37,7 @@ func RegisterRoutes(
 	jwtService := adminService.NewJWTService()
 	probeHandler := circuit.NewProbeHandler(circuitManager, logger)
 	healthCheckService := adminService.NewHealthCheckService(logger, keyRepo, channelRepo, probeHandler)
-	syncService := modelsyncService.NewSyncService(logger, channelRepo, modelConfigRepo, keyRepo)
+	syncService := modelsyncService.NewSyncService(logger, channelRepo, modelConfigRepo, keyRepo, circuitManager)
 
 	// 创建 Dashboard 服务
 	dashboardService := adminService.NewDashboardService(logger, requestLogRepo, channelRepo, keyRepo, circuitManager)
@@ -52,7 +52,7 @@ func RegisterRoutes(
 	authHandler := NewAuthHandler(authService, logger)
 	channelHandler := NewChannelHandler(channelRepo, modelConfigRepo, keyRepo, db, logger, circuitManager)
 	keyHandler := NewKeyHandler(keyRepo, channelRepo, healthCheckService, circuitManager, logger)
-	modelConfigHandler := NewChannelModelHandler(modelConfigRepo, channelRepo, logger)
+	modelConfigHandler := NewChannelModelHandler(modelConfigRepo, channelRepo, logger, circuitManager)
 	modelSyncHandler := NewModelSyncHandler(syncService, modelConfigRepo, db, logger)
 	dashboardHandler := NewDashboardHandler(dashboardService)
 	settingsHandler := NewSettingsHandler(logger, systemSettingRepo, settingService)

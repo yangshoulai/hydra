@@ -203,16 +203,19 @@ function getModelStats(channel: Channel) {
   if (stats) {
     return {
       active: stats.active || 0,
+      cooling: stats.cooling || 0,
       disabled: stats.disabled || 0,
       nonExist: stats.non_exist || 0
     }
   }
 
   if (channel.model_configs && channel.model_configs.length > 0) {
-    const result = {active: 0, disabled: 0, nonExist: 0}
+    const result = {active: 0, cooling: 0, disabled: 0, nonExist: 0}
     channel.model_configs.forEach((config) => {
       if (config.status === 'active') {
         result.active += 1
+      } else if (config.status === 'cooling') {
+        result.cooling += 1
       } else if (config.status === 'disabled') {
         result.disabled += 1
       } else if (config.status === 'non_exist') {
@@ -222,7 +225,7 @@ function getModelStats(channel: Channel) {
     return result
   }
 
-  return {active: 0, disabled: 0, nonExist: 0}
+  return {active: 0, cooling: 0, disabled: 0, nonExist: 0}
 }
 
 // 获取渠道列表
@@ -377,7 +380,13 @@ const columns = computed<DataTableColumns<Channel>>(() => {
       align: 'right',
       render(row) {
         const stats = getModelStats(row)
-        const color = stats.active > 0 ? '#10b981' : stats.disabled > 0 ? '#f59e0b' : '#ef4444'
+        const color = stats.active > 0
+            ? '#10b981'
+            : stats.cooling > 0
+                ? '#f59e0b'
+                : stats.disabled > 0
+                    ? '#f59e0b'
+                    : '#ef4444'
 
         return h(
             NTooltip,
@@ -385,11 +394,12 @@ const columns = computed<DataTableColumns<Channel>>(() => {
             {
               trigger: () =>
                   h(NText, {style: {color: color, fontWeight: 500}}, {
-                    default: () => `${stats.active} / ${stats.disabled} / ${stats.nonExist}`
+                    default: () => `${stats.active} / ${stats.cooling} / ${stats.disabled} / ${stats.nonExist}`
                   }),
               default: () =>
                   h('div', {style: {lineHeight: '1.8'}}, [
                     h('div', {}, `正常：${stats.active}`),
+                    h('div', {}, `冷却：${stats.cooling}`),
                     h('div', {}, `禁用：${stats.disabled}`),
                     h('div', {}, `失效：${stats.nonExist}`)
                   ])

@@ -78,7 +78,8 @@ type ChannelModelConfig struct {
 	ChannelID     uint          `gorm:"not null;uniqueIndex:idx_channel_upstream" json:"channel_id"`
 	UnifiedModel  string        `gorm:"type:varchar(100);not null;index:idx_unified_model" json:"unified_model"`
 	UpstreamModel string        `gorm:"type:varchar(100);not null;uniqueIndex:idx_channel_upstream" json:"upstream_model"`
-	Status        string        `gorm:"type:varchar(20);not null;default:'active'" json:"status"` // active, disabled, non_exist
+	Status        string        `gorm:"type:varchar(20);not null;default:'active'" json:"status"` // active, cooling, disabled, non_exist
+	CoolingAt     *time.Time    `gorm:"index" json:"cooling_at"`
 	EndpointTypes EndpointTypes `gorm:"type:text;default:'[\"openai\"]'" json:"endpoint_types"`
 	KeyGroups     KeyGroups     `gorm:"type:text;default:'[\"Default\"]'" json:"key_groups"`
 	Remark        string        `gorm:"type:varchar(200)" json:"remark"`

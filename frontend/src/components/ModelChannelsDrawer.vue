@@ -40,6 +40,7 @@
                 :single-line="false"
                 size="small"
                 :pagination="false"
+                :scroll-x="800"
                 :row-key="(row) => row.config_id"
             />
           </n-card>
@@ -54,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, h, ref, watch} from 'vue'
+import {computed, h, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {
   type DataTableColumns,
   NAlert,
@@ -79,14 +80,16 @@ interface ModelConfig {
   id: number
   config_id: number
   config_status: string
+  cooling_at?: string
   upstream_model: string
   endpoint_types: string[]
-  status: 'disabled' | 'active' | 'non_exist'
+  status: 'disabled' | 'active' | 'cooling' | 'non_exist'
 }
 
 interface ChannelInfo {
   config_id: number
-  config_status: 'disabled' | 'active' | 'non_exist'
+  config_status: 'disabled' | 'active' | 'cooling' | 'non_exist'
+  cooling_at?: string
   channel_id: number
   channel_name: string
   channel_status: string
@@ -119,6 +122,8 @@ const loading = ref(false)
 const channels = ref<ChannelInfo[]>([])
 const groupedChannels = ref<ChannelGroup[]>([])
 const testingConfigs = ref<Set<number>>(new Set())
+const currentTime = ref(Date.now())
+const coolingTimer = ref<number | null>(null)
 
 const visible = computed({
   get: () => props.show,
@@ -138,6 +143,7 @@ function groupChannelsByChannel() {
       id: channel.config_id,
       config_id: channel.config_id,
       config_status: channel.config_status,
+      cooling_at: channel.cooling_at,
       upstream_model: channel.upstream_model,
       endpoint_types: channel.endpoint_types,
       status: channel.config_status
@@ -158,6 +164,24 @@ function groupChannelsByChannel() {
   groupedChannels.value = Array.from(groupMap.values())
 }
 
+function formatCoolingElapsed(coolingAt?: string): string {
+  if (!coolingAt) return '-'
+  const t = new Date(coolingAt).getTime()
+  if (Number.isNaN(t)) return '-'
+  const diff = currentTime.value - t
+  if (diff < 0) return '-'
+
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  const remainingSeconds = seconds % 60
+
+  if (hours > 0) return `${hours}小时${remainingMinutes}分`
+  if (minutes > 0) return `${minutes}分${remainingSeconds}秒`
+  return `${remainingSeconds}秒`
+}
+
 async function loadChannels() {
   if (!props.modelId) return
 
@@ -176,10 +200,11 @@ async function loadChannels() {
 
 async function handleToggleStatus(row: ModelConfig) {
   try {
-    await channelApi.toggleChannelModelStatus(row.config_id)
-    message.success(`已${row.status === 'active' ? '禁用' : '启用'}该模型配置`)
-    // await loadChannels()
-    row.status = 'active' === row.status ? 'disabled' : 'active'
+    const nextStatus = row.status === 'active' ? 'disabled' : 'active'
+    await channelApi.updateModelConfig(row.config_id, {status: nextStatus})
+    message.success(`已${nextStatus === 'active' ? '启用' : '禁用'}该模型配置`)
+    row.status = nextStatus
+    row.cooling_at = undefined
   } catch (error: any) {
     console.error('Failed to toggle status:', error)
     message.error('切换状态失败')
@@ -224,6 +249,19 @@ watch(() => props.show, (newVal) => {
   }
 })
 
+onMounted(() => {
+  coolingTimer.value = window.setInterval(() => {
+    currentTime.value = Date.now()
+  }, 1000)
+})
+
+onBeforeUnmount(() => {
+  if (coolingTimer.value !== null) {
+    clearInterval(coolingTimer.value)
+    coolingTimer.value = null
+  }
+})
+
 function createColumns(channelId: number): DataTableColumns<ModelConfig> {
   return [
     {
@@ -239,7 +277,7 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
     {
       title: '端点类型',
       key: 'endpoint_types',
-      width: 200,
+      width: 160,
       render: (row: ModelConfig) => {
         return h(EndpointTags, {types: row.endpoint_types})
       }
@@ -252,6 +290,7 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
       render: (row: ModelConfig) => {
         const statusConfig = {
           active: {type: 'success' as const, text: '启用'},
+          cooling: {type: 'warning' as const, text: '冷却中'},
           disabled: {type: 'default' as const, text: '禁用'},
           non_exist: {type: 'error' as const, text: '失效'}
         }
@@ -268,9 +307,21 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
       }
     },
     {
+      title: '已冷却',
+      key: 'cooling_time',
+      width: 120,
+      align: 'center',
+      render: (row: ModelConfig) => {
+        if (row.status !== 'cooling') {
+          return h(NText, {depth: 3}, {default: () => '-'})
+        }
+        return h(NText, {}, {default: () => formatCoolingElapsed(row.cooling_at)})
+      }
+    },
+    {
       title: '操作',
       key: 'actions',
-      width: 120,
+      width: 160,
       align: 'center',
       render: (row: ModelConfig) => {
         const isTesting = testingConfigs.value.has(row.config_id)
@@ -293,31 +344,53 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
                 }
             ),
             // 启用/禁用按钮
-            h(
-                NPopconfirm,
-                {
-                  onPositiveClick: () => handleToggleStatus(row)
-                },
-                {
-                  default: () => `确定要${row.status === 'active' ? '禁用' : '启用'}该模型配置吗？`,
-                  trigger: () => h(
-                      NButton,
-                      {
-                        size: 'tiny',
-                        type: row.status === 'active' ? 'warning' : 'success',
-                        secondary: true
-                      },
-                      {
-                        default: () => row.status === 'active' ? '禁用' : '启用',
-                        icon: () => h(NIcon, null, {
-                          default: () => row.status === 'active'
-                              ? h(CloseCircleOutline)
-                              : h(CheckmarkCircleOutline)
-                        })
-                      }
-                  )
-                }
-            )
+            row.status === 'cooling'
+                ? h(
+                    NPopconfirm,
+                    {
+                      onPositiveClick: () => handleToggleStatus(row)
+                    },
+                    {
+                      default: () => '确定要启用该模型配置吗？（将清除冷却状态）',
+                      trigger: () => h(
+                          NButton,
+                          {
+                            size: 'tiny',
+                            type: 'success',
+                            secondary: true
+                          },
+                          {
+                            default: () => '启用',
+                            icon: () => h(NIcon, null, {default: () => h(CheckmarkCircleOutline)})
+                          }
+                      )
+                    }
+                )
+                : h(
+                    NPopconfirm,
+                    {
+                      onPositiveClick: () => handleToggleStatus(row)
+                    },
+                    {
+                      default: () => `确定要${row.status === 'active' ? '禁用' : '启用'}该模型配置吗？（将清除冷却状态）`,
+                      trigger: () => h(
+                          NButton,
+                          {
+                            size: 'tiny',
+                            type: row.status === 'active' ? 'warning' : 'success',
+                            secondary: true
+                          },
+                          {
+                            default: () => row.status === 'active' ? '禁用' : '启用',
+                            icon: () => h(NIcon, null, {
+                              default: () => row.status === 'active'
+                                  ? h(CloseCircleOutline)
+                                  : h(CheckmarkCircleOutline)
+                            })
+                          }
+                      )
+                    }
+                )
           ]
         })
       }

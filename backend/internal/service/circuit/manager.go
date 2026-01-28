@@ -3,10 +3,8 @@ package circuit
 import (
 	"context"
 	"log/slog"
-	"sort"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
@@ -68,50 +66,6 @@ func NewManager(
 	}
 }
 
-// LoadCoolingKeys 从数据库加载所有冷却中的密钥到缓存
-func (m *Manager) LoadCoolingKeys(ctx context.Context) error {
-	keys, err := m.keyRepo.FindAllCooling(ctx)
-	if err != nil {
-		return err
-	}
-
-	if len(keys) == 0 {
-		return nil
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	loadedCount := 0
-	for _, key := range keys {
-		var lastFailure time.Time
-		if key.CoolingAt != nil {
-			lastFailure = key.CoolingAt.Add(-m.coolingDuration)
-		} else {
-			lastFailure = time.Now()
-		}
-
-		breaker := &KeyBreaker{
-			keyID:            key.ID,
-			state:            KeyStateCooling,
-			failureCount:     m.failureThreshold,
-			lastFailure:      lastFailure,
-			failureThreshold: m.failureThreshold,
-			coolingDuration:  m.coolingDuration,
-		}
-		m.keyBreakers[key.ID] = breaker
-		loadedCount++
-	}
-
-	if loadedCount > 0 {
-		m.logger.Info("从数据库加载冷却中的密钥",
-			slog.Int("count", loadedCount),
-		)
-	}
-
-	return nil
-}
-
 // GetKeyBreaker 获取或创建 Key 熔断器
 func (m *Manager) GetKeyBreaker(keyID uint) *KeyBreaker {
 	m.mu.RLock()
@@ -122,7 +76,36 @@ func (m *Manager) GetKeyBreaker(keyID uint) *KeyBreaker {
 		return breaker
 	}
 
-	// 创建新的熔断器
+	state := KeyStateActive
+	failureCount := 0
+	lastFailure := time.Time{}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	key, err := m.keyRepo.FindByID(ctx, keyID)
+	if err != nil {
+		m.logger.Error("从数据库获取密钥状态失败",
+			slog.Uint64("key_id", uint64(keyID)),
+			slog.String("error", err.Error()),
+		)
+	} else if key != nil {
+		switch key.Status {
+		case "cooling":
+			state = KeyStateCooling
+			failureCount = m.failureThreshold
+			if key.CoolingAt != nil {
+				lastFailure = key.CoolingAt.Add(-m.coolingDuration)
+			} else {
+				lastFailure = time.Now()
+			}
+		case "dead", "disabled":
+			state = KeyStateDead
+			failureCount = m.failureThreshold
+		}
+	}
+
+	// 创建新的熔断器（带数据库状态）
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -131,11 +114,19 @@ func (m *Manager) GetKeyBreaker(keyID uint) *KeyBreaker {
 		return breaker
 	}
 
-	breaker = NewKeyBreaker(keyID, m.failureThreshold, m.coolingDuration)
+	breaker = &KeyBreaker{
+		keyID:            keyID,
+		state:            state,
+		failureCount:     failureCount,
+		lastFailure:      lastFailure,
+		failureThreshold: m.failureThreshold,
+		coolingDuration:  m.coolingDuration,
+	}
 	m.keyBreakers[keyID] = breaker
 
 	m.logger.Debug("创建密钥熔断器",
 		slog.Uint64("key_id", uint64(keyID)),
+		slog.String("state", string(state)),
 	)
 
 	return breaker
@@ -151,6 +142,36 @@ func (m *Manager) GetModelConfigBreaker(modelConfigID uint, channelID uint) *Mod
 		return breaker
 	}
 
+	state := ModelConfigStateActive
+	failureCount := 0
+	lastFailure := time.Time{}
+	actualChannelID := channelID
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	config, err := m.modelConfigRepo.FindByID(ctx, modelConfigID)
+	if err != nil {
+		m.logger.Error("从数据库获取模型配置状态失败",
+			slog.Uint64("model_config_id", uint64(modelConfigID)),
+			slog.String("error", err.Error()),
+		)
+	} else if config != nil {
+		actualChannelID = config.ChannelID
+		switch config.Status {
+		case "cooling":
+			state = ModelConfigStateCooling
+			failureCount = m.failureThreshold
+			if config.CoolingAt != nil {
+				lastFailure = *config.CoolingAt
+			} else {
+				lastFailure = time.Now()
+			}
+		case "disabled", "non_exist":
+			state = ModelConfigStateDisabled
+		}
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -158,12 +179,21 @@ func (m *Manager) GetModelConfigBreaker(modelConfigID uint, channelID uint) *Mod
 		return breaker
 	}
 
-	breaker = NewModelConfigBreaker(modelConfigID, channelID, m.failureThreshold, m.coolingDuration)
+	breaker = &ModelConfigBreaker{
+		configID:         modelConfigID,
+		channelID:        actualChannelID,
+		state:            state,
+		failureCount:     failureCount,
+		lastFailure:      lastFailure,
+		failureThreshold: m.failureThreshold,
+		coolingDuration:  m.coolingDuration,
+	}
 	m.modelConfigBreakers[modelConfigID] = breaker
 
 	m.logger.Debug("创建模型配置熔断器",
 		slog.Uint64("model_config_id", uint64(modelConfigID)),
-		slog.Uint64("channel_id", uint64(channelID)),
+		slog.Uint64("channel_id", uint64(actualChannelID)),
+		slog.String("state", string(state)),
 	)
 
 	return breaker
@@ -172,10 +202,14 @@ func (m *Manager) GetModelConfigBreaker(modelConfigID uint, channelID uint) *Mod
 // RecordKeySuccess 记录 Key 成功
 func (m *Manager) RecordKeySuccess(keyID uint, channelID uint) {
 	keyBreaker := m.GetKeyBreaker(keyID)
+	oldState := keyBreaker.state
 	keyBreaker.RecordSuccess()
 
 	// 异步更新数据库，如果之前在 cooling 状态，需要清除 cooling_at
-	go m.exitKeyCooling(keyID)
+	if oldState != keyBreaker.state {
+		go m.exitKeyCooling(keyID)
+	}
+
 }
 
 // RecordKeyHardFailure 记录 Key 硬故障
@@ -197,6 +231,9 @@ func (m *Manager) RecordKeyHardFailure(keyID uint, channelID uint, channelName s
 // RecordKeySoftFailure 记录 Key 软故障
 func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName string, errMsg string) {
 	keyBreaker := m.GetKeyBreaker(keyID)
+
+	oldState := keyBreaker.state
+
 	keyBreaker.RecordSoftFailure()
 	m.logger.Warn("密钥连续["+strconv.Itoa(keyBreaker.failureCount)+"]次失败",
 		slog.Uint64("key_id", uint64(keyID)),
@@ -205,7 +242,7 @@ func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName s
 	)
 
 	// 如果进入冷却状态,更新数据库
-	if keyBreaker.GetState() == KeyStateCooling {
+	if oldState != KeyStateCooling && keyBreaker.state == KeyStateCooling {
 		m.logger.Warn("密钥进入冷却状态",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.Uint64("channel_id", uint64(channelID)),
@@ -219,12 +256,19 @@ func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName s
 // RecordModelConfigSuccess 记录模型配置成功
 func (m *Manager) RecordModelConfigSuccess(modelConfigID uint, channelID uint) {
 	breaker := m.GetModelConfigBreaker(modelConfigID, channelID)
+	oldState := breaker.state
 	breaker.RecordSuccess()
+
+	if oldState != ModelConfigStateActive {
+		go m.exitModelConfigCooling(modelConfigID)
+	}
+
 }
 
 // RecordModelConfigFailure 记录模型配置失败（统一模型到上游模型的映射调用失败）
 func (m *Manager) RecordModelConfigFailure(modelConfigID uint, channelID uint, channelName string, unifiedModel string, upstreamModel string, errMsg string) {
 	breaker := m.GetModelConfigBreaker(modelConfigID, channelID)
+	oldState := breaker.state
 	breaker.RecordFailure()
 
 	m.logger.Warn("模型配置连续["+strconv.Itoa(breaker.failureCount)+"]次失败",
@@ -236,7 +280,7 @@ func (m *Manager) RecordModelConfigFailure(modelConfigID uint, channelID uint, c
 		slog.String("errMsg", errMsg),
 	)
 
-	if breaker.GetState() == ModelConfigStateCooling {
+	if oldState != breaker.state && breaker.state == ModelConfigStateCooling {
 		m.logger.Warn("模型配置进入冷却状态",
 			slog.Uint64("model_config_id", uint64(modelConfigID)),
 			slog.Uint64("channel_id", uint64(channelID)),
@@ -244,6 +288,7 @@ func (m *Manager) RecordModelConfigFailure(modelConfigID uint, channelID uint, c
 			slog.String("unified_model", unifiedModel),
 			slog.String("upstream_model", upstreamModel),
 		)
+		go m.enterModelConfigCooling(modelConfigID)
 	}
 }
 
@@ -255,62 +300,8 @@ func (m *Manager) IsKeyAvailable(keyID uint) bool {
 
 // IsModelConfigAvailable 检查模型配置是否可用
 func (m *Manager) IsModelConfigAvailable(modelConfigID uint) bool {
-	m.mu.RLock()
-	breaker, exists := m.modelConfigBreakers[modelConfigID]
-	m.mu.RUnlock()
-
-	// 没有记录过失败的配置默认可用
-	if !exists {
-		return true
-	}
-
+	breaker := m.GetModelConfigBreaker(modelConfigID, 0)
 	return breaker.IsAvailable()
-}
-
-// ResetKey 重置 Key 熔断器
-func (m *Manager) ResetKey(keyID uint) {
-	breaker := m.GetKeyBreaker(keyID)
-	breaker.Reset()
-
-	m.logger.Info("重置密钥熔断器",
-		slog.Uint64("key_id", uint64(keyID)),
-	)
-
-	// 更新数据库，清除 cooling_at
-	go m.exitKeyCooling(keyID)
-}
-
-// StartProbeScheduler 启动探测调度器
-func (m *Manager) StartProbeScheduler() {
-	m.logger.Info("熔断器探测调度器启动中")
-
-	for {
-		m.mu.RLock()
-		interval := m.probeInterval
-		m.mu.RUnlock()
-
-		ticker := time.NewTicker(interval)
-
-		m.logger.Info("熔断器探测调度器已启动",
-			slog.Duration("interval", interval),
-		)
-
-	loop:
-		for {
-			select {
-			case <-ticker.C:
-				m.probeHalfOpenKeys()
-			case <-m.restartChan:
-				ticker.Stop()
-				m.logger.Info("熔断器探测调度器因配置变更而重启")
-				break loop
-			case <-m.stopChan:
-				ticker.Stop()
-				m.logger.Info("熔断器探测调度器已停止")
-				return
-			}
-		}
-	}
 }
 
 // Stop 停止管理器
@@ -322,132 +313,6 @@ func (m *Manager) Stop() {
 type keyProbeCandidate struct {
 	keyID       uint
 	lastFailure time.Time
-}
-
-// probeHalfOpenKeys 探测半开状态的 Key
-func (m *Manager) probeHalfOpenKeys() {
-	// 检查是否已有探测在进行中
-	if !atomic.CompareAndSwapInt32(&m.probing, 0, 1) {
-		m.logger.Warn("跳过探测周期，上一次探测仍在进行中")
-		return
-	}
-
-	// 获取当前配置的最大并发探测数
-	m.mu.RLock()
-	maxConcurrentProbes := m.probeMaxConcurrent
-	m.mu.RUnlock()
-
-	m.mu.RLock()
-	candidates := make([]keyProbeCandidate, 0)
-	for keyID, breaker := range m.keyBreakers {
-		if breaker.GetState() == KeyStateHalfOpen {
-			stats := breaker.GetStats()
-			if lastFailure, ok := stats["last_failure"].(time.Time); ok {
-				candidates = append(candidates, keyProbeCandidate{
-					keyID:       keyID,
-					lastFailure: lastFailure,
-				})
-			}
-		}
-	}
-	m.mu.RUnlock()
-
-	if len(candidates) == 0 {
-		atomic.StoreInt32(&m.probing, 0)
-		return
-	}
-
-	// 按冷却时间排序，优先探测冷却时间最长的 Key
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].lastFailure.Before(candidates[j].lastFailure)
-	})
-
-	// 限制并发探测数量
-	probeCount := len(candidates)
-	if probeCount > maxConcurrentProbes {
-		probeCount = maxConcurrentProbes
-	}
-
-	m.logger.Info("探测半开状态的密钥",
-		slog.Int("total", len(candidates)),
-		slog.Int("probing", probeCount),
-		slog.Int("max_concurrent", maxConcurrentProbes),
-	)
-
-	// 使用 WaitGroup 等待所有探测完成
-	var wg sync.WaitGroup
-	wg.Add(probeCount)
-
-	// 探测优先级最高的 N 个 Key
-	for i := 0; i < probeCount; i++ {
-		go func(keyID uint) {
-			defer wg.Done()
-			m.probeKey(keyID)
-		}(candidates[i].keyID)
-	}
-
-	// 在后台等待所有探测完成后清除标志
-	go func() {
-		wg.Wait()
-		atomic.StoreInt32(&m.probing, 0)
-		m.logger.Debug("探测周期完成")
-	}()
-}
-
-// probeKey 探测单个 Key
-func (m *Manager) probeKey(keyID uint) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	// 获取 Key 信息
-	key, err := m.keyRepo.FindByID(ctx, keyID)
-	if err != nil {
-		m.logger.Error("探测时查找密钥失败",
-			slog.Uint64("key_id", uint64(keyID)),
-			slog.String("error", err.Error()),
-		)
-		return
-	}
-
-	// 获取 Channel 信息
-	channel, err := m.channelRepo.FindByID(ctx, key.ChannelID)
-	if err != nil {
-		m.logger.Error("探测时查找渠道失败",
-			slog.Uint64("key_id", uint64(keyID)),
-			slog.Uint64("channel_id", uint64(key.ChannelID)),
-			slog.String("error", err.Error()),
-		)
-		return
-	}
-	if channel == nil {
-		m.logger.Error("探测时渠道不存在",
-			slog.Uint64("key_id", uint64(keyID)),
-			slog.Uint64("channel_id", uint64(key.ChannelID)),
-		)
-		return
-	}
-
-	// 创建探测处理器
-	probeHandler := NewProbeHandler(m, m.logger)
-
-	// 执行探测(带重试)
-	success, isHardFailure, err := probeHandler.ProbeKeyWithRetry(ctx, key, channel, 0)
-	errMsg := ""
-	if err != nil {
-		errMsg = err.Error()
-	}
-	// 处理探测结果
-	probeHandler.HandleProbeResult(keyID, channel, success, isHardFailure, errMsg)
-
-	if err != nil {
-		m.logger.Debug("探测完成但有错误",
-			slog.Uint64("key_id", uint64(keyID)),
-			slog.Uint64("channel_id", uint64(key.ChannelID)),
-			slog.String("channel_name", channel.Name),
-			slog.Bool("success", success),
-			slog.String("error", err.Error()),
-		)
-	}
 }
 
 // updateKeyStatus 更新数据库中的 Key 状态
@@ -491,24 +356,29 @@ func (m *Manager) exitKeyCooling(keyID uint) {
 	}
 }
 
-// GetAllStats 获取所有熔断器统计信息
-func (m *Manager) GetAllStats() map[string]interface{} {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+// enterModelConfigCooling 设置模型配置进入冷却状态
+func (m *Manager) enterModelConfigCooling(modelConfigID uint) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-	keyStats := make([]map[string]interface{}, 0, len(m.keyBreakers))
-	for _, breaker := range m.keyBreakers {
-		keyStats = append(keyStats, breaker.GetStats())
+	if err := m.modelConfigRepo.EnterCooling(ctx, modelConfigID); err != nil {
+		m.logger.Error("设置模型配置冷却状态失败",
+			slog.Uint64("model_config_id", uint64(modelConfigID)),
+			slog.String("error", err.Error()),
+		)
 	}
+}
 
-	modelConfigStats := make([]map[string]interface{}, 0, len(m.modelConfigBreakers))
-	for _, breaker := range m.modelConfigBreakers {
-		modelConfigStats = append(modelConfigStats, breaker.GetStats())
-	}
+// exitModelConfigCooling 退出模型配置冷却状态
+func (m *Manager) exitModelConfigCooling(modelConfigID uint) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-	return map[string]interface{}{
-		"keys":          keyStats,
-		"model_configs": modelConfigStats,
+	if err := m.modelConfigRepo.ExitCooling(ctx, modelConfigID); err != nil {
+		m.logger.Error("退出模型配置冷却状态失败",
+			slog.Uint64("model_config_id", uint64(modelConfigID)),
+			slog.String("error", err.Error()),
+		)
 	}
 }
 

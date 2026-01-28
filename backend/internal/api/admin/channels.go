@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/models"
@@ -169,7 +170,7 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 			)
 			modelStats = &repository.ModelConfigStatusCount{}
 		}
-		modelCount := int(modelStats.Active + modelStats.Disabled + modelStats.NonExist)
+		modelCount := int(modelStats.Active + modelStats.Cooling + modelStats.Disabled + modelStats.NonExist)
 
 		// 查询该渠道的密钥统计
 		keyStats, err := h.keyRepo.CountByChannelIDAndStatus(c.Request.Context(), channel.ID)
@@ -543,6 +544,7 @@ func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
 	type ChannelModelInfo struct {
 		ConfigID      uint     `json:"config_id"`
 		ConfigStatus  string   `json:"config_status"`
+		CoolingAt     *time.Time `json:"cooling_at"`
 		ChannelID     uint     `json:"channel_id"`
 		ChannelName   string   `json:"channel_name"`
 		ChannelStatus string   `json:"channel_status"`
@@ -556,6 +558,7 @@ func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
 			result = append(result, ChannelModelInfo{
 				ConfigID:      config.ID,
 				ConfigStatus:  config.Status,
+				CoolingAt:     config.CoolingAt,
 				ChannelID:     config.ChannelID,
 				ChannelName:   config.Channel.Name,
 				ChannelStatus: config.Channel.Status,

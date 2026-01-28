@@ -57,7 +57,7 @@ func (s *HealthCheckService) CheckChannelHealth(ctx context.Context, channelID u
 	// 查询渠道
 	channel, err := s.channelRepo.FindByID(ctx, channelID)
 	if err != nil {
-		s.logger.Error("渠道不存在", slog.Uint64("channel_id", uint64(channelID)), slog.String("error", err.Error()))
+		s.logger.Error("查询渠道异常", slog.Uint64("channel_id", uint64(channelID)), slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -172,32 +172,4 @@ func (s *HealthCheckService) checkSingleKey(ctx context.Context, key *models.Key
 	}
 
 	return result
-}
-
-// CheckAllChannels 检查所有渠道的健康状态
-func (s *HealthCheckService) CheckAllChannels(ctx context.Context) ([]ChannelHealthCheckResult, error) {
-	// 查询所有激活的渠道
-	channels, err := s.channelRepo.FindActive(ctx)
-	if err != nil {
-		s.logger.Error("failed to find channels",
-			slog.String("error", err.Error()),
-		)
-		return nil, err
-	}
-
-	results := make([]ChannelHealthCheckResult, 0, len(channels))
-
-	for _, channel := range channels {
-		result, err := s.CheckChannelHealth(ctx, channel.ID)
-		if err != nil {
-			s.logger.Error("检查渠道密钥状态异常", slog.Uint64("channel_id", uint64(channel.ID)), slog.String("error", err.Error()))
-			continue
-		}
-
-		if result != nil {
-			results = append(results, *result)
-		}
-	}
-
-	return results, nil
 }

@@ -341,15 +341,7 @@ func (h *KeyHandler) ResetKeyStatus(c *gin.Context) {
 		return
 	}
 
-	// 根据目标状态处理熔断器
-	if targetStatus == "active" {
-		// 启用时重置熔断器状态
-		h.circuitManager.ResetKey(uint(id))
-	} else if targetStatus == "disabled" {
-		// 禁用时从缓存中移除熔断器
-		h.circuitManager.RemoveKeyBreaker(uint(id))
-	}
-
+	h.circuitManager.RemoveKeyBreaker(uint(id))
 	h.logger.Info("重置密钥状态", slog.Uint64("key_id", id), slog.String("status", targetStatus))
 
 	c.JSON(http.StatusOK, key)
@@ -420,8 +412,8 @@ func (h *KeyHandler) TestSingleKey(c *gin.Context) {
 	// 查询 Key
 	key, err := h.keyRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("密钥不存在", slog.Uint64("key_id", id), slog.String("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "密钥不存在"})
+		h.logger.Error("查询密钥异常", slog.Uint64("key_id", id), slog.String("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询密钥异常"})
 		return
 	}
 

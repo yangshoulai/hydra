@@ -9,8 +9,9 @@ import (
 type ModelConfigState string
 
 const (
-	ModelConfigStateActive  ModelConfigState = "active"  // 正常状态
-	ModelConfigStateCooling ModelConfigState = "cooling" // 冷却中
+	ModelConfigStateActive   ModelConfigState = "active"   // 正常状态
+	ModelConfigStateCooling  ModelConfigState = "cooling"  // 冷却中
+	ModelConfigStateDisabled ModelConfigState = "disabled" // 禁用/不存在
 )
 
 // ModelConfigBreaker 模型配置级别熔断器
@@ -69,45 +70,9 @@ func (mb *ModelConfigBreaker) RecordFailure() {
 	}
 }
 
-// GetState 获取当前状态
-func (mb *ModelConfigBreaker) GetState() ModelConfigState {
-	mb.mu.RLock()
-	defer mb.mu.RUnlock()
-
-	if mb.state == ModelConfigStateCooling {
-		if time.Since(mb.lastFailure) >= mb.coolingDuration {
-			mb.mu.RUnlock()
-			mb.mu.Lock()
-			if mb.state == ModelConfigStateCooling && time.Since(mb.lastFailure) >= mb.coolingDuration {
-				mb.state = ModelConfigStateActive
-				mb.failureCount = 0
-			}
-			mb.mu.Unlock()
-			mb.mu.RLock()
-		}
-	}
-
-	return mb.state
-}
-
 // IsAvailable 检查模型配置是否可用
 func (mb *ModelConfigBreaker) IsAvailable() bool {
-	return mb.GetState() == ModelConfigStateActive
-}
-
-// GetStats 获取统计信息
-func (mb *ModelConfigBreaker) GetStats() map[string]interface{} {
-	mb.mu.RLock()
-	defer mb.mu.RUnlock()
-
-	return map[string]interface{}{
-		"model_config_id": mb.configID,
-		"channel_id":      mb.channelID,
-		"state":           string(mb.state),
-		"failure_count":   mb.failureCount,
-		"last_failure":    mb.lastFailure,
-		"last_success":    mb.lastSuccess,
-	}
+	return mb.state == ModelConfigStateActive || (mb.state == ModelConfigStateCooling && time.Since(mb.lastFailure) >= mb.coolingDuration)
 }
 
 // UpdateConfig 更新熔断器配置
