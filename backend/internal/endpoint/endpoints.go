@@ -4,6 +4,7 @@ package endpoint
 func init() {
 	Register(&ChatCompletionsEndpoint{})
 	Register(&ResponsesEndpoint{})
+	Register(&ImagesGenerationsEndpoint{})
 	Register(&MessagesEndpoint{})
 	Register(&GeminiEndpoint{})
 }

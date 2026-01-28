@@ -379,6 +379,7 @@ const show = computed({
 // State
 const loading = ref(false)
 const syncing = ref(false)
+const syncRequestId = ref(0)
 const saving = ref(false)
 const syncFailed = ref(false)
 const hasSynced = ref(false)
@@ -646,7 +647,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '密钥分组',
     key: 'key_groups',
-    width: 200,
+    width: 160,
     render(row) {
       const value = keyGroupsEditMap.value[row.key] || row.key_groups
       return h(NSelect, {
@@ -695,9 +696,9 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '测试状态',
     key: 'test_status',
-    width: 120,
+    width: 160,
     fixed: 'right',
-    align: 'center',
+    align: 'left',
     render(row) {
       const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
       const statusMap = {
@@ -712,10 +713,11 @@ const columns: DataTableColumns<ModelDisplayType> = [
           const status = testStatus.value[row.key]?.[type] || 'idle'
           const config = statusMap[status]
           const typeLabelMap: Record<string, string> = {
-            openai: 'OpenAI',
-            'openai-response': 'Response',
-            anthropic: 'Anthropic',
-            gemini: 'Gemini'
+            openai: 'OpenAI Chat',
+            'openai-response': 'OpenAI Responses',
+            'openai-image': 'OpenAI Images',
+            anthropic: 'Anthropic Messages',
+            gemini: 'Google Gemini'
           }
           const typeLabel = typeLabelMap[type] || type
           return h(NTag, {type: config.type, size: 'small'}, {default: () => `${typeLabel}: ${config.text}`})
@@ -734,10 +736,9 @@ const columns: DataTableColumns<ModelDisplayType> = [
       const isAnyTesting = endpointTypes.some((type: string) => testStatus.value[row.key]?.[type] === 'testing')
 
       return h(NButton, {
-        size: 'small',
+        size: 'tiny',
         type: 'info',
         loading: isAnyTesting,
-        secondary: true,
         onClick: () => handleTest(row)
       }, {
         icon: () => h(NIcon, null, {default: () => h(PlayCircleOutline)}),
@@ -831,13 +832,24 @@ async function loadUnifiedModels() {
 
 // 同步上游模型
 async function handleSyncModels() {
+  const currentRequestId = syncRequestId.value + 1
+  syncRequestId.value = currentRequestId
+  const currentChannelId = props.channelId
   syncing.value = true
   syncFailed.value = false
 
   try {
-    const result = await channelApi.syncModels(props.channelId)
+    const result = await channelApi.syncModels(currentChannelId)
 
     console.log('[ModelManagementDialog] Sync result received:', result)
+
+    if (
+        currentRequestId !== syncRequestId.value ||
+        !props.modelValue ||
+        props.channelId !== currentChannelId
+    ) {
+      return
+    }
 
     syncResult.value = result
     hasSynced.value = true
@@ -856,14 +868,23 @@ async function handleSyncModels() {
     window.$message?.success('同步成功')
   } catch (error: any) {
     console.error('[ModelManagementDialog] Sync failed:', error)
+    if (
+        currentRequestId !== syncRequestId.value ||
+        !props.modelValue ||
+        props.channelId !== currentChannelId
+    ) {
+      return
+    }
     syncFailed.value = true
     hasSynced.value = true
     syncResult.value = null
     window.$message?.error(error.response?.data?.error || '同步失败，仅显示本地配置')
   } finally {
     // 确保无论发生什么都要重置 loading 状态
-    syncing.value = false
-    console.log('[ModelManagementDialog] Sync completed, syncing set to false')
+    if (currentRequestId === syncRequestId.value) {
+      syncing.value = false
+      console.log('[ModelManagementDialog] Sync completed, syncing set to false')
+    }
   }
 }
 
@@ -1135,8 +1156,15 @@ function handleClose() {
 
 // 监听对话框打开
 watch(() => props.modelValue, async (newVal) => {
-  if (newVal && props.channelId > 0) {
+  if (!newVal) {
+    syncRequestId.value += 1
+    syncing.value = false
+    return
+  }
+  if (props.channelId > 0) {
     // 重置状态
+    syncRequestId.value += 1
+    syncing.value = false
     syncResult.value = null
     syncFailed.value = false
     hasSynced.value = false

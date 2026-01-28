@@ -10,7 +10,7 @@ import (
 type ChatCompletionsEndpoint struct{}
 
 func (e *ChatCompletionsEndpoint) GetName() string {
-	return "OpenAI Chat Completions"
+	return "OpenAI Chat"
 }
 
 func (e *ChatCompletionsEndpoint) GetType() string {
