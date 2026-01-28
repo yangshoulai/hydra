@@ -193,6 +193,17 @@ func (r *RequestLogRepository) DeleteDetailsBefore(ctx context.Context, before t
 	return result.RowsAffected, result.Error
 }
 
+// DeleteDetailsByMainBefore 删除主表在指定时间之前的明细日志记录
+func (r *RequestLogRepository) DeleteDetailsByMainBefore(ctx context.Context, before time.Time) (int64, error) {
+	result := r.db.WithContext(ctx).Exec(`
+		DELETE FROM request_logs_detail
+		WHERE main_log_id IN (
+			SELECT id FROM request_logs_main WHERE created_at < ?
+		)
+	`, before)
+	return result.RowsAffected, result.Error
+}
+
 // GetStatistics 获取统计数据
 type RequestLogStatistics struct {
 	TotalRequests   int64   `json:"total_requests"`

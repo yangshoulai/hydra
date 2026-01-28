@@ -233,11 +233,6 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			continue
 		}
 
-		upstreamReqBody, readReqBodyErr := readAndResetBody(upstreamReq)
-		if readReqBodyErr != nil {
-			ps.logWarnWithTrace("读取上游请求体失败", traceID, slog.String("error", readReqBodyErr.Error()))
-		}
-
 		detailLog.RequestHeaders(headersToJSON(upstreamReq.Header))
 		// 发送请求
 		upstreamResp, err := ps.httpClient.Do(upstreamReq, traceID)
@@ -253,18 +248,21 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 		if failureType != FailureTypeNone {
 			respBody, readRespErr := readAndResetResponseBody(upstreamResp)
 			if readRespErr != nil {
-				ps.logWarnWithTrace("读取上游响应体失败", traceID, slog.String("error", readRespErr.Error()))
+				ps.logWarnWithTrace("读取响应体失败", traceID, slog.String("error", readRespErr.Error()))
 			}
-			detail := buildProxyRequestResponseDump(upstreamReq, upstreamReqBody, upstreamResp, respBody)
 			ps.logErrorWithTrace("渠道故障", traceID, slog.String("failure_type", string(failureType)),
 				slog.Uint64("channel_id", uint64(routeResult.Channel.ID)),
 				slog.String("channel_name", routeResult.Channel.Name),
+				slog.String("model", routeResult.UnifiedModel),
+				slog.String("upstream_model", routeResult.UpstreamModel),
 				slog.String("error", errMsg),
-				slog.String("detail", detail),
+				slog.String("url", upstreamReq.URL.String()),
+				slog.Int("http_status", upstreamResp.StatusCode),
+				slog.String("response_body", string(respBody)),
 			)
 			ps.recordFailure(routeResult, failureType, failureScope, errMsg)
 
-			detailLog.IsSuccess(false).Status("failed").ErrorMessage(errMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
+			detailLog.IsSuccess(false).Status("failed").ResponseBody(string(respBody)).ErrorMessage(errMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, errors.New(errMsg), failureType)
 			mainLog.AddDetail(detailLog)
 			mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage(errMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
@@ -579,19 +577,6 @@ func headersToJSON(headers http.Header) string {
 	return string(jsonBytes)
 }
 
-func readAndResetBody(req *http.Request) ([]byte, error) {
-	if req == nil || req.Body == nil {
-		return nil, nil
-	}
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	return body, nil
-}
-
 func readAndResetResponseBody(resp *http.Response) ([]byte, error) {
 	if resp == nil || resp.Body == nil {
 		return nil, nil
@@ -604,34 +589,6 @@ func readAndResetResponseBody(resp *http.Response) ([]byte, error) {
 	_ = resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 	return body, nil
-}
-
-func buildProxyRequestResponseDump(req *http.Request, reqBody []byte, resp *http.Response, respBody []byte) string {
-	var b strings.Builder
-	b.WriteString("request:\n")
-	if req == nil {
-		b.WriteString("  <no request>\n")
-	} else {
-		b.WriteString(fmt.Sprintf("  url: %s %s\n", req.Method, req.URL.String()))
-		b.WriteString("  headers:\n")
-		b.WriteString(indentBlock(formatHeaders(req.Header), "    "))
-		b.WriteString("\n  body:\n")
-		b.WriteString(indentBlock(formatBody(reqBody), "    "))
-		b.WriteString("\n")
-	}
-
-	b.WriteString("response:\n")
-	if resp == nil {
-		b.WriteString("  <no response>")
-		return strings.TrimRight(b.String(), "\n")
-	}
-
-	b.WriteString(fmt.Sprintf("  status: %s\n", resp.Status))
-	b.WriteString("  headers:\n")
-	b.WriteString(indentBlock(formatHeaders(resp.Header), "    "))
-	b.WriteString("\n  body:\n")
-	b.WriteString(indentBlock(formatBody(respBody), "    "))
-	return strings.TrimRight(b.String(), "\n")
 }
 
 func formatHeaders(headers http.Header) string {

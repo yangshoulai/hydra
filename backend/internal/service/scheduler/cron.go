@@ -123,6 +123,8 @@ const (
 	EveryDayAt3AM = "0 0 3 * * *"
 	// EveryDayAtMidnight 每天午夜执行
 	EveryDayAtMidnight = "0 0 0 * * *"
+	// EveryDayAt1AM 每天凌晨1点执行
+	EveryDayAt1AM = "0 0 1 * * *"
 	// EveryMonday 凌晨3点 周一凌晨3点执行
 	EveryMondayAt3AM = "0 0 3 * * 1"
 	// EveryDayAt6AM 每天6点执行

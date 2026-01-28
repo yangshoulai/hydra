@@ -91,7 +91,7 @@ func main() {
 	}
 
 	// 初始化定时任务调度器
-	cronScheduler := initCronScheduler(db, mainLogger, settingService, circuitManager)
+	cronScheduler := initCronScheduler(db, mainLogger, settingService, circuitManager, cfg)
 
 	// 初始化渠道模型同步调度器
 	channelRepo := repository.NewChannelRepository(db)
@@ -300,7 +300,7 @@ func setupRouter(
 }
 
 // initCronScheduler 初始化定时任务调度器
-func initCronScheduler(db *gorm.DB, logger *slog.Logger, settingService *configService.SettingService, circuitManager *circuit.Manager) *schedulerService.CronScheduler {
+func initCronScheduler(db *gorm.DB, logger *slog.Logger, settingService *configService.SettingService, circuitManager *circuit.Manager, cfg *config.Config) *schedulerService.CronScheduler {
 	// 创建定时任务调度器
 	cronScheduler := schedulerService.NewCronScheduler(logger)
 
@@ -318,6 +318,21 @@ func initCronScheduler(db *gorm.DB, logger *slog.Logger, settingService *configS
 		logger.Error("添加熔断器清理任务失败", slog.String("error", err.Error()))
 	} else {
 		logger.Info("熔断器清理任务调度成功", slog.String("schedule", "every hour"))
+	}
+
+	// 添加日志清理任务 - 每天凌晨1点执行
+	requestLogRepo := repository.NewRequestLogRepository(db)
+	logCleanupService := loggerService.NewLogCleanupService(logger, settingService, requestLogRepo)
+
+	err = cronScheduler.AddJob(
+		"log-cleanup",
+		schedulerService.EveryDayAt1AM,
+		logCleanupService.Run,
+	)
+	if err != nil {
+		logger.Error("添加日志清理任务失败", slog.String("error", err.Error()))
+	} else {
+		logger.Info("日志清理任务调度成功", slog.String("schedule", "every day at 1am"))
 	}
 
 	return cronScheduler
