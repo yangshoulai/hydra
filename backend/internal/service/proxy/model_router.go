@@ -33,7 +33,7 @@ func NewModelRouter(logger *slog.Logger, circuitManager *circuit.Manager, keySel
 func (mr *ModelRouter) RouteModel(channel *models.Channel, availableModelConfigs []models.ChannelModelConfig, selectedKey models.Key, traceID string) models.ChannelModelConfig {
 
 	// 根据密钥分组过去模型配置
-	filteredConfigs := make([]models.ChannelModelConfig, len(availableModelConfigs))
+	filteredConfigs := make([]models.ChannelModelConfig, 0)
 	for _, config := range availableModelConfigs {
 		for _, kg := range config.KeyGroups {
 			if selectedKey.KeyGroup == kg {

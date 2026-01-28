@@ -94,12 +94,10 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, mo
 				continue
 			}
 
-			if config.UnifiedModel == modelName {
-				if cs.hasEndpointType(config.EndpointTypes, endpointType) {
-					filteredModelConfigs = append(filteredModelConfigs, config)
-					for _, kg := range config.KeyGroups {
-						modelKeyGroups[kg] = struct{}{}
-					}
+			if cs.hasEndpointType(config.EndpointTypes, endpointType) {
+				filteredModelConfigs = append(filteredModelConfigs, config)
+				for _, kg := range config.KeyGroups {
+					modelKeyGroups[kg] = struct{}{}
 				}
 			}
 		}

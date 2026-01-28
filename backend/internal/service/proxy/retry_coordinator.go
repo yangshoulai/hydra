@@ -26,11 +26,11 @@ func NewRetryCoordinator(logger *slog.Logger, maxRetries int, retryDelay time.Du
 
 // RetryContext 重试上下文
 type RetryContext struct {
-	AttemptCount       int      // 尝试次数
-	FailedChannelIDs   []uint   // 已失败的 Channel ID
-	LastError          error    // 最后一次错误
-	LastFailureType    FailureType // 最后一次故障类型
-	StartTime          time.Time // 开始时间
+	AttemptCount     int         // 尝试次数
+	FailedChannelIDs []uint      // 已失败的 Channel ID
+	LastError        error       // 最后一次错误
+	LastFailureType  FailureType // 最后一次故障类型
+	StartTime        time.Time   // 开始时间
 }
 
 // NewRetryContext 创建重试上下文
@@ -56,7 +56,7 @@ func (rc *RetryCoordinator) ShouldRetry(retryCtx *RetryContext) bool {
 	// 只检查是否超过最大重试次数
 	// 故障类型（hard/soft）只用于熔断器记录，不影响重试决策
 	if retryCtx.AttemptCount >= maxRetries {
-		rc.logger.Warn("max retries exceeded",
+		rc.logger.Warn("达到最大重试次数",
 			slog.Int("attempt_count", retryCtx.AttemptCount),
 			slog.Int("max_retries", maxRetries),
 		)

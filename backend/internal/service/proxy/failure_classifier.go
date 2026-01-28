@@ -66,7 +66,7 @@ func (fc *FailureClassifier) ClassifyHTTPError(statusCode int) (FailureType, Fai
 	// 对于渠道代理来说，4xx 应该触发重试（切换到其他渠道）
 	// 但不应记录到熔断器（既不是 Key 问题，也不应熔断模型配置）
 	if statusCode >= 400 && statusCode < 500 {
-		return FailureTypeSoft, FailureScopeNone, "代理客户端故障（" + strconv.Itoa(statusCode) + "）"
+		return FailureTypeSoft, FailureScopeModelConfig, "代理客户端故障（" + strconv.Itoa(statusCode) + "）"
 	}
 
 	// 5xx 服务端错误,归因到模型配置（避免影响同渠道其他模型）

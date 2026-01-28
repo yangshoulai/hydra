@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/endpoint"
@@ -229,6 +232,12 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 			_ = ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
 			continue
 		}
+
+		upstreamReqBody, readReqBodyErr := readAndResetBody(upstreamReq)
+		if readReqBodyErr != nil {
+			ps.logWarnWithTrace("读取上游请求体失败", traceID, slog.String("error", readReqBodyErr.Error()))
+		}
+
 		detailLog.RequestHeaders(headersToJSON(upstreamReq.Header))
 		// 发送请求
 		upstreamResp, err := ps.httpClient.Do(upstreamReq, traceID)
@@ -242,10 +251,16 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpoint string) error {
 
 		// 处理故障
 		if failureType != FailureTypeNone {
+			respBody, readRespErr := readAndResetResponseBody(upstreamResp)
+			if readRespErr != nil {
+				ps.logWarnWithTrace("读取上游响应体失败", traceID, slog.String("error", readRespErr.Error()))
+			}
+			detail := buildProxyRequestResponseDump(upstreamReq, upstreamReqBody, upstreamResp, respBody)
 			ps.logErrorWithTrace("渠道故障", traceID, slog.String("failure_type", string(failureType)),
 				slog.Uint64("channel_id", uint64(routeResult.Channel.ID)),
 				slog.String("channel_name", routeResult.Channel.Name),
 				slog.String("error", errMsg),
+				slog.String("detail", detail),
 			)
 			ps.recordFailure(routeResult, failureType, failureScope, errMsg)
 
@@ -389,9 +404,6 @@ func (ps *ProxyService) recordFailure(routeResult *RouteResult, failureType Fail
 			ps.circuitManager.RecordKeySoftFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
 		}
 	case FailureScopeModelConfig:
-		if routeResult.ModelConfigID == 0 {
-			return
-		}
 		if failureType == FailureTypeSoft || failureType == FailureTypeModelNotFound {
 			ps.circuitManager.RecordModelConfigFailure(
 				routeResult.ModelConfigID,
@@ -407,9 +419,6 @@ func (ps *ProxyService) recordFailure(routeResult *RouteResult, failureType Fail
 			ps.circuitManager.RecordKeyHardFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
 		} else if failureType == FailureTypeSoft {
 			ps.circuitManager.RecordKeySoftFailure(routeResult.Key.ID, routeResult.Channel.ID, routeResult.Channel.Name, errMsg)
-		}
-		if routeResult.ModelConfigID == 0 {
-			return
 		}
 		if failureType == FailureTypeSoft || failureType == FailureTypeModelNotFound {
 			ps.circuitManager.RecordModelConfigFailure(
@@ -568,6 +577,119 @@ func headersToJSON(headers http.Header) string {
 	}
 
 	return string(jsonBytes)
+}
+
+func readAndResetBody(req *http.Request) ([]byte, error) {
+	if req == nil || req.Body == nil {
+		return nil, nil
+	}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	return body, nil
+}
+
+func readAndResetResponseBody(resp *http.Response) ([]byte, error) {
+	if resp == nil || resp.Body == nil {
+		return nil, nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	_ = resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	return body, nil
+}
+
+func buildProxyRequestResponseDump(req *http.Request, reqBody []byte, resp *http.Response, respBody []byte) string {
+	var b strings.Builder
+	b.WriteString("request:\n")
+	if req == nil {
+		b.WriteString("  <no request>\n")
+	} else {
+		b.WriteString(fmt.Sprintf("  url: %s %s\n", req.Method, req.URL.String()))
+		b.WriteString("  headers:\n")
+		b.WriteString(indentBlock(formatHeaders(req.Header), "    "))
+		b.WriteString("\n  body:\n")
+		b.WriteString(indentBlock(formatBody(reqBody), "    "))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("response:\n")
+	if resp == nil {
+		b.WriteString("  <no response>")
+		return strings.TrimRight(b.String(), "\n")
+	}
+
+	b.WriteString(fmt.Sprintf("  status: %s\n", resp.Status))
+	b.WriteString("  headers:\n")
+	b.WriteString(indentBlock(formatHeaders(resp.Header), "    "))
+	b.WriteString("\n  body:\n")
+	b.WriteString(indentBlock(formatBody(respBody), "    "))
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func formatHeaders(headers http.Header) string {
+	if len(headers) == 0 {
+		return "<empty>"
+	}
+
+	keys := make([]string, 0, len(headers))
+	for key := range headers {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	lines := make([]string, 0, len(keys))
+	for _, key := range keys {
+		value := strings.Join(headers[key], ", ")
+		lines = append(lines, fmt.Sprintf("- %s: %s", key, value))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func formatBody(body []byte) string {
+	if len(body) == 0 {
+		return "<empty>"
+	}
+
+	trimmed := bytes.TrimSpace(body)
+	if json.Valid(trimmed) {
+		var pretty bytes.Buffer
+		if err := json.Indent(&pretty, trimmed, "  ", "  "); err == nil {
+			return pretty.String()
+		}
+	}
+
+	if !utf8.Valid(body) {
+		return fmt.Sprintf("<%d bytes; non-utf8>", len(body))
+	}
+
+	const maxBodyBytes = 4096
+	text := string(body)
+	if len(text) > maxBodyBytes {
+		return text[:maxBodyBytes] + fmt.Sprintf("\n<... truncated, %d bytes total>", len(body))
+	}
+
+	return text
+}
+
+func indentBlock(text, indent string) string {
+	if text == "" {
+		return indent + "<empty>"
+	}
+
+	lines := strings.Split(text, "\n")
+	for i := range lines {
+		lines[i] = indent + lines[i]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // OnConfigChanged 实现 ConfigListener 接口，响应配置变更
