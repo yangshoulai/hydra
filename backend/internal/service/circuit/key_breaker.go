@@ -66,7 +66,15 @@ func (kb *KeyBreaker) RecordSoftFailure() {
 // IsAvailable 检查 Key 是否可用
 func (kb *KeyBreaker) IsAvailable() bool {
 	state := kb.state
-	return state == KeyStateActive || (state == KeyStateCooling && time.Since(kb.lastFailure) >= kb.coolingDuration)
+	if state == KeyStateActive {
+		return true
+	}
+	if state == KeyStateCooling {
+		// 超过阈值则延长冷却时间，每多一次失败，则延长一分钟，最多可以额外延长 5 分钟
+		additionalSeconds := min(max(kb.failureCount-kb.failureThreshold, 0), 5) * 60
+		return time.Since(kb.lastFailure) >= (kb.coolingDuration + time.Duration(additionalSeconds)*time.Second)
+	}
+	return false
 }
 
 // UpdateConfig 更新熔断器配置

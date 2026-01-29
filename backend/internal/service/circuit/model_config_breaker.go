@@ -72,7 +72,15 @@ func (mb *ModelConfigBreaker) RecordFailure() {
 
 // IsAvailable 检查模型配置是否可用
 func (mb *ModelConfigBreaker) IsAvailable() bool {
-	return mb.state == ModelConfigStateActive || (mb.state == ModelConfigStateCooling && time.Since(mb.lastFailure) >= mb.coolingDuration)
+	if mb.state == ModelConfigStateActive {
+		return true
+	}
+	if mb.state == ModelConfigStateCooling {
+		// 超过阈值则延长冷却时间，每多一次失败，则延长一分钟，最多可以额外延长 5 分钟
+		additionalSeconds := min(max(mb.failureCount-mb.failureThreshold, 0), 5) * 60
+		return time.Since(mb.lastFailure) >= (mb.coolingDuration + time.Duration(additionalSeconds)*time.Second)
+	}
+	return false
 }
 
 // UpdateConfig 更新熔断器配置
