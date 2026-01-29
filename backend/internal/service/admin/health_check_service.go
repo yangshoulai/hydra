@@ -118,7 +118,7 @@ func (s *HealthCheckService) checkKeysParallel(ctx context.Context, keys []model
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			result := s.checkSingleKey(ctx, &k, channel)
+			result := s.CheckSingleKey(ctx, &k, channel)
 
 			mu.Lock()
 			results[index] = result
@@ -132,11 +132,6 @@ func (s *HealthCheckService) checkKeysParallel(ctx context.Context, keys []model
 
 // CheckSingleKey 检查单个 Key 的健康状态（公共方法）
 func (s *HealthCheckService) CheckSingleKey(ctx context.Context, key *models.Key, channel *models.Channel) KeyHealthResult {
-	return s.checkSingleKey(ctx, key, channel)
-}
-
-// checkSingleKey 检查单个 Key
-func (s *HealthCheckService) checkSingleKey(ctx context.Context, key *models.Key, channel *models.Channel) KeyHealthResult {
 	s.logger.Debug("检查密钥状态", slog.Uint64("key_id", uint64(key.ID)), slog.Uint64("channel_id", uint64(channel.ID)))
 
 	start := time.Now()

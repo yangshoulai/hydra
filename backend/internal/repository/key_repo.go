@@ -82,8 +82,8 @@ func (r *KeyRepository) UpdateStatus(ctx context.Context, id uint, status string
 }
 
 // EnterCooling 设置 Key 进入冷却状态
-func (r *KeyRepository) EnterCooling(ctx context.Context, id uint, duration time.Duration) error {
-	coolingAt := time.Now().Add(duration)
+func (r *KeyRepository) EnterCooling(ctx context.Context, id uint) error {
+	coolingAt := time.Now()
 	return r.db.WithContext(ctx).
 		Model(&models.Key{}).
 		Where("id = ?", id).

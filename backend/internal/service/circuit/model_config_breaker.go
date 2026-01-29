@@ -65,7 +65,7 @@ func (mb *ModelConfigBreaker) RecordFailure() {
 	mb.lastFailure = time.Now()
 	mb.failureCount++
 
-	if mb.failureCount >= mb.failureThreshold && mb.state == ModelConfigStateActive {
+	if mb.failureCount >= mb.failureThreshold {
 		mb.state = ModelConfigStateCooling
 	}
 }

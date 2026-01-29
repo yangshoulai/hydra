@@ -95,7 +95,7 @@ func (m *Manager) GetKeyBreaker(keyID uint) *KeyBreaker {
 			state = KeyStateCooling
 			failureCount = m.failureThreshold
 			if key.CoolingAt != nil {
-				lastFailure = key.CoolingAt.Add(-m.coolingDuration)
+				lastFailure = *key.CoolingAt
 			} else {
 				lastFailure = time.Now()
 			}
@@ -206,7 +206,7 @@ func (m *Manager) RecordKeySuccess(keyID uint, channelID uint) {
 	keyBreaker.RecordSuccess()
 
 	// 异步更新数据库，如果之前在 cooling 状态，需要清除 cooling_at
-	if oldState != keyBreaker.state {
+	if oldState != KeyStateActive {
 		go m.exitKeyCooling(keyID)
 	}
 
@@ -215,6 +215,7 @@ func (m *Manager) RecordKeySuccess(keyID uint, channelID uint) {
 // RecordKeyHardFailure 记录 Key 硬故障
 func (m *Manager) RecordKeyHardFailure(keyID uint, channelID uint, channelName string, errMsg string) {
 	keyBreaker := m.GetKeyBreaker(keyID)
+	oldState := keyBreaker.state
 	keyBreaker.RecordHardFailure()
 
 	m.logger.Warn("密钥硬故障",
@@ -225,16 +226,18 @@ func (m *Manager) RecordKeyHardFailure(keyID uint, channelID uint, channelName s
 	)
 
 	// 异步更新数据库
-	go m.updateKeyStatus(keyID, "dead")
+	if oldState != KeyStateDead {
+		go m.updateKeyStatus(keyID, "dead")
+	}
+
 }
 
 // RecordKeySoftFailure 记录 Key 软故障
 func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName string, errMsg string) {
 	keyBreaker := m.GetKeyBreaker(keyID)
 
-	oldState := keyBreaker.state
-
 	keyBreaker.RecordSoftFailure()
+
 	m.logger.Warn("密钥连续["+strconv.Itoa(keyBreaker.failureCount)+"]次失败",
 		slog.Uint64("key_id", uint64(keyID)),
 		slog.Uint64("channel_id", uint64(channelID)),
@@ -242,7 +245,7 @@ func (m *Manager) RecordKeySoftFailure(keyID uint, channelID uint, channelName s
 	)
 
 	// 如果进入冷却状态,更新数据库
-	if oldState != KeyStateCooling && keyBreaker.state == KeyStateCooling {
+	if keyBreaker.state == KeyStateCooling {
 		m.logger.Warn("密钥进入冷却状态",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.Uint64("channel_id", uint64(channelID)),
@@ -268,7 +271,6 @@ func (m *Manager) RecordModelConfigSuccess(modelConfigID uint, channelID uint) {
 // RecordModelConfigFailure 记录模型配置失败（统一模型到上游模型的映射调用失败）
 func (m *Manager) RecordModelConfigFailure(modelConfigID uint, channelID uint, channelName string, unifiedModel string, upstreamModel string, errMsg string) {
 	breaker := m.GetModelConfigBreaker(modelConfigID, channelID)
-	oldState := breaker.state
 	breaker.RecordFailure()
 
 	m.logger.Warn("模型配置连续["+strconv.Itoa(breaker.failureCount)+"]次失败",
@@ -280,7 +282,7 @@ func (m *Manager) RecordModelConfigFailure(modelConfigID uint, channelID uint, c
 		slog.String("errMsg", errMsg),
 	)
 
-	if oldState != breaker.state && breaker.state == ModelConfigStateCooling {
+	if breaker.state == ModelConfigStateCooling {
 		m.logger.Warn("模型配置进入冷却状态",
 			slog.Uint64("model_config_id", uint64(modelConfigID)),
 			slog.Uint64("channel_id", uint64(channelID)),
@@ -334,7 +336,7 @@ func (m *Manager) enterKeyCooling(keyID uint) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	if err := m.keyRepo.EnterCooling(ctx, keyID, m.coolingDuration); err != nil {
+	if err := m.keyRepo.EnterCooling(ctx, keyID); err != nil {
 		m.logger.Error("设置密钥冷却状态失败",
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.Duration("cooling_duration", m.coolingDuration),
@@ -411,6 +413,7 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 	for _, breaker := range m.keyBreakers {
 		breaker.UpdateConfig(failureThreshold, coolingDuration)
 	}
+
 	for _, breaker := range m.modelConfigBreakers {
 		breaker.UpdateConfig(failureThreshold, coolingDuration)
 	}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
-	"github.com/yangshoulai/hydra/internal/service/circuit"
 	configService "github.com/yangshoulai/hydra/internal/service/config"
 	"github.com/yangshoulai/hydra/internal/service/scheduler"
 )
@@ -31,12 +30,8 @@ func NewChannelModelSyncScheduler(
 	cronScheduler *scheduler.CronScheduler,
 	settingService *configService.SettingService,
 	channelRepo *repository.ChannelRepository,
-	modelConfigRepo *repository.ChannelModelConfigRepository,
-	keyRepo *repository.KeyRepository,
-	circuitManager *circuit.Manager,
+	syncService *SyncService,
 ) *ChannelModelSyncScheduler {
-	syncService := NewSyncService(logger, channelRepo, modelConfigRepo, keyRepo, circuitManager)
-
 	return &ChannelModelSyncScheduler{
 		logger:         logger,
 		cronScheduler:  cronScheduler,

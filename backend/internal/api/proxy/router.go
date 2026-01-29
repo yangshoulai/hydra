@@ -6,51 +6,21 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/app"
 	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/middleware"
-	"github.com/yangshoulai/hydra/internal/repository"
-	"github.com/yangshoulai/hydra/internal/service/circuit"
-	configService "github.com/yangshoulai/hydra/internal/service/config"
-	"github.com/yangshoulai/hydra/internal/service/logger"
-	"github.com/yangshoulai/hydra/internal/service/proxy"
-	"gorm.io/gorm"
 )
 
 // RegisterRoutes 注册代理路由
 func RegisterRoutes(
 	router *gin.Engine,
-	db *gorm.DB,
-	logger *slog.Logger,
-	circuitManager *circuit.Manager,
-	auditLogger *logger.AuditLogger,
-	debugModeManager *logger.DebugModeManager,
-	proxyServiceConfig *proxy.ProxyServiceConfig,
-	settingService *configService.SettingService,
+	components *app.Components,
 ) {
-	// 创建 repositories
-	channelRepo := repository.NewChannelRepository(db)
-	modelRepo := repository.NewModelRepository(db, logger)
-	requestLogRepo := repository.NewRequestLogRepository(db)
-	keyRepo := repository.NewKeyRepository(db)
-	modelConfigRepo := repository.NewChannelModelConfigRepository(db)
-	accessTokenRepo := repository.NewAccessTokenRepository(db)
-
-	// 创建代理服务（传入 settingService 以支持配置热更新）
-	proxySvc := proxy.NewProxyService(
-		logger,
-		channelRepo,
-		requestLogRepo,
-		keyRepo,
-		modelConfigRepo,
-		accessTokenRepo,
-		circuitManager,
-		auditLogger,
-		proxyServiceConfig,
-		settingService,
-	)
-
-	// 注册 ProxyService 为配置监听器
-	settingService.RegisterListener(proxySvc)
+	logger := components.Logger
+	repos := components.Repos
+	services := components.Services
+	proxySvc := services.ProxyService
+	settingService := services.Setting
 
 	// 从系统设置加载明文错误规则（用于非流式响应嗅探）
 	ctx := context.Background()
@@ -63,7 +33,7 @@ func RegisterRoutes(
 	}
 
 	// 创建通用 handlers
-	modelsHandler := NewModelsHandler(logger, modelRepo)
+	modelsHandler := NewModelsHandler(logger, repos.Model)
 
 	// 创建 v1 路由组
 	v1 := router.Group("/v1")
@@ -72,11 +42,11 @@ func RegisterRoutes(
 		// 应用中间件
 		v1.Use(middleware.TraceID())
 		v1.Use(middleware.RequestLogger(logger))
-		v1.Use(middleware.Auth(accessTokenRepo, logger)) // 访问令牌认证
+		v1.Use(middleware.Auth(repos.AccessToken, logger)) // 访问令牌认证
 
 		v1beta.Use(middleware.TraceID())
 		v1beta.Use(middleware.RequestLogger(logger))
-		v1beta.Use(middleware.Auth(accessTokenRepo, logger)) // 访问令牌认证
+		v1beta.Use(middleware.Auth(repos.AccessToken, logger)) // 访问令牌认证
 
 		// 从端点注册中心动态注册路由
 		registry := endpoint.GetGlobalRegistry()

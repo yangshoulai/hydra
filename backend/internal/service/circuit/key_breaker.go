@@ -40,7 +40,7 @@ func (kb *KeyBreaker) RecordSuccess() {
 	kb.state = KeyStateActive
 }
 
-// RecordHardFailure 记录硬故障(401/402/403/429 quota exceeded)
+// RecordHardFailure 记录硬故障
 func (kb *KeyBreaker) RecordHardFailure() {
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
@@ -67,20 +67,6 @@ func (kb *KeyBreaker) RecordSoftFailure() {
 func (kb *KeyBreaker) IsAvailable() bool {
 	state := kb.state
 	return state == KeyStateActive || (state == KeyStateCooling && time.Since(kb.lastFailure) >= kb.coolingDuration)
-}
-
-// GetStats 获取统计信息
-func (kb *KeyBreaker) GetStats() map[string]interface{} {
-	kb.mu.RLock()
-	defer kb.mu.RUnlock()
-
-	return map[string]interface{}{
-		"key_id":        kb.keyID,
-		"state":         string(kb.state),
-		"failure_count": kb.failureCount,
-		"last_failure":  kb.lastFailure,
-		"last_success":  kb.lastSuccess,
-	}
 }
 
 // UpdateConfig 更新熔断器配置

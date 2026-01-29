@@ -36,13 +36,17 @@ func NewAuthService(
 	logger *slog.Logger,
 	adminUserRepo *repository.AdminUserRepository,
 	accessTokenRepo *repository.AccessTokenRepository,
+	jwtService *JWTService,
 ) *AuthService {
+	if jwtService == nil {
+		jwtService = NewJWTService()
+	}
 	return &AuthService{
 		db:              db,
 		logger:          logger,
 		adminUserRepo:   adminUserRepo,
 		accessTokenRepo: accessTokenRepo,
-		jwtService:      NewJWTService(),
+		jwtService:      jwtService,
 	}
 }
 

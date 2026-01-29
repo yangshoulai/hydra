@@ -2,39 +2,28 @@ package repository
 
 import (
 	"context"
-	"log/slog"
+	"errors"
 	"strings"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // ModelRepository 统一模型仓储
 type ModelRepository struct {
-	db     *gorm.DB
-	logger *slog.Logger
+	db *gorm.DB
 }
 
 // NewModelRepository 创建统一模型仓储
-func NewModelRepository(db *gorm.DB, logger *slog.Logger) *ModelRepository {
+func NewModelRepository(db *gorm.DB) *ModelRepository {
 	return &ModelRepository{
-		db:     db,
-		logger: logger,
+		db: db,
 	}
 }
 
 // Create 创建统一模型
 func (r *ModelRepository) Create(ctx context.Context, model *models.Model) error {
-	err := r.db.WithContext(ctx).Create(model).Error
-	if err != nil {
-		r.logger.Error("failed to create model",
-			slog.String("error", err.Error()),
-			slog.String("name", model.Name),
-		)
-		return err
-	}
-	return nil
+	return r.db.WithContext(ctx).Create(model).Error
 }
 
 // FindByID 根据 ID 查询统一模型
@@ -44,13 +33,9 @@ func (r *ModelRepository) FindByID(ctx context.Context, id uint) (*models.Model,
 		Preload("Provider").
 		First(&model, id).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		r.logger.Error("failed to find model by id",
-			slog.Uint64("id", uint64(id)),
-			slog.String("error", err.Error()),
-		)
 		return nil, err
 	}
 	return &model, nil
@@ -61,13 +46,9 @@ func (r *ModelRepository) FindByName(ctx context.Context, name string) (*models.
 	var model models.Model
 	err := r.db.WithContext(ctx).Where("name = ?", name).First(&model).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		r.logger.Error("failed to find model by name",
-			slog.String("name", name),
-			slog.String("error", err.Error()),
-		)
 		return nil, err
 	}
 	return &model, nil
@@ -182,9 +163,6 @@ func (r *ModelRepository) ListWithFilter(
 
 	var results []ModelWithCount
 	if err := query.Scan(&results).Error; err != nil {
-		r.logger.Error("failed to list models",
-			slog.String("error", err.Error()),
-		)
 		return nil, 0, 0, err
 	}
 
@@ -223,9 +201,6 @@ func (r *ModelRepository) ListWithFilter(
 	return modelList, total, totalChannelConfigs, nil
 }
 
-// List 查询统一模型列表（已废弃，使用 ListWithFilter）
-// func (r *ModelRepository) List(ctx context.Context) ([]models.Model, error) {
-
 // ListWithActiveChannelConfigs 查询有激活渠道配置的统一模型列表
 // 返回在 models 表中存在，且在 channel_model_configs 中有配置，
 // 且配置的渠道是 active 状态，且 channel_model_config 本身也是 active 状态的模型
@@ -241,9 +216,6 @@ func (r *ModelRepository) ListWithActiveChannelConfigs(ctx context.Context) ([]m
 		Order("models.created_at DESC").
 		Find(&modelList).Error
 	if err != nil {
-		r.logger.Error("failed to list models with active channel configs",
-			slog.String("error", err.Error()),
-		)
 		return nil, err
 	}
 	return modelList, nil
@@ -264,9 +236,6 @@ func (r *ModelRepository) ListWithActiveChannelConfigsByEndpointType(ctx context
 		Order("models.created_at DESC").
 		Find(&modelList).Error
 	if err != nil {
-		r.logger.Error("failed to list models with active channel configs",
-			slog.String("error", err.Error()),
-		)
 		return nil, err
 	}
 	return modelList, nil
@@ -275,24 +244,13 @@ func (r *ModelRepository) ListWithActiveChannelConfigsByEndpointType(ctx context
 // Update 更新统一模型
 func (r *ModelRepository) Update(ctx context.Context, model *models.Model) error {
 	err := r.db.WithContext(ctx).Save(model).Error
-	if err != nil {
-		r.logger.Error("failed to update model",
-			slog.Uint64("id", uint64(model.ID)),
-			slog.String("error", err.Error()),
-		)
-		return err
-	}
-	return nil
+	return err
 }
 
 // Delete 删除统一模型
 func (r *ModelRepository) Delete(ctx context.Context, id uint) error {
 	err := r.db.WithContext(ctx).Delete(&models.Model{}, id).Error
 	if err != nil {
-		r.logger.Error("failed to delete model",
-			slog.Uint64("id", uint64(id)),
-			slog.String("error", err.Error()),
-		)
 		return err
 	}
 	return nil
@@ -309,26 +267,7 @@ func (r *ModelRepository) ExistsByName(ctx context.Context, name string, exclude
 
 	err := query.Count(&count).Error
 	if err != nil {
-		r.logger.Error("failed to check model name existence",
-			slog.String("name", name),
-			slog.String("error", err.Error()),
-		)
 		return false, err
 	}
 	return count > 0, nil
-}
-
-// BatchCreate 批量创建统一模型（用于 upsert）
-func (r *ModelRepository) BatchCreate(ctx context.Context, models []*models.Model) error {
-	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "name"}},
-		DoUpdates: clause.AssignmentColumns([]string{"provider_id", "remark", "updated_at"}),
-	}).Create(&models).Error
-	if err != nil {
-		r.logger.Error("failed to batch create models",
-			slog.String("error", err.Error()),
-		)
-		return err
-	}
-	return nil
 }

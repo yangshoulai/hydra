@@ -17,11 +17,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/api/admin"
 	"github.com/yangshoulai/hydra/internal/api/proxy"
+	"github.com/yangshoulai/hydra/internal/app"
 	"github.com/yangshoulai/hydra/internal/config"
 	_ "github.com/yangshoulai/hydra/internal/endpoint" // 导入端点包以触发 init 函数
 	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/migration"
 	"github.com/yangshoulai/hydra/internal/repository"
+	adminService "github.com/yangshoulai/hydra/internal/service/admin"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
 	configService "github.com/yangshoulai/hydra/internal/service/config"
 	loggerService "github.com/yangshoulai/hydra/internal/service/logger"
@@ -66,53 +68,94 @@ func main() {
 		_ = config.CloseDatabase(db)
 	}(db)
 
-	// 创建系统设置仓储（全局唯一实例）
-	systemSettingRepo := repository.NewSystemSettingRepository(db)
+	// 创建仓储（全局唯一实例）
+	repos := &app.Repositories{
+		AdminUser:     repository.NewAdminUserRepository(db),
+		AccessToken:   repository.NewAccessTokenRepository(db),
+		Channel:       repository.NewChannelRepository(db),
+		Key:           repository.NewKeyRepository(db),
+		ModelConfig:   repository.NewChannelModelConfigRepository(db),
+		RequestLog:    repository.NewRequestLogRepository(db),
+		SystemSetting: repository.NewSystemSettingRepository(db),
+		Model:         repository.NewModelRepository(db),
+		Provider:      repository.NewProviderRepository(db),
+	}
 
 	// 初始化系统设置
-	if err := initSystemSettings(systemSettingRepo, mainLogger); err != nil {
+	if err := initSystemSettings(repos.SystemSetting, mainLogger); err != nil {
 		mainLogger.Error("初始化系统设置失败", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
-	// 创建系统设置服务（全局唯一实例）
-	settingService := configService.NewSettingService(mainLogger, systemSettingRepo)
+	// 创建系统设置服务
+	settingService := configService.NewSettingService(mainLogger, repos.SystemSetting)
 
 	// 从系统设置加载熔断器配置
 	ctx := context.Background()
 
 	// 初始化熔断器管理器（传入 settingService 以支持配置热更新）
-	circuitManager := initCircuitManager(ctx, db, mainLogger, settingService)
+	circuitManager := initCircuitManager(ctx, db, mainLogger, settingService, repos)
 
 	// 初始化调试模式管理器
-	debugModeManager := loggerService.NewDebugModeManager(mainLogger, settingService)
-	if err := debugModeManager.Initialize(ctx); err != nil {
-		mainLogger.Error("初始化调试模式管理器失败", slog.String("error", err.Error()))
-	}
+	debugModeManager := initDebugModeManager(ctx, mainLogger, settingService)
+
+	// 创建日志清理服务
+	logCleanupService := loggerService.NewLogCleanupService(mainLogger, settingService, repos.RequestLog)
 
 	// 初始化定时任务调度器
-	cronScheduler := initCronScheduler(db, mainLogger, settingService, circuitManager, cfg)
+	cronScheduler := initCronScheduler(mainLogger, circuitManager, logCleanupService)
+
+	// 创建模型同步服务
+	syncService := modelsyncService.NewSyncService(mainLogger, repos.Channel, repos.ModelConfig, repos.Key, circuitManager)
 
 	// 初始化渠道模型同步调度器
-	channelRepo := repository.NewChannelRepository(db)
-	modelConfigRepo := repository.NewChannelModelConfigRepository(db)
-	keyRepo := repository.NewKeyRepository(db)
-	channelSyncScheduler := modelsyncService.NewChannelModelSyncScheduler(
-		mainLogger,
-		cronScheduler,
-		settingService,
-		channelRepo,
-		modelConfigRepo,
-		keyRepo,
-		circuitManager,
-	)
-	channelSyncScheduler.Initialize(ctx)
+	channelSyncScheduler := initChannelModelSyncScheduler(ctx, cronScheduler, syncService, settingService, repos, mainLogger)
+
+	// 创建审计日志记录器
+	auditLogger := loggerService.NewAuditLogger(mainLogger, repos.RequestLog, debugModeManager)
+
+	// 创建代理服务
+	proxySvc := initProxyService(ctx, settingService, repos, mainLogger, circuitManager, auditLogger)
+
+	// 创建管理后台相关服务
+	jwtService := adminService.NewJWTService()
+	authService := adminService.NewAuthService(db, mainLogger, repos.AdminUser, repos.AccessToken, jwtService)
+	probeHandler := circuit.NewProbeHandler(circuitManager, mainLogger)
+	healthCheckService := adminService.NewHealthCheckService(mainLogger, repos.Key, repos.Channel, probeHandler)
+	dashboardService := adminService.NewDashboardService(mainLogger, repos.RequestLog, repos.Channel, repos.Key, circuitManager)
+	modelService := adminService.NewModelService(repos.Model, repos.ModelConfig, mainLogger)
+	providerService := adminService.NewProviderService(repos.Provider, mainLogger)
+
+	components := &app.Components{
+		DB:     db,
+		Logger: mainLogger,
+		Repos:  repos,
+		Services: &app.Services{
+			Setting:               settingService,
+			CircuitManager:        circuitManager,
+			DebugModeManager:      debugModeManager,
+			CronScheduler:         cronScheduler,
+			ChannelModelScheduler: channelSyncScheduler,
+			AuditLogger:           auditLogger,
+			LogCleanupService:     logCleanupService,
+			ProxyService:          proxySvc,
+			AuthService:           authService,
+			JWTService:            jwtService,
+			HealthCheckService:    healthCheckService,
+			SyncService:           syncService,
+			DashboardService:      dashboardService,
+			ModelService:          modelService,
+			ProviderService:       providerService,
+			CircuitProbeHandler:   probeHandler,
+		},
+	}
 
 	// 注册配置监听器以支持热更新
 	configService.RegisterConfigListeners(settingService, []configService.ConfigListener{
 		circuitManager,
-		debugModeManager, // 注册 DebugModeManager 作为配置监听器
+		debugModeManager,
 		channelSyncScheduler,
+		proxySvc,
 	})
 
 	// 启动定时任务调度器
@@ -121,8 +164,8 @@ func main() {
 		cronScheduler.Start()
 	}()
 
-	// 初始化 HTTP 服务器（传入 settingService 以共享同一实例）
-	router := setupRouter(cfg, db, mainLogger, circuitManager, debugModeManager, settingService)
+	// 初始化 HTTP 服务器
+	router := setupRouter(cfg, components)
 
 	srv := &http.Server{
 		Addr:           fmt.Sprintf(":%d", cfg.Server.Port),
@@ -221,20 +264,17 @@ func initCircuitManager(ctx context.Context,
 	db *gorm.DB,
 	logger *slog.Logger,
 	settingService *configService.SettingService,
+	repos *app.Repositories,
 ) *circuit.Manager {
-	keyRepo := repository.NewKeyRepository(db)
-	channelRepo := repository.NewChannelRepository(db)
-	modelConfigRepo := repository.NewChannelModelConfigRepository(db)
-
 	probeInterval := 90 * time.Second // 探测间隔 90 秒
 	failureThreshold, coolingDuration := settingService.GetCircuitBreakerConfig(ctx)
 
 	return circuit.NewManager(
 		db,
 		logger,
-		keyRepo,
-		channelRepo,
-		modelConfigRepo,
+		repos.Key,
+		repos.Channel,
+		repos.ModelConfig,
 		settingService,
 		failureThreshold,
 		coolingDuration,
@@ -245,12 +285,10 @@ func initCircuitManager(ctx context.Context,
 // setupRouter 设置路由
 func setupRouter(
 	cfg *config.Config,
-	db *gorm.DB,
-	logger *slog.Logger,
-	circuitManager *circuit.Manager,
-	debugModeManager *loggerService.DebugModeManager,
-	settingService *configService.SettingService, // 接收共享的 settingService 实例
+	components *app.Components,
 ) *gin.Engine {
+	logger := components.Logger
+
 	// 设置 Gin 模式
 	if cfg.Log.Level == "debug" {
 		gin.SetMode(gin.DebugMode)
@@ -271,25 +309,11 @@ func setupRouter(
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": version})
 	})
 
-	// 从系统设置加载代理配置（使用传入的 settingService）
-	ctx := context.Background()
-	requestTimeout, _, _, maxRetry := settingService.GetProxyConfig(ctx)
-
-	// 创建审计日志记录器（新版）
-	requestLogRepo := repository.NewRequestLogRepository(db)
-	auditLoggerV2 := loggerService.NewAuditLogger(logger, requestLogRepo, debugModeManager)
-
 	// 注册代理路由
-	proxyServiceConfig := &proxyService.ProxyServiceConfig{
-		MaxRetries:     maxRetry,
-		RetryDelay:     500 * time.Millisecond,
-		RequestTimeout: requestTimeout,
-	}
-
-	proxy.RegisterRoutes(router, db, logger, circuitManager, auditLoggerV2, debugModeManager, proxyServiceConfig, settingService)
+	proxy.RegisterRoutes(router, components)
 
 	// 注册 Admin API 路由
-	admin.RegisterRoutes(router, db, logger, circuitManager, settingService)
+	admin.RegisterRoutes(router, components)
 
 	// 注册静态文件服务 (SPA)
 	registerStaticRoutes(router, logger)
@@ -300,7 +324,7 @@ func setupRouter(
 }
 
 // initCronScheduler 初始化定时任务调度器
-func initCronScheduler(db *gorm.DB, logger *slog.Logger, settingService *configService.SettingService, circuitManager *circuit.Manager, cfg *config.Config) *schedulerService.CronScheduler {
+func initCronScheduler(logger *slog.Logger, circuitManager *circuit.Manager, logCleanupService *loggerService.LogCleanupService) *schedulerService.CronScheduler {
 	// 创建定时任务调度器
 	cronScheduler := schedulerService.NewCronScheduler(logger)
 
@@ -321,9 +345,6 @@ func initCronScheduler(db *gorm.DB, logger *slog.Logger, settingService *configS
 	}
 
 	// 添加日志清理任务 - 每天凌晨1点执行
-	requestLogRepo := repository.NewRequestLogRepository(db)
-	logCleanupService := loggerService.NewLogCleanupService(logger, settingService, requestLogRepo)
-
 	err = cronScheduler.AddJob(
 		"log-cleanup",
 		schedulerService.EveryDayAt1AM,
@@ -336,6 +357,52 @@ func initCronScheduler(db *gorm.DB, logger *slog.Logger, settingService *configS
 	}
 
 	return cronScheduler
+}
+
+func initDebugModeManager(ctx context.Context, mainLogger *slog.Logger, settingService *configService.SettingService) *loggerService.DebugModeManager {
+	debugModeManager := loggerService.NewDebugModeManager(mainLogger, settingService)
+	if err := debugModeManager.Initialize(ctx); err != nil {
+		mainLogger.Error("初始化调试模式管理器失败", slog.String("error", err.Error()))
+	}
+	return debugModeManager
+}
+
+func initProxyService(ctx context.Context, settingService *configService.SettingService, repos *app.Repositories,
+	mainLogger *slog.Logger,
+	circuitManager *circuit.Manager,
+	auditLogger *loggerService.AuditLogger,
+) *proxyService.ProxyService {
+	requestTimeout, _, _, maxRetry := settingService.GetProxyConfig(ctx)
+	proxyServiceConfig := &proxyService.ProxyServiceConfig{
+		MaxRetries:     maxRetry,
+		RetryDelay:     500 * time.Millisecond,
+		RequestTimeout: requestTimeout,
+	}
+	return proxyService.NewProxyService(
+		mainLogger,
+		repos.Channel,
+		repos.RequestLog,
+		repos.Key,
+		repos.ModelConfig,
+		repos.AccessToken,
+		circuitManager,
+		auditLogger,
+		proxyServiceConfig,
+		settingService,
+	)
+}
+
+func initChannelModelSyncScheduler(ctx context.Context, cronScheduler *schedulerService.CronScheduler, syncService *modelsyncService.SyncService, settingService *configService.SettingService, repos *app.Repositories, mainLogger *slog.Logger) *modelsyncService.ChannelModelSyncScheduler {
+	channelSyncScheduler := modelsyncService.NewChannelModelSyncScheduler(
+		mainLogger,
+		cronScheduler,
+		settingService,
+		repos.Channel,
+		syncService,
+	)
+	channelSyncScheduler.Initialize(ctx)
+
+	return channelSyncScheduler
 }
 
 // registerStaticRoutes 注册静态文件服务 (SPA)
