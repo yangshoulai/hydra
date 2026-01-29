@@ -47,11 +47,11 @@ func (r *KeyRepository) FindByChannelID(ctx context.Context, channelID uint) ([]
 	return keys, err
 }
 
-// FindActiveByChannelID 根据渠道ID查询所有激活的 Key
-func (r *KeyRepository) FindActiveByChannelID(ctx context.Context, channelID uint) ([]*models.Key, error) {
+// FindNonDeadByChannelID 根据渠道ID查询所有非失效的 Key
+func (r *KeyRepository) FindNonDeadByChannelID(ctx context.Context, channelID uint) ([]*models.Key, error) {
 	var keys []*models.Key
 	err := r.db.WithContext(ctx).
-		Where("channel_id = ? AND status = ?", channelID, "active").
+		Where("channel_id = ? AND status <> ?", channelID, "dead").
 		Order("id ASC").
 		Find(&keys).Error
 	return keys, err

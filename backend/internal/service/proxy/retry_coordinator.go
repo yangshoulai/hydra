@@ -67,7 +67,7 @@ func (rc *RetryCoordinator) ShouldRetry(retryCtx *RetryContext) bool {
 }
 
 // RecordAttempt 记录一次尝试
-func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint, err error, failureType FailureType) {
+func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint, channelName string, err error, failureType FailureType) {
 	if retryCtx == nil {
 		return
 	}
@@ -84,6 +84,7 @@ func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint
 	rc.logger.Info("重试尝试已记录",
 		slog.Int("attempt_count", retryCtx.AttemptCount),
 		slog.Uint64("channel_id", uint64(channelID)),
+		slog.String("channel_name", channelName),
 		slog.String("failure_type", string(failureType)),
 		slog.Int("failed_channels_count", len(retryCtx.FailedChannelIDs)),
 	)

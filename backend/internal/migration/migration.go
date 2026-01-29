@@ -82,6 +82,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_11_0_AddModelConfigCooling(tx)
 			},
 		},
+		// v1.12.0 清理废弃系统设置
+		{
+			ID: "v1.12.0_remove_unused_settings",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_12_0_RemoveUnusedSettings(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

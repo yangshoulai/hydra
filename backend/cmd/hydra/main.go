@@ -266,7 +266,6 @@ func initCircuitManager(ctx context.Context,
 	settingService *configService.SettingService,
 	repos *app.Repositories,
 ) *circuit.Manager {
-	probeInterval := 90 * time.Second // 探测间隔 90 秒
 	failureThreshold, coolingDuration := settingService.GetCircuitBreakerConfig(ctx)
 
 	return circuit.NewManager(
@@ -278,7 +277,6 @@ func initCircuitManager(ctx context.Context,
 		settingService,
 		failureThreshold,
 		coolingDuration,
-		probeInterval,
 	)
 }
 
@@ -372,7 +370,7 @@ func initProxyService(ctx context.Context, settingService *configService.Setting
 	circuitManager *circuit.Manager,
 	auditLogger *loggerService.AuditLogger,
 ) *proxyService.ProxyService {
-	requestTimeout, _, _, maxRetry := settingService.GetProxyConfig(ctx)
+	requestTimeout, _, maxRetry := settingService.GetProxyConfig(ctx)
 	proxyServiceConfig := &proxyService.ProxyServiceConfig{
 		MaxRetries:     maxRetry,
 		RetryDelay:     500 * time.Millisecond,

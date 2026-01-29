@@ -29,11 +29,8 @@ type Manager struct {
 	keyBreakers         map[uint]*KeyBreaker
 	modelConfigBreakers map[uint]*ModelConfigBreaker
 
-	probeInterval      time.Duration // 探测间隔
-	probeMaxConcurrent int           // 最大并发探测数
-	probing            int32         // 探测进行中标志 (0=空闲, 1=探测中)
-	stopChan           chan struct{}
-	restartChan        chan struct{} // 重启探测调度器信号
+	probing  int32 // 探测进行中标志 (0=空闲, 1=探测中)
+	stopChan chan struct{}
 }
 
 // NewManager 创建熔断器管理器
@@ -46,7 +43,6 @@ func NewManager(
 	settingService *config.SettingService,
 	failureThreshold int,
 	coolingDuration time.Duration,
-	probeInterval time.Duration,
 ) *Manager {
 	return &Manager{
 		db:                  db,
@@ -57,12 +53,9 @@ func NewManager(
 		settingService:      settingService,
 		failureThreshold:    failureThreshold,
 		coolingDuration:     coolingDuration,
-		probeInterval:       probeInterval,
-		probeMaxConcurrent:  10, // 默认值
 		keyBreakers:         make(map[uint]*KeyBreaker),
 		modelConfigBreakers: make(map[uint]*ModelConfigBreaker),
 		stopChan:            make(chan struct{}),
-		restartChan:         make(chan struct{}),
 	}
 }
 
@@ -384,7 +377,7 @@ func (m *Manager) exitModelConfigCooling(modelConfigID uint) {
 	}
 }
 
-// OnConfigChanged 配置变更回调
+// OnConfigChanged 配置变更回调（仅关注熔断器阈值与冷却时长）
 func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 	if category != "circuit_breaker" {
 		return
@@ -393,21 +386,14 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 	// 从配置服务获取最新的熔断器配置
 	failureThreshold := m.settingService.GetInt(ctx, models.SettingCircuitBreakerFailureThreshold, m.failureThreshold)
 	coolingDuration := m.settingService.GetDuration(ctx, models.SettingCircuitBreakerCoolingDuration, m.coolingDuration)
-	probeInterval := m.settingService.GetDuration(ctx, models.SettingCircuitBreakerProbeInterval, m.probeInterval)
-	probeMaxConcurrent := m.settingService.GetInt(ctx, models.SettingCircuitBreakerProbeMaxConcurrent, m.probeMaxConcurrent)
-
 	m.mu.Lock()
 
 	// 更新配置
 	oldFailureThreshold := m.failureThreshold
 	oldCoolingDuration := m.coolingDuration
-	oldProbeInterval := m.probeInterval
-	oldProbeMaxConcurrent := m.probeMaxConcurrent
 
 	m.failureThreshold = failureThreshold
 	m.coolingDuration = coolingDuration
-	m.probeInterval = probeInterval
-	m.probeMaxConcurrent = probeMaxConcurrent
 
 	// 更新所有现有的熔断器配置
 	for _, breaker := range m.keyBreakers {
@@ -425,21 +411,7 @@ func (m *Manager) OnConfigChanged(ctx context.Context, category string) {
 		slog.Int("new_failure_threshold", failureThreshold),
 		slog.Duration("old_cooling_duration", oldCoolingDuration),
 		slog.Duration("new_cooling_duration", coolingDuration),
-		slog.Duration("old_probe_interval", oldProbeInterval),
-		slog.Duration("new_probe_interval", probeInterval),
-		slog.Int("old_probe_max_concurrent", oldProbeMaxConcurrent),
-		slog.Int("new_probe_max_concurrent", probeMaxConcurrent),
 	)
-
-	// 如果探测间隔发生变化，重启探测调度器
-	if oldProbeInterval != probeInterval {
-		m.logger.Info("探测间隔已变更，重启调度器")
-		select {
-		case m.restartChan <- struct{}{}:
-		default:
-			m.logger.Warn("发送重启信号失败，通道可能已满")
-		}
-	}
 }
 
 // RemoveKeyBreaker 移除 Key 熔断器

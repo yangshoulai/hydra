@@ -212,7 +212,7 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 
 	// 获取渠道的一个可用key
 	keyRepo := repository.NewKeyRepository(h.db)
-	keys, err := keyRepo.FindActiveByChannelID(c.Request.Context(), channelID)
+	keys, err := keyRepo.FindNonDeadByChannelID(c.Request.Context(), channelID)
 	if err != nil {
 		h.logger.Error("无法获取渠道密钥信息",
 			slog.Uint64("channel_id", uint64(channelID)),

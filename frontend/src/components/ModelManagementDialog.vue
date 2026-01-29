@@ -841,8 +841,6 @@ async function handleSyncModels() {
   try {
     const result = await channelApi.syncModels(currentChannelId)
 
-    console.log('[ModelManagementDialog] Sync result received:', result)
-
     if (
         currentRequestId !== syncRequestId.value ||
         !props.modelValue ||
@@ -883,7 +881,6 @@ async function handleSyncModels() {
     // 确保无论发生什么都要重置 loading 状态
     if (currentRequestId === syncRequestId.value) {
       syncing.value = false
-      console.log('[ModelManagementDialog] Sync completed, syncing set to false')
     }
   }
 }
@@ -1180,8 +1177,6 @@ watch(() => props.modelValue, async (newVal) => {
     // 重置分页为第一页
     pagination.page = 1
 
-    console.log('[ModelManagementDialog] Dialog opened, loading data...')
-
     try {
       // 先加载数据
       await Promise.all([
@@ -1189,21 +1184,11 @@ watch(() => props.modelValue, async (newVal) => {
         loadUnifiedModels(),
         loadEndpoints()
       ])
-
-      console.log('[ModelManagementDialog] Data loaded:', {
-        localConfigs: localConfigs.value.length,
-        unifiedModels: unifiedModels.value.length
-      })
-
       // 数据加载完成后再初始化编辑状态和选中状态
       initEditMap()
-
-      console.log('[ModelManagementDialog] Edit map initialized:', editMap.value)
-
       // 等待 Vue 更新视图
       await nextTick()
 
-      console.log('[ModelManagementDialog] After nextTick, displayModels:', displayModels.value.length)
     } catch (error) {
       console.error('[ModelManagementDialog] Error loading data:', error)
     }

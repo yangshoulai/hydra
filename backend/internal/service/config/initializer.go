@@ -42,20 +42,6 @@ var DefaultSettings = []models.SystemSetting{
 		Category:  "circuit_breaker",
 		Remark:    "熔断器冷却时长(秒)",
 	},
-	{
-		Key:       models.SettingCircuitBreakerProbeInterval,
-		Value:     "30",
-		ValueType: "int",
-		Category:  "circuit_breaker",
-		Remark:    "探测间隔(秒)",
-	},
-	{
-		Key:       models.SettingCircuitBreakerProbeMaxConcurrent,
-		Value:     "10",
-		ValueType: "int",
-		Category:  "circuit_breaker",
-		Remark:    "最大并发探测数",
-	},
 	// 日志设置
 	{
 		Key:       models.SettingLogRetentionDays,
@@ -78,13 +64,6 @@ var DefaultSettings = []models.SystemSetting{
 		ValueType: "int",
 		Category:  "proxy",
 		Remark:    "代理请求超时时间(秒)",
-	},
-	{
-		Key:       models.SettingProxyMaxResponseSize,
-		Value:     "10485760",
-		ValueType: "int",
-		Category:  "proxy",
-		Remark:    "最大响应大小(字节, 默认 10MB)",
 	},
 	{
 		Key:       models.SettingProxyMaxConcurrent,

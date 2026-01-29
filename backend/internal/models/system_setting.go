@@ -23,16 +23,13 @@ func (SystemSetting) TableName() string {
 
 // 预定义的系统设置 Key
 const (
-	SettingCircuitBreakerFailureThreshold   = "circuit_breaker_failure_threshold"
-	SettingCircuitBreakerCoolingDuration    = "circuit_breaker_cooling_duration"
-	SettingCircuitBreakerProbeInterval      = "circuit_breaker_probe_interval"
-	SettingCircuitBreakerProbeMaxConcurrent = "circuit_breaker_probe_max_concurrent"
-	SettingLogRetentionDays                 = "log_retention_days"
-	SettingLogDebugEnabled                  = "log_debug_enabled"
-	SettingProxyRequestTimeout              = "proxy_request_timeout"
-	SettingProxyMaxResponseSize             = "proxy_max_response_size"
-	SettingProxyMaxConcurrent               = "proxy_max_concurrent"
-	SettingProxyMaxRetry                    = "proxy_max_retry"
-	SettingSnifferPlainTextErrorRules       = "sniffer_plain_text_error_rules"
-	SettingChannelGlobalSyncEnabled         = "channel_global_sync_enabled"
+	SettingCircuitBreakerFailureThreshold = "circuit_breaker_failure_threshold"
+	SettingCircuitBreakerCoolingDuration  = "circuit_breaker_cooling_duration"
+	SettingLogRetentionDays               = "log_retention_days"
+	SettingLogDebugEnabled                = "log_debug_enabled"
+	SettingProxyRequestTimeout            = "proxy_request_timeout"
+	SettingProxyMaxConcurrent             = "proxy_max_concurrent"
+	SettingProxyMaxRetry                  = "proxy_max_retry"
+	SettingSnifferPlainTextErrorRules     = "sniffer_plain_text_error_rules"
+	SettingChannelGlobalSyncEnabled       = "channel_global_sync_enabled"
 )

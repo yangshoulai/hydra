@@ -34,7 +34,7 @@ func (e *ImagesGenerationsEndpoint) GetTestPayload(modelName string) map[string]
 		"model":  modelName,
 		"prompt": "请生成一只戴着耳机的柯基",
 		"n":      1,
-		"size":   "1024x1024",
+		"size":   "512x512",
 	}
 }
 

@@ -21,14 +21,6 @@ func NewResponseSniffer(logger *slog.Logger) *ResponseSniffer {
 	}
 }
 
-// NewResponseSnifferWithRules 创建带自定义规则的响应嗅探器
-func NewResponseSnifferWithRules(rules []SniffRule, logger *slog.Logger) *ResponseSniffer {
-	return &ResponseSniffer{
-		rules:  rules,
-		logger: logger,
-	}
-}
-
 // SniffResult 嗅探结果
 type SniffResult struct {
 	IsFake200   bool   // 是否为假 200
@@ -99,11 +91,6 @@ func (s *ResponseSniffer) IsFake200(resp *http.Response) (bool, error) {
 	return result.IsFake200, nil
 }
 
-// AddRule 添加自定义嗅探规则
-func (s *ResponseSniffer) AddRule(rule SniffRule) {
-	s.rules = append(s.rules, rule)
-}
-
 // UpdatePlainTextErrorKeywords 更新明文错误关键词
 func (s *ResponseSniffer) UpdatePlainTextErrorKeywords(keywords []string) {
 	for _, rule := range s.rules {
@@ -112,20 +99,6 @@ func (s *ResponseSniffer) UpdatePlainTextErrorKeywords(keywords []string) {
 			return
 		}
 	}
-}
-
-// GetPlainTextErrorKeywords 获取当前的明文错误关键词
-func (s *ResponseSniffer) GetPlainTextErrorKeywords() []string {
-	for _, rule := range s.rules {
-		if plainTextRule, ok := rule.(*PlainTextErrorRule); ok {
-			plainTextRule.mu.RLock()
-			keywords := make([]string, len(plainTextRule.errorKeywords))
-			copy(keywords, plainTextRule.errorKeywords)
-			plainTextRule.mu.RUnlock()
-			return keywords
-		}
-	}
-	return GetDefaultPlainTextErrorKeywords()
 }
 
 // truncateString 截断字符串用于日志输出

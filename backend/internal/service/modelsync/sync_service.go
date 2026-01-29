@@ -129,7 +129,7 @@ func (s *SyncService) fetchUpstreamModels(ctx context.Context, channel *models.C
 	modelGroups := make(map[string][]string)
 	modelSet := make(map[string]struct{})
 
-	keys, err := s.keyRepo.FindActiveByChannelID(ctx, channel.ID)
+	keys, err := s.keyRepo.FindNonDeadByChannelID(ctx, channel.ID)
 	if err != nil {
 		s.logger.Warn("查询渠道可用密钥异常",
 			slog.Uint64("channel_id", uint64(channel.ID)),

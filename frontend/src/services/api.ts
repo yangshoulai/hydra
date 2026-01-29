@@ -44,7 +44,14 @@ apiClient.interceptors.response.use(
                     const response = await axios.post(`${API_BASE_URL}/admin/api/auth/refresh`, {
                         refresh_token: refreshToken
                     })
-                    const { access_token, refresh_token: new_refresh_token } = response.data
+                    const {access_token, refresh_token: new_refresh_token} = response.data
+                    // 防御性校验：后端未返回 access_token 时直接回登录页
+                    if (!access_token) {
+                        localStorage.removeItem('access_token')
+                        localStorage.removeItem('refresh_token')
+                        window.location.href = '/login'
+                        throw new Error('No access token in refresh response')
+                    }
                     localStorage.setItem('access_token', access_token)
                     localStorage.setItem('refresh_token', new_refresh_token)
                     return access_token

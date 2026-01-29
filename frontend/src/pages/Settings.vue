@@ -57,33 +57,6 @@
             <n-text class="field-hint">熔断后等待多久再尝试恢复</n-text>
           </div>
 
-          <div class="form-item-wrapper">
-            <n-form-item label="探测间隔" path="circuit_breaker_probe_interval">
-              <n-input-number
-                  v-model:value="formData.circuit_breaker_probe_interval"
-                  :min="10"
-                  :max="300"
-                  style="width: 100%"
-              >
-                <template #suffix>秒</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">探测半开状态 Key 的时间间隔</n-text>
-          </div>
-
-          <div class="form-item-wrapper">
-            <n-form-item label="最大并发探测数" path="circuit_breaker_probe_max_concurrent">
-              <n-input-number
-                  v-model:value="formData.circuit_breaker_probe_max_concurrent"
-                  :min="1"
-                  :max="50"
-                  style="width: 100%"
-              >
-                <template #suffix>个</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">每次探测周期最多同时探测的 Key 数量</n-text>
-          </div>
         </n-form>
       </n-card>
 
@@ -132,20 +105,6 @@
               </n-input-number>
             </n-form-item>
             <n-text class="field-hint">系统允许的最大并发请求数</n-text>
-          </div>
-          <div class="form-item-wrapper">
-            <n-form-item label="最大响应大小" path="proxy_max_response_size">
-              <n-input-number
-                  v-model:value="formData.proxy_max_response_size"
-                  :min="1"
-                  :max="100"
-                  :precision="0"
-                  style="width: 100%"
-              >
-                <template #suffix>MB</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">单个响应的最大 Body 大小</n-text>
           </div>
 
           <div class="form-item-wrapper">
@@ -345,11 +304,8 @@ const message = useMessage()
 interface SettingsData {
   circuit_breaker_failure_threshold: number
   circuit_breaker_cooling_duration: number
-  circuit_breaker_probe_interval: number
-  circuit_breaker_probe_max_concurrent: number
   proxy_request_timeout: number
   proxy_max_concurrent: number
-  proxy_max_response_size: number
   proxy_max_retry: number
   log_retention_days: number
   log_debug_enabled: boolean
@@ -367,11 +323,8 @@ const snifferKeywords = ref('') // 嗅探器错误关键词（每行一个）
 const formData = ref<SettingsData>({
   circuit_breaker_failure_threshold: 3,
   circuit_breaker_cooling_duration: 60,
-  circuit_breaker_probe_interval: 30,
-  circuit_breaker_probe_max_concurrent: 10,
   proxy_request_timeout: 60,
   proxy_max_concurrent: 1000,
-  proxy_max_response_size: 10,
   proxy_max_retry: 3,
   log_retention_days: 30,
   log_debug_enabled: false,
@@ -398,16 +351,6 @@ const loadSettings = async () => {
           settings.circuit_breaker_cooling_duration
       )
     }
-    if (settings.circuit_breaker_probe_interval) {
-      formData.value.circuit_breaker_probe_interval = parseInt(
-          settings.circuit_breaker_probe_interval
-      )
-    }
-    if (settings.circuit_breaker_probe_max_concurrent) {
-      formData.value.circuit_breaker_probe_max_concurrent = parseInt(
-          settings.circuit_breaker_probe_max_concurrent
-      )
-    }
     if (settings.proxy_request_timeout) {
       formData.value.proxy_request_timeout = parseInt(
           settings.proxy_request_timeout
@@ -417,11 +360,6 @@ const loadSettings = async () => {
       formData.value.proxy_max_concurrent = parseInt(
           settings.proxy_max_concurrent
       )
-    }
-    if (settings.proxy_max_response_size) {
-      formData.value.proxy_max_response_size = parseInt(
-          settings.proxy_max_response_size
-      ) / (1024 * 1024) // 转换为 MB
     }
     if (settings.proxy_max_retry) {
       formData.value.proxy_max_retry = parseInt(settings.proxy_max_retry)
@@ -520,16 +458,9 @@ const handleSave = async () => {
             formData.value.circuit_breaker_failure_threshold.toString(),
         circuit_breaker_cooling_duration:
             formData.value.circuit_breaker_cooling_duration.toString(),
-        circuit_breaker_probe_interval:
-            formData.value.circuit_breaker_probe_interval.toString(),
-        circuit_breaker_probe_max_concurrent:
-            formData.value.circuit_breaker_probe_max_concurrent.toString(),
         proxy_request_timeout:
             formData.value.proxy_request_timeout.toString(),
         proxy_max_concurrent: formData.value.proxy_max_concurrent.toString(),
-        proxy_max_response_size: (
-            formData.value.proxy_max_response_size * 1024 * 1024
-        ).toString(), // 转换为字节
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
         log_retention_days: formData.value.log_retention_days.toString(),
         log_debug_enabled: debugModeEnabled.value.toString(),

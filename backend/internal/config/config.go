@@ -53,44 +53,6 @@ type FileConfig struct {
 	Compress   bool   `mapstructure:"compress"`
 }
 
-// CircuitBreakerConfig 熔断器配置
-type CircuitBreakerConfig struct {
-	FailureThreshold   int `mapstructure:"failure_threshold"`
-	CoolingDurationSec int `mapstructure:"cooling_duration_sec"`
-	MaxRetry           int `mapstructure:"max_retry"`
-}
-
-// SnifferConfig 响应嗅探器配置
-type SnifferConfig struct {
-	ErrorKeywords []string `mapstructure:"error_keywords"`
-}
-
-// ProxyConfig 代理配置
-type ProxyConfig struct {
-	RequestTimeout  time.Duration `mapstructure:"request_timeout"`
-	MaxResponseSize int64         `mapstructure:"max_response_size"`
-	MaxConcurrent   int           `mapstructure:"max_concurrent"`
-}
-
-// AdminConfig 管理后台配置
-type AdminConfig struct {
-	SessionSecret  string `mapstructure:"session_secret"`
-	SessionMaxAge  int    `mapstructure:"session_max_age"`
-	CookieSecure   bool   `mapstructure:"cookie_secure"`
-	CookieHTTPOnly bool   `mapstructure:"cookie_http_only"`
-	CookieSameSite string `mapstructure:"cookie_same_site"`
-}
-
-// CORSConfig CORS 配置
-type CORSConfig struct {
-	Enabled        bool     `mapstructure:"enabled"`
-	AllowedOrigins []string `mapstructure:"allowed_origins"`
-	AllowedMethods []string `mapstructure:"allowed_methods"`
-	AllowedHeaders []string `mapstructure:"allowed_headers"`
-	ExposedHeaders []string `mapstructure:"exposed_headers"`
-	MaxAge         int      `mapstructure:"max_age"`
-}
-
 // Load 加载配置文件
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
