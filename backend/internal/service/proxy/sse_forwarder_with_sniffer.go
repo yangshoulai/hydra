@@ -242,9 +242,11 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 		flusher.Flush()
 	}
 
-	// 继续转发剩余数据
+	// 继续转发剩余数据（捕获完整上游报文）
 	var captureBuffer bytes.Buffer
-	const maxCaptureLength = 10 * 1024 * 1024
+	if len(firstFrame.FirstChunk) > 0 {
+		captureBuffer.Write(firstFrame.FirstChunk)
+	}
 	bytesSent := len(firstFrame.FirstChunk)
 	chunkCount := 0
 	var lineBuffer bytes.Buffer
@@ -281,9 +283,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 		}
 
 		// 捕获内容
-		if captureBuffer.Len() < maxCaptureLength {
-			captureBuffer.WriteByte(ch)
-		}
+		captureBuffer.WriteByte(ch)
 
 		// 统计 chunk 数量（遇到 data: 行就计数）
 		lineBuffer.WriteByte(ch)
@@ -310,12 +310,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 		}
 	}
 
-	capturedContent := captureBuffer.String()
-	if captureBuffer.Len() >= maxCaptureLength {
-		capturedContent += "...(truncated)"
-	}
-
-	return capturedContent, chunkCount, firstChunkTime, nil
+	return captureBuffer.String(), chunkCount, firstChunkTime, nil
 }
 
 // truncateString 截断字符串（使用 sse_forwarder.go 中的实现）
