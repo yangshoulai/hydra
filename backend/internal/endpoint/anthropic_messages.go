@@ -38,7 +38,6 @@ func (e *MessagesEndpoint) GetTestPayload(modelName string) map[string]interface
 				"content": "请告诉我你的知识库的截止日期是哪一天？",
 			},
 		},
-		"max_tokens": 10,
 	}
 }
 

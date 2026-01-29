@@ -2,6 +2,7 @@ package admin
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -336,6 +337,11 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 	// 发送请求
 	client := &http.Client{
 		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -359,7 +365,8 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 		slog.String("endpoint_type", endpointType),
 		slog.String("url", req.URL.String()),
 		slog.Uint64("status_code", uint64(resp.StatusCode)),
-		slog.String("request_body", string(body)),
+		slog.String("request_body", string(updatedBody)),
+		slog.String("response_body", string(body)),
 	)
 	// 使用端点的验证方法验证响应
 	valid, errMsg := ep.ValidateResponse(resp.StatusCode, body)

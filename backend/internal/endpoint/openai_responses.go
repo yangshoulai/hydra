@@ -40,7 +40,6 @@ func (e *ResponsesEndpoint) GetTestPayload(modelName string) map[string]interfac
 				},
 			},
 		},
-		"max_tokens": 10,
 	}
 }
 
