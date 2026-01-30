@@ -74,8 +74,10 @@ func (e *MessagesEndpoint) ParseTokenUsage(_ []byte, responseBody string, isStre
 func (e *MessagesEndpoint) ConfigureRequest(req *http.Request, apiKey string, modelName string, requestBody []byte) ([]byte, error) {
 	// Anthropic 端点的特定配置
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Anthropic-Version", "2023-06-01")
 	req.Header.Set("X-Api-Key", apiKey)
+	if req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	return replaceRequestModel(requestBody, req.Header.Get("Content-Type"), modelName)
 }

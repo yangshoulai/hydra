@@ -73,6 +73,8 @@ func (e *ChatCompletionsEndpoint) ParseTokenUsage(_ []byte, responseBody string,
 func (e *ChatCompletionsEndpoint) ConfigureRequest(req *http.Request, apiKey string, modelName string, requestBody []byte) ([]byte, error) {
 	// OpenAI 端点的标准配置
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
+	if req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	return replaceRequestModel(requestBody, req.Header.Get("Content-Type"), modelName)
 }

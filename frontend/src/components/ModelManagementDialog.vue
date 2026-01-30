@@ -534,7 +534,7 @@ const displayModels = computed<ModelDisplayType[]>(() => {
     let disabled = false
     let endpointTypes = ['openai']
     let keyGroups = ['Default']
-    let channelStatus: 'active' | 'disabled' | 'non_exist' | 'unconfigured' = 'unconfigured'
+    let channelStatus: 'active' | 'disabled' | 'non_exist' | 'unconfigured' | 'cooling' = 'unconfigured'
 
     if (d.type === 'existing') {
       status = 'configured'
@@ -687,6 +687,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
         active: {type: 'success' as const, text: '正常'},
         disabled: {type: 'warning' as const, text: '禁用'},
         non_exist: {type: 'error' as const, text: '失效'},
+        cooling: {type: 'warning' as const, text: '冷却中'},
         unconfigured: {type: 'default' as const, text: '未配置'}
       }
       const config = statusConfig[row.channel_status] || statusConfig.unconfigured

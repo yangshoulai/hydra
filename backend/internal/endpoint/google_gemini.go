@@ -77,7 +77,9 @@ func (e *GeminiEndpoint) ParseTokenUsage(_ []byte, responseBody string, isStream
 }
 
 func (e *GeminiEndpoint) ConfigureRequest(req *http.Request, apiKey string, modelName string, requestBody []byte) ([]byte, error) {
-	req.Header.Set("Content-Type", "application/json")
+	if req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if apiKey != "" {
 		query := req.URL.Query()
 		if query.Get("key") == "" {

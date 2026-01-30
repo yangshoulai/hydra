@@ -123,7 +123,8 @@ func (r *RequestLogRepository) ListMain(ctx context.Context, filter *ListMainFil
 		query = query.Where("access_token = ?", filter.AccessToken)
 	}
 	if filter.StatusCode != nil {
-		query = query.Where("status_code = ?", *filter.StatusCode)
+		// 状态码过滤以明细表为准（任一明细命中即可）
+		query = query.Where("id IN (SELECT main_log_id FROM request_logs_detail WHERE status_code = ?)", *filter.StatusCode)
 	}
 	if filter.IsSuccess != nil {
 		query = query.Where("is_success = ?", *filter.IsSuccess)

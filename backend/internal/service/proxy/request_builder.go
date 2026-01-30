@@ -58,8 +58,6 @@ func (rb *RequestBuilder) BuildProxyRequest(
 	// 重置 Body,使其可以再次读取
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(originalBody))
 
-	// 根据 Content-Type 处理请求
-	contentType := c.GetHeader("Content-Type")
 	modifiedBody := originalBody
 
 	// 构建上游 URL
@@ -77,13 +75,6 @@ func (rb *RequestBuilder) BuildProxyRequest(
 
 	// 复制必要的 Headers
 	rb.copyHeaders(c.Request, req)
-
-	// 设置 Content-Type
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	} else {
-		req.Header.Set("Content-Type", "application/json")
-	}
 
 	// 使用端点的配置方法设置请求头和请求体
 	ep, err := rb.getEndpointByPath(endpoint)

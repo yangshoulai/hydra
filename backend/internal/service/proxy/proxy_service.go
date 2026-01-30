@@ -115,7 +115,10 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 	startTime := time.Now()
 	traceID := GetTraceIDFromContext(c)
 
-	endpointType := ps.getEndpointType(endpointPath)
+	endpointType, err := ps.getEndpointType(endpointPath)
+	if err != nil {
+		return err
+	}
 	mainLog := logger.NewMainLogBuilder().
 		TraceID(traceID).
 		EndpointType(endpointType).
@@ -707,25 +710,20 @@ func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
 }
 
 // getEndpointType 根据端点路径确定端点类型
-func (ps *ProxyService) getEndpointType(endpointPath string) string {
+func (ps *ProxyService) getEndpointType(endpointPath string) (string, error) {
 	// 从端点注册中心查找匹配的端点
 	for _, ep := range endpoint.GetAll() {
 		epPath := ep.GetPath()
 		if epPath == endpointPath {
-			return ep.GetType()
+			return ep.GetType(), nil
 		}
 		if strings.Contains(epPath, "*") {
 			prefix := strings.Split(epPath, "*")[0]
 			if prefix != "" && strings.HasPrefix(endpointPath, prefix) {
-				return ep.GetType()
+				return ep.GetType(), nil
 			}
 		}
 	}
 
-	// 如果找不到，返回默认的 openai
-	ps.logger.Warn("未找到端点类型，使用默认值",
-		slog.String("endpoint_path", endpointPath),
-		slog.String("default_type", "openai"),
-	)
-	return "openai"
+	return "openai", errors.New("unsupported endpoint")
 }

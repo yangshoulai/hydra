@@ -62,10 +62,15 @@ func (fc *FailureClassifier) ClassifyHTTPError(statusCode int) (FailureType, Fai
 		return FailureTypeModelNotFound, FailureScopeModelConfig, "上游模型不存在（" + strconv.Itoa(statusCode) + "）"
 	}
 
+	// 400 的错误一般是代理的报文结构或者内容有问题（不合适的内容），不应该熔断
+	if statusCode == 400 {
+		return FailureTypeSoft, FailureScopeNone, "代理客户端故障（" + strconv.Itoa(statusCode) + "）"
+	}
+
 	// 4xx 客户端错误(除了上述的)
-	// 对于渠道代理来说，4xx 应该触发重试（切换到其他渠道）
-	// 但不应记录到熔断器（既不是 Key 问题，也不应熔断模型配置）
-	if statusCode >= 400 && statusCode < 500 {
+	// 对于渠道代理来说，4xx 应该触发重试
+	// 熔断相关的模型
+	if statusCode > 400 && statusCode < 500 {
 		return FailureTypeSoft, FailureScopeModelConfig, "代理客户端故障（" + strconv.Itoa(statusCode) + "）"
 	}
 

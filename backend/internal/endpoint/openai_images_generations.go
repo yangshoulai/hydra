@@ -66,6 +66,8 @@ func (e *ImagesGenerationsEndpoint) ParseTokenUsage(_ []byte, _ string, _ bool) 
 
 func (e *ImagesGenerationsEndpoint) ConfigureRequest(req *http.Request, apiKey string, modelName string, requestBody []byte) ([]byte, error) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
+	if req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	return replaceRequestModel(requestBody, req.Header.Get("Content-Type"), modelName)
 }
