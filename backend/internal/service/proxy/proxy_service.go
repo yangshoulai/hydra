@@ -298,7 +298,17 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 		var firstChunkTime int
 		var forwardErr error
 
-		if isStream {
+		upstreamIsStream := isStream && isEventStreamResponse(upstreamResp)
+		if isStream && !upstreamIsStream {
+			ps.logWarnWithTrace("上游响应非流式，降级为非流式处理", traceID,
+				slog.String("endpoint", endpointPath),
+				slog.String("content_type", safeHeaderValue(upstreamResp, "Content-Type")),
+			)
+		}
+		detailLog.IsStream(upstreamIsStream)
+		mainLog.IsStream(upstreamIsStream)
+
+		if upstreamIsStream {
 			responseBodyStr, streamChunks, firstChunkTime, forwardErr = ps.sseForwarderWithSniffer.ForwardStreamWithDetection(c, upstreamResp, traceID)
 			if emptyBodyErr, ok := forwardErr.(*EmptySSEBodyError); ok {
 				ps.recordFailure(routeResult, FailureTypeSoft, FailureScopeNone, forwardErr.Error())
@@ -680,6 +690,21 @@ func indentBlock(text, indent string) string {
 		lines[i] = indent + lines[i]
 	}
 	return strings.Join(lines, "\n")
+}
+
+func isEventStreamResponse(resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	return strings.Contains(contentType, "text/event-stream")
+}
+
+func safeHeaderValue(resp *http.Response, key string) string {
+	if resp == nil {
+		return ""
+	}
+	return resp.Header.Get(key)
 }
 
 // OnConfigChanged 实现 ConfigListener 接口，响应配置变更
