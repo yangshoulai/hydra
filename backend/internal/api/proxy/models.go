@@ -80,7 +80,7 @@ func (h *ModelsHandler) handleModelsByEndpointType(c *gin.Context, endpointType 
 		modelList, err = h.modelRepo.ListWithActiveChannelConfigsByEndpointType(ctx, endpointType)
 	}
 	if err != nil {
-		h.logger.Error("failed to list enabled models",
+		h.logger.Error("查询启用令牌列表异常",
 			slog.String("trace_id", traceID),
 			slog.String("error", err.Error()),
 		)

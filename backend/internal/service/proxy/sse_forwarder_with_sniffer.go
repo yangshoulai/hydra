@@ -190,7 +190,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 	writer := c.Writer
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		sf.logger.Error("response writer does not support flushing")
+		sf.logger.Error("响应流不支持 flushing")
 		return "", 0, 0, io.ErrUnexpectedEOF
 	}
 

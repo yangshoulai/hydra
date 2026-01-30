@@ -71,7 +71,7 @@ func (rc *RetryCoordinator) ShouldRetry(retryCtx *RetryContext) bool {
 }
 
 // RecordAttempt 记录一次尝试
-func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint, channelName string, modelConfigID uint, keyID uint, err error, failureType FailureType) {
+func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint, channelName string, modelConfigID uint, keyID uint, err error, failureType FailureType, traceID string) {
 	if retryCtx == nil {
 		return
 	}
@@ -91,7 +91,8 @@ func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint
 		retryCtx.FailedKeyIDs = append(retryCtx.FailedKeyIDs, keyID)
 	}
 
-	rc.logger.Info("重试尝试已记录",
+	rc.logger.Info("记录重试",
+		slog.String("trace_id", traceID),
 		slog.Int("attempt_count", retryCtx.AttemptCount),
 		slog.Uint64("channel_id", uint64(channelID)),
 		slog.String("channel_name", channelName),
@@ -113,7 +114,7 @@ func (rc *RetryCoordinator) WaitBeforeRetry(ctx context.Context, retryCtx *Retry
 	// 使用指数退避策略
 	delay := rc.calculateDelay(retryCtx.AttemptCount)
 
-	rc.logger.Debug("waiting before retry",
+	rc.logger.Debug("等待重试中",
 		slog.Int("attempt_count", retryCtx.AttemptCount),
 		slog.Duration("delay", delay),
 	)
@@ -206,7 +207,7 @@ func (rc *RetryCoordinator) UpdateConfig(maxRetries int, retryDelay time.Duratio
 	rc.maxRetries = maxRetries
 	rc.retryDelay = retryDelay
 
-	rc.logger.Info("retry coordinator config updated",
+	rc.logger.Info("重试协调器配置已更新",
 		slog.Int("old_max_retries", oldMaxRetries),
 		slog.Int("new_max_retries", maxRetries),
 		slog.Duration("old_retry_delay", oldRetryDelay),

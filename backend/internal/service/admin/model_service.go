@@ -12,10 +12,10 @@ import (
 
 // 错误定义
 var (
-	ErrInvalidInput      = errors.New("invalid input")
-	ErrModelNameExists   = errors.New("model name already exists")
-	ErrModelNotFound     = errors.New("model not found")
-	ErrModelInUse        = errors.New("model is in use by channel configurations")
+	ErrInvalidInput    = errors.New("invalid input")
+	ErrModelNameExists = errors.New("model name already exists")
+	ErrModelNotFound   = errors.New("model not found")
+	ErrModelInUse      = errors.New("model is in use by channel configurations")
 )
 
 // ModelService 统一模型服务
@@ -79,7 +79,7 @@ func (s *ModelService) Create(ctx context.Context, req CreateModelRequest) (*mod
 		return nil, err
 	}
 
-	s.logger.Info("model created",
+	s.logger.Info("模型已创建",
 		slog.Uint64("id", uint64(model.ID)),
 		slog.String("name", model.Name),
 	)
@@ -123,7 +123,7 @@ func (s *ModelService) Update(ctx context.Context, id uint, req UpdateModelReque
 		return nil, err
 	}
 
-	s.logger.Info("model updated",
+	s.logger.Info("模型已更新",
 		slog.Uint64("id", uint64(model.ID)),
 		slog.String("name", model.Name),
 	)
@@ -155,7 +155,7 @@ func (s *ModelService) Delete(ctx context.Context, id uint) error {
 		return err
 	}
 
-	s.logger.Info("model deleted",
+	s.logger.Info("模型已删除",
 		slog.Uint64("id", uint64(id)),
 		slog.String("name", model.Name),
 	)
@@ -172,8 +172,8 @@ func (s *ModelService) List(ctx context.Context) ([]models.Model, error) {
 type ModelListRequest struct {
 	Page       int    `form:"page" binding:"omitempty,min=1"`
 	PageSize   int    `form:"page_size" binding:"omitempty,min=1,max=1000"`
-	Name       string `form:"name" binding:"omitempty,max=100"`           // 模型名称模糊查询
-	ProviderID string `form:"provider_id" binding:"omitempty,max=50"`     // 厂商ID精确查询
+	Name       string `form:"name" binding:"omitempty,max=100"`          // 模型名称模糊查询
+	ProviderID string `form:"provider_id" binding:"omitempty,max=50"`    // 厂商ID精确查询
 	SortBy     string `form:"sort_by" binding:"omitempty,oneof=id name"` // 排序字段
 	SortOrder  string `form:"sort_order" binding:"omitempty,oneof=asc desc"`
 }

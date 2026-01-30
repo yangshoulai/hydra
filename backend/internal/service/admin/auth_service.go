@@ -171,7 +171,7 @@ func (s *AuthService) generateAccessToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to create token record: %w", err)
 	}
 
-	s.logger.Debug("access token generated",
+	s.logger.Debug("密钥已生成",
 		slog.Uint64("token_id", uint64(accessToken.ID)),
 	)
 
@@ -230,7 +230,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uint, req *Chan
 		return fmt.Errorf("failed to update password: %w", err)
 	}
 
-	s.logger.Info("password changed successfully",
+	s.logger.Info("密码修改成功",
 		slog.Uint64("user_id", uint64(userID)),
 	)
 

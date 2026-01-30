@@ -78,7 +78,7 @@ func (qa *QPSAggregator) AggregateLastHour(ctx context.Context) ([]QPSDataPoint,
 		})
 	}
 
-	qa.logger.Debug("QPS aggregation completed",
+	qa.logger.Debug("QPS 汇总计算已完成",
 		slog.Int("data_points", len(dataPoints)),
 		slog.Int("total_requests", len(logs)),
 	)
@@ -92,7 +92,7 @@ func (qa *QPSAggregator) AggregateByInterval(
 	startTime, endTime time.Time,
 	interval time.Duration,
 ) ([]QPSDataPoint, error) {
-	qa.logger.Info("aggregating QPS data by interval",
+	qa.logger.Info("按指定时间间隔聚合 QPS 数据",
 		slog.Time("start_time", startTime),
 		slog.Time("end_time", endTime),
 		slog.Duration("interval", interval),

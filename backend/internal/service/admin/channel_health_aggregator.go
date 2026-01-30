@@ -78,7 +78,7 @@ func (cha *ChannelHealthAggregator) AggregateAllChannels(ctx context.Context) ([
 		healthInfos = append(healthInfos, *healthInfo)
 	}
 
-	cha.logger.Debug("channel health aggregation completed",
+	cha.logger.Debug("渠道健康指标已生成",
 		slog.Int("total_channels", len(healthInfos)),
 	)
 
@@ -206,7 +206,7 @@ func (cha *ChannelHealthAggregator) GetOverallHealthStatus(ctx context.Context) 
 		status.OverallHealth = float64(status.HealthyKeys) / float64(status.TotalKeys) * 100
 	}
 
-	cha.logger.Debug("overall health status calculated",
+	cha.logger.Debug("计算整体健康度已完成",
 		slog.Int("total_channels", status.TotalChannels),
 		slog.Int("total_keys", status.TotalKeys),
 	)

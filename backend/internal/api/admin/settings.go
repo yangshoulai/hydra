@@ -35,7 +35,7 @@ func NewSettingsHandler(
 func (h *SettingsHandler) GetAllSettings(c *gin.Context) {
 	settings, err := h.systemSettingRepo.GetAll(c.Request.Context())
 	if err != nil {
-		h.logger.Error("failed to get settings", slog.String("error", err.Error()))
+		h.logger.Error("获取系统配置异常", slog.String("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to get settings",
 		})
@@ -73,7 +73,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	// 批量更新设置
 	for key, value := range req.Settings {
 		if err := h.settingService.Set(c.Request.Context(), key, value); err != nil {
-			h.logger.Error("failed to update setting",
+			h.logger.Error("更新系统配置异常",
 				slog.String("key", key),
 				slog.String("value", value),
 				slog.String("error", err.Error()),
@@ -86,7 +86,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		}
 	}
 
-	h.logger.Info("settings updated",
+	h.logger.Info("系统配置已更新",
 		slog.Int("count", len(req.Settings)),
 	)
 
@@ -145,7 +145,7 @@ func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 	}
 
 	if err := h.settingService.Set(c.Request.Context(), key, req.Value); err != nil {
-		h.logger.Error("failed to update setting",
+		h.logger.Error("更新系统配置异常",
 			slog.String("key", key),
 			slog.String("value", req.Value),
 			slog.String("error", err.Error()),
@@ -157,7 +157,7 @@ func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("setting updated",
+	h.logger.Info("系统配置已更新",
 		slog.String("key", key),
 		slog.String("value", req.Value),
 	)

@@ -94,13 +94,11 @@ func (s *CronScheduler) RemoveJob(name string) {
 
 // Start 启动调度器
 func (s *CronScheduler) Start() {
-	s.logger.Info("启动定时任务调度器")
 	s.cron.Start()
 }
 
 // Stop 停止调度器
 func (s *CronScheduler) Stop() {
-	s.logger.Info("停止定时任务调度器")
 	ctx := s.cron.Stop()
 	<-ctx.Done()
 	s.logger.Info("定时任务调度器已停止")

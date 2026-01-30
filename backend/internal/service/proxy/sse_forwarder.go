@@ -36,7 +36,7 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 	writer := c.Writer
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		sf.logger.Error("response writer does not support flushing")
+		sf.logger.Error("响应流不支持 flushing")
 		return io.ErrUnexpectedEOF
 	}
 
@@ -115,7 +115,7 @@ func (sf *SSEForwarder) ForwardStream(c *gin.Context, upstreamResp *http.Respons
 			line := lineBuffer.String()
 			if len(line) > 2 { // \r\n 或 \n
 				eventCount++
-				sf.logger.Debug("SSE event forwarded",
+				sf.logger.Debug("转发 SSE 流",
 					slog.Int("event_number", eventCount),
 					slog.Int("line_length", len(line)),
 					slog.String("line_prefix", truncateString(line, 50)),
@@ -253,7 +253,7 @@ func (sf *SSEForwarder) ForwardStreamWithCapture(c *gin.Context, upstreamResp *h
 			line := lineBuffer.String()
 			if len(line) > 2 { // \r\n 或 \n
 				eventCount++
-				sf.logger.Debug("SSE event forwarded",
+				sf.logger.Debug("转发 SSE 流已完成",
 					slog.String("trace_id", traceID),
 					slog.Int("event_number", eventCount),
 					slog.Int("line_length", len(line)),

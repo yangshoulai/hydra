@@ -87,7 +87,7 @@ func (src *SuccessRateCalculator) calculateSuccessRate(
 		stats.SuccessRate = float64(stats.SuccessRequests) / float64(stats.TotalRequests) * 100
 	}
 
-	src.logger.Debug("success rate calculation completed",
+	src.logger.Debug("成功率计算已完成",
 		slog.Int("total_requests", stats.TotalRequests),
 		slog.Int("success_requests", stats.SuccessRequests),
 		slog.Int("failed_requests", stats.FailedRequests),
@@ -137,7 +137,7 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByChannel(
 			stats.SuccessRate = float64(stats.SuccessRequests) / float64(stats.TotalRequests) * 100
 		}
 
-		src.logger.Debug("channel success rate calculated",
+		src.logger.Debug("渠道成功率计算已完成",
 			slog.Int64("channel_id", int64(channelID)),
 			slog.Int("total_requests", stats.TotalRequests),
 			slog.Float64("success_rate", stats.SuccessRate),
@@ -187,7 +187,7 @@ func (src *SuccessRateCalculator) CalculateSuccessRateByModel(
 			stats.SuccessRate = float64(stats.SuccessRequests) / float64(stats.TotalRequests) * 100
 		}
 
-		src.logger.Debug("model success rate calculated",
+		src.logger.Debug("模型成功率计算已完成",
 			slog.String("model", modelName),
 			slog.Int("total_requests", stats.TotalRequests),
 			slog.Float64("success_rate", stats.SuccessRate),

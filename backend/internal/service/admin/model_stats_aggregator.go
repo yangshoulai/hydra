@@ -67,7 +67,7 @@ func (m *ModelStatsAggregator) GetModelStatsByTimeRange(ctx context.Context, sta
 		Where("requested_model != ''").
 		Distinct("requested_model").
 		Count(&activeModels).Error; err != nil {
-		m.logger.Error("failed to count active models", slog.String("error", err.Error()))
+		m.logger.Error("统计激活的模型数异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 	stats.ActiveModels = int(activeModels)
@@ -78,7 +78,7 @@ func (m *ModelStatsAggregator) GetModelStatsByTimeRange(ctx context.Context, sta
 		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
 		Where("requested_model != ''").
 		Count(&totalRequests).Error; err != nil {
-		m.logger.Error("failed to count total requests", slog.String("error", err.Error()))
+		m.logger.Error("统计所有请求数异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 	stats.TotalRequests = int(totalRequests)
@@ -90,7 +90,7 @@ func (m *ModelStatsAggregator) GetModelStatsByTimeRange(ctx context.Context, sta
 		Where("requested_model != ''").
 		Where("is_success = ?", true).
 		Count(&successRequests).Error; err != nil {
-		m.logger.Error("failed to count success requests", slog.String("error", err.Error()))
+		m.logger.Error("统计成功请求数异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 	stats.SuccessRequests = int(successRequests)
@@ -112,7 +112,7 @@ func (m *ModelStatsAggregator) GetModelStatsByTimeRange(ctx context.Context, sta
 		Group("requested_model").
 		Order("total_requests DESC").
 		Scan(&modelStats).Error; err != nil {
-		m.logger.Error("failed to get model details", slog.String("error", err.Error()))
+		m.logger.Error("获取模型详情异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 

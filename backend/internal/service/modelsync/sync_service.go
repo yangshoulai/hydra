@@ -111,7 +111,7 @@ func (s *SyncService) SyncChannelModels(ctx context.Context, channel *models.Cha
 		Diff:           diff,
 	}
 
-	s.logger.Debug("",
+	s.logger.Debug("渠道模型同步完成",
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_id", channel.Name),
 		slog.Int("upstream_count", diff.TotalUpstreamModels),

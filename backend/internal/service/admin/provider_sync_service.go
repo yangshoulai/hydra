@@ -14,7 +14,7 @@ import (
 
 const (
 	remoteProvidersURL = "https://basellm.github.io/llm-metadata/api/providers.json"
-	timeout           = 10 * time.Second
+	timeout            = 10 * time.Second
 )
 
 // RemoteProviderResponse 远程厂商 API 响应
@@ -24,16 +24,16 @@ type RemoteProviderResponse struct {
 
 // RemoteProvider 远程厂商
 type RemoteProvider struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	IconURL  string `json:"iconURL"`
-	LobeIcon string `json:"lobeIcon"`
-	ModelCount int  `json:"modelCount"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	IconURL    string `json:"iconURL"`
+	LobeIcon   string `json:"lobeIcon"`
+	ModelCount int    `json:"modelCount"`
 }
 
 // SyncProviders 同步远程厂商
 func (s *ProviderService) SyncProviders(ctx context.Context) ([]RemoteProvider, error) {
-	s.logger.Info("syncing remote providers", slog.String("url", remoteProvidersURL))
+	s.logger.Info("同步远程供应商", slog.String("url", remoteProvidersURL))
 
 	// 创建 HTTP 客户端
 	client := &http.Client{
@@ -43,21 +43,21 @@ func (s *ProviderService) SyncProviders(ctx context.Context) ([]RemoteProvider, 
 	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, remoteProvidersURL, nil)
 	if err != nil {
-		s.logger.Error("failed to create request", slog.String("error", err.Error()))
+		s.logger.Error("创建同步请求异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	// 发送请求
 	resp, err := client.Do(req)
 	if err != nil {
-		s.logger.Error("failed to fetch remote providers", slog.String("error", err.Error()))
+		s.logger.Error("获取远程供应商信息异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	// 检查响应状态
 	if resp.StatusCode != http.StatusOK {
-		s.logger.Error("remote providers API returned non-200 status",
+		s.logger.Error("远程供应商接口返回无效状态码",
 			slog.Int("status", resp.StatusCode),
 		)
 		return nil, err
@@ -66,18 +66,18 @@ func (s *ProviderService) SyncProviders(ctx context.Context) ([]RemoteProvider, 
 	// 读取响应体
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		s.logger.Error("failed to read response body", slog.String("error", err.Error()))
+		s.logger.Error("读取响应体异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	// 解析 JSON
 	var response RemoteProviderResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		s.logger.Error("failed to parse response", slog.String("error", err.Error()))
+		s.logger.Error("解析响应体异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	s.logger.Info("successfully synced remote providers",
+	s.logger.Info("同步远程供应商信息成功",
 		slog.Int("count", len(response.Providers)),
 	)
 

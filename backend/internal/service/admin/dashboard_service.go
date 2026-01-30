@@ -43,24 +43,24 @@ func NewDashboardService(
 
 // DashboardMetrics 仪表盘指标
 type DashboardMetrics struct {
-	CurrentQPS         float64                 `json:"current_qps"`
-	SuccessRate        float64                 `json:"success_rate"`
-	TotalRequests      int                     `json:"total_requests"`
-	ActiveModels       int                     `json:"active_models"`
-	ActiveChannels     int                     `json:"active_channels"`
-	TotalChannels      int                     `json:"total_channels"`
-	TotalPromptTokens  int64                   `json:"total_prompt_tokens"`
-	TotalCompletionTokens int64                `json:"total_completion_tokens"`
-	ModelStats         *ModelStats             `json:"model_stats"`
-	QPSTrend           []QPSDataPoint          `json:"qps_trend"`
-	ChannelHealthList  []ChannelHealthMetrics  `json:"channel_health_list"`
+	CurrentQPS            float64                `json:"current_qps"`
+	SuccessRate           float64                `json:"success_rate"`
+	TotalRequests         int                    `json:"total_requests"`
+	ActiveModels          int                    `json:"active_models"`
+	ActiveChannels        int                    `json:"active_channels"`
+	TotalChannels         int                    `json:"total_channels"`
+	TotalPromptTokens     int64                  `json:"total_prompt_tokens"`
+	TotalCompletionTokens int64                  `json:"total_completion_tokens"`
+	ModelStats            *ModelStats            `json:"model_stats"`
+	QPSTrend              []QPSDataPoint         `json:"qps_trend"`
+	ChannelHealthList     []ChannelHealthMetrics `json:"channel_health_list"`
 }
 
 // GetMetrics 获取仪表盘指标
 func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, error) {
 	qps, err := s.qpsAggregator.GetCurrentQPS(ctx)
 	if err != nil {
-		s.logger.Error("failed to get current QPS", slog.String("error", err.Error()))
+		s.logger.Error("获取当前 QPS 异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -69,31 +69,31 @@ func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, e
 
 	successRateStats, err := s.successRateCalculator.CalculateSuccessRateByTimeRange(ctx, startTime, endTime)
 	if err != nil {
-		s.logger.Error("failed to calculate success rate", slog.String("error", err.Error()))
+		s.logger.Error("计算成功率异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	modelStats, err := s.modelStatsAggregator.GetModelStatsByTimeRange(ctx, startTime, endTime)
 	if err != nil {
-		s.logger.Error("failed to get model stats", slog.String("error", err.Error()))
+		s.logger.Error("获取模型统计数据异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	activeChannels, err := s.channelRepo.FindActive(ctx)
 	if err != nil {
-		s.logger.Error("failed to get active channels", slog.String("error", err.Error()))
+		s.logger.Error("获取激活渠道列表异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	allChannels, err := s.channelRepo.FindAll(ctx)
 	if err != nil {
-		s.logger.Error("failed to get all channels", slog.String("error", err.Error()))
+		s.logger.Error("获取所有渠道异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	qpsTrend, err := s.qpsAggregator.AggregateLastHour(ctx)
 	if err != nil {
-		s.logger.Error("failed to get QPS trend", slog.String("error", err.Error()))
+		s.logger.Error("获取 QPS", slog.String("error", err.Error()))
 		return nil, err
 	}
 
@@ -110,17 +110,17 @@ func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, e
 	}
 
 	return &DashboardMetrics{
-		CurrentQPS:        qps,
-		SuccessRate:       successRateStats.SuccessRate,
-		TotalRequests:     successRateStats.TotalRequests,
-		ActiveModels:      modelStats.ActiveModels,
-		ActiveChannels:    len(activeChannels),
-		TotalChannels:     len(allChannels),
-		TotalPromptTokens: tokenUsage.PromptTokens,
+		CurrentQPS:            qps,
+		SuccessRate:           successRateStats.SuccessRate,
+		TotalRequests:         successRateStats.TotalRequests,
+		ActiveModels:          modelStats.ActiveModels,
+		ActiveChannels:        len(activeChannels),
+		TotalChannels:         len(allChannels),
+		TotalPromptTokens:     tokenUsage.PromptTokens,
 		TotalCompletionTokens: tokenUsage.CompletionTokens,
-		ModelStats:        modelStats,
-		QPSTrend:          qpsTrend,
-		ChannelHealthList: channelStats,
+		ModelStats:            modelStats,
+		QPSTrend:              qpsTrend,
+		ChannelHealthList:     channelStats,
 	}, nil
 }
 

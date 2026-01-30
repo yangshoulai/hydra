@@ -52,7 +52,7 @@ func (h *GenericHandler) Handle(c *gin.Context) {
 			return
 		}
 
-		h.logger.Error("请求处理失败",
+		h.logger.Error("处理失败",
 			slog.String("trace_id", traceID),
 			slog.String("endpoint", h.endpointName),
 			slog.Duration("duration", duration),

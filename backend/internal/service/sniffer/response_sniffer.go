@@ -36,7 +36,7 @@ func (s *ResponseSniffer) SniffResponse(resp *http.Response) (*SniffResult, erro
 	// 读取 Body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		s.logger.Error("Failed to read response body",
+		s.logger.Error("读取响应内容异常",
 			"error", err,
 			"status_code", resp.StatusCode,
 		)

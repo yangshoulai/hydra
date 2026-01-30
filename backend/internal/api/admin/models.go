@@ -13,7 +13,7 @@ import (
 // ModelHandler 统一模型处理器
 type ModelHandler struct {
 	modelService *admin.ModelService
-	logger        *slog.Logger
+	logger       *slog.Logger
 }
 
 // NewModelHandler 创建统一模型处理器
@@ -23,7 +23,7 @@ func NewModelHandler(
 ) *ModelHandler {
 	return &ModelHandler{
 		modelService: modelService,
-		logger:        logger,
+		logger:       logger,
 	}
 }
 
@@ -64,7 +64,7 @@ func (h *ModelHandler) CreateModel(c *gin.Context) {
 			})
 			return
 		}
-		h.logger.Error("failed to create model",
+		h.logger.Error("创建模型异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -127,7 +127,7 @@ func (h *ModelHandler) UpdateModel(c *gin.Context) {
 			})
 			return
 		}
-		h.logger.Error("failed to update model",
+		h.logger.Error("更新模型异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -174,7 +174,7 @@ func (h *ModelHandler) DeleteModel(c *gin.Context) {
 			})
 			return
 		}
-		h.logger.Error("failed to delete model",
+		h.logger.Error("删除模型异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -218,7 +218,7 @@ func (h *ModelHandler) ListModels(c *gin.Context) {
 
 	result, err := h.modelService.ListWithFilter(c.Request.Context(), req)
 	if err != nil {
-		h.logger.Error("failed to list models",
+		h.logger.Error("查询模型列表异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -253,7 +253,7 @@ func (h *ModelHandler) GetModel(c *gin.Context) {
 
 	model, err := h.modelService.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		h.logger.Error("failed to get model",
+		h.logger.Error("查询模型异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{

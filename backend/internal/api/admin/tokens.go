@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"crypto/rand"
+	"encoding/base64"
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
-	"crypto/rand"
-	"encoding/base64"
 	"log/slog"
 )
 
@@ -34,7 +34,7 @@ func NewTokensHandler(
 type TokenListResponse struct {
 	ID               uint    `json:"id"`
 	Name             string  `json:"name"`
-	Token            string  `json:"token"`          // 明文令牌（用于复制）
+	Token            string  `json:"token"`         // 明文令牌（用于复制）
 	TokenPreview     string  `json:"token_preview"` // 脱敏令牌（前8位+***+后4位）
 	Status           string  `json:"status"`
 	CreatedAt        string  `json:"created_at"`
@@ -48,18 +48,18 @@ type TokenListResponse struct {
 type TokenListRequest struct {
 	Page      int    `form:"page" binding:"omitempty,min=1"`
 	PageSize  int    `form:"page_size" binding:"omitempty,min=1,max=1000"`
-	Name      string `form:"name" binding:"omitempty,max=20"`               // 名称过滤
-	Status    string `form:"status" binding:"omitempty,oneof=active disabled"` // 状态过滤
-	Token     string `form:"token" binding:"omitempty,max=255"`             // 令牌过滤
+	Name      string `form:"name" binding:"omitempty,max=20"`                                     // 名称过滤
+	Status    string `form:"status" binding:"omitempty,oneof=active disabled"`                    // 状态过滤
+	Token     string `form:"token" binding:"omitempty,max=255"`                                   // 令牌过滤
 	SortBy    string `form:"sort_by" binding:"omitempty,oneof=id status created_at last_used_at"` // 排序字段
-	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`  // 排序方向
+	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`                       // 排序方向
 }
 
 // TokenListData 令牌列表数据响应
 type TokenListData struct {
-	Total    int64              `json:"total"`
-	Page     int                `json:"page"`
-	PageSize int                `json:"page_size"`
+	Total    int64               `json:"total"`
+	Page     int                 `json:"page"`
+	PageSize int                 `json:"page_size"`
 	Items    []TokenListResponse `json:"items"`
 }
 
@@ -71,12 +71,12 @@ type CreateTokenRequest struct {
 
 // CreateTokenResponse 创建令牌响应
 type CreateTokenResponse struct {
-	ID           uint    `json:"id"`
-	Name         string  `json:"name"`
-	TokenPreview string  `json:"token_preview"` // 脱敏令牌
-	AccessToken  string  `json:"access_token"`  // 明文令牌，仅在创建时返回
-	CreatedAt    string  `json:"created_at"`
-	Message      string  `json:"message"`
+	ID           uint   `json:"id"`
+	Name         string `json:"name"`
+	TokenPreview string `json:"token_preview"` // 脱敏令牌
+	AccessToken  string `json:"access_token"`  // 明文令牌，仅在创建时返回
+	CreatedAt    string `json:"created_at"`
+	Message      string `json:"message"`
 }
 
 // GetTokens 获取令牌列表
@@ -129,7 +129,7 @@ func (h *TokensHandler) GetTokens(c *gin.Context) {
 	// 查询令牌列表
 	tokens, total, err := h.tokenRepo.ListWithFilter(c.Request.Context(), offset, req.PageSize, filter, sortOpts)
 	if err != nil {
-		h.logger.Error("failed to get tokens", slog.String("error", err.Error()))
+		h.logger.Error("查询令牌列表异常", slog.String("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to get tokens",
 		})
@@ -202,7 +202,7 @@ func (h *TokensHandler) CreateToken(c *gin.Context) {
 	// 生成随机令牌
 	accessToken, err := generateAccessToken()
 	if err != nil {
-		h.logger.Error("failed to generate access token", slog.String("error", err.Error()))
+		h.logger.Error("创建访问令牌异常", slog.String("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to generate access token",
 		})
@@ -245,7 +245,7 @@ func (h *TokensHandler) CreateToken(c *gin.Context) {
 	}
 
 	if err := h.tokenRepo.Create(c.Request.Context(), token); err != nil {
-		h.logger.Error("failed to create token",
+		h.logger.Error("创建令牌异常",
 			slog.String("name", req.Name),
 			slog.String("error", err.Error()),
 		)
@@ -255,7 +255,7 @@ func (h *TokensHandler) CreateToken(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("access token created",
+	h.logger.Info("访问令牌已创建",
 		slog.Int64("token_id", int64(token.ID)),
 		slog.String("name", token.Name),
 		slog.Bool("has_expiration", expiresAt != nil),
@@ -297,7 +297,7 @@ func (h *TokensHandler) DeleteToken(c *gin.Context) {
 
 	// 删除令牌
 	if err := h.tokenRepo.Delete(c.Request.Context(), id); err != nil {
-		h.logger.Error("failed to delete token",
+		h.logger.Error("删除令牌异常",
 			slog.Int64("token_id", int64(id)),
 			slog.String("error", err.Error()),
 		)
@@ -307,7 +307,7 @@ func (h *TokensHandler) DeleteToken(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("access token deleted",
+	h.logger.Info("访问令牌已删除",
 		slog.Int64("token_id", int64(id)),
 		slog.String("name", token.Name),
 	)
@@ -345,7 +345,7 @@ func (h *TokensHandler) ToggleTokenStatus(c *gin.Context) {
 	}
 
 	if err := h.tokenRepo.ToggleStatus(c.Request.Context(), id, newStatus); err != nil {
-		h.logger.Error("failed to toggle token status",
+		h.logger.Error("切换令牌状态异常",
 			slog.Int64("token_id", int64(id)),
 			slog.String("error", err.Error()),
 		)
@@ -355,7 +355,7 @@ func (h *TokensHandler) ToggleTokenStatus(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("access token status toggled",
+	h.logger.Info("访问令牌状态已切换",
 		slog.Int64("token_id", int64(id)),
 		slog.String("new_status", newStatus),
 	)

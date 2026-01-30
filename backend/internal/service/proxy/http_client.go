@@ -94,7 +94,7 @@ func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, err
 	currentTimeout := hc.config.RequestTimeout
 	hc.configMu.RUnlock()
 
-	hc.logger.Debug("sending upstream request",
+	hc.logger.Debug("渠道调用开始",
 		slog.String("trace_id", traceID),
 		slog.String("method", req.Method),
 		slog.String("url", req.URL.String()),
@@ -106,7 +106,7 @@ func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, err
 	duration := time.Since(startTime)
 
 	if err != nil {
-		hc.logger.Error("upstream request failed",
+		hc.logger.Debug("渠道调用异常",
 			slog.String("trace_id", traceID),
 			slog.String("method", req.Method),
 			slog.String("url", req.URL.String()),
@@ -117,7 +117,7 @@ func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, err
 		return nil, err
 	}
 
-	hc.logger.Debug("upstream request completed",
+	hc.logger.Debug("渠道调用完成",
 		slog.String("trace_id", traceID),
 		slog.String("method", req.Method),
 		slog.String("url", req.URL.String()),

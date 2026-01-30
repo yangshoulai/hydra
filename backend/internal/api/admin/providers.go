@@ -63,7 +63,7 @@ func (h *ProviderHandler) CreateProvider(c *gin.Context) {
 			})
 			return
 		}
-		h.logger.Error("failed to create provider",
+		h.logger.Error("创建供应商异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -111,7 +111,7 @@ func (h *ProviderHandler) UpdateProvider(c *gin.Context) {
 			})
 			return
 		}
-		h.logger.Error("failed to update provider",
+		h.logger.Error("更新供应商异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -152,7 +152,7 @@ func (h *ProviderHandler) DeleteProvider(c *gin.Context) {
 			})
 			return
 		}
-		h.logger.Error("failed to delete provider",
+		h.logger.Error("删除供应商异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -178,7 +178,7 @@ func (h *ProviderHandler) DeleteProvider(c *gin.Context) {
 func (h *ProviderHandler) ListProviders(c *gin.Context) {
 	providers, err := h.providerService.List(c.Request.Context())
 	if err != nil {
-		h.logger.Error("failed to list providers",
+		h.logger.Error("查询供应商列表异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -206,7 +206,7 @@ func (h *ProviderHandler) GetProvider(c *gin.Context) {
 
 	provider, err := h.providerService.FindByID(c.Request.Context(), id)
 	if err != nil {
-		h.logger.Error("failed to get provider",
+		h.logger.Error("查询供应商信息异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -238,7 +238,7 @@ func (h *ProviderHandler) GetProvider(c *gin.Context) {
 func (h *ProviderHandler) SyncRemoteProviders(c *gin.Context) {
 	providers, err := h.providerService.SyncProviders(c.Request.Context())
 	if err != nil {
-		h.logger.Error("failed to sync remote providers",
+		h.logger.Error("同步远程供应商异常",
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{

@@ -12,7 +12,7 @@ import (
 
 // Provider 相关错误定义
 var (
-	ErrProviderIdExists  = errors.New("provider id already exists")
+	ErrProviderIdExists   = errors.New("provider id already exists")
 	ErrProviderNameExists = errors.New("provider name already exists")
 	ErrProviderNotFound   = errors.New("provider not found")
 	ErrProviderInUse      = errors.New("provider is in use by models")
@@ -87,7 +87,7 @@ func (s *ProviderService) Create(ctx context.Context, req CreateProviderRequest)
 		return nil, err
 	}
 
-	s.logger.Info("provider created",
+	s.logger.Info("供应商已创建",
 		slog.String("id", provider.ID),
 		slog.String("name", provider.Name),
 	)
@@ -124,7 +124,7 @@ func (s *ProviderService) Update(ctx context.Context, id string, req UpdateProvi
 		return nil, err
 	}
 
-	s.logger.Info("provider updated",
+	s.logger.Info("供应商已更新",
 		slog.String("id", provider.ID),
 		slog.String("name", provider.Name),
 	)
@@ -156,7 +156,7 @@ func (s *ProviderService) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	s.logger.Info("provider deleted",
+	s.logger.Info("供应商已删除",
 		slog.String("id", id),
 		slog.String("name", provider.Name),
 	)
