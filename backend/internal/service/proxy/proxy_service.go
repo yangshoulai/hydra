@@ -255,6 +255,10 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 			if readRespErr != nil {
 				ps.logWarnWithTrace("读取响应体失败", traceID, slog.String("error", readRespErr.Error()))
 			}
+			statusCode := -1
+			if upstreamResp != nil {
+				statusCode = upstreamResp.StatusCode
+			}
 			ps.logErrorWithTrace("渠道故障", traceID, slog.String("failure_type", string(failureType)),
 				slog.Uint64("channel_id", uint64(routeResult.Channel.ID)),
 				slog.String("channel_name", routeResult.Channel.Name),
@@ -262,7 +266,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 				slog.String("upstream_model", routeResult.UpstreamModel),
 				slog.String("error", errMsg),
 				slog.String("url", upstreamReq.URL.String()),
-				slog.Int("http_status", upstreamResp.StatusCode),
+				slog.Int("http_status", statusCode),
 				slog.String("response_body", string(respBody)),
 			)
 			ps.recordFailure(routeResult, failureType, failureScope, errMsg)

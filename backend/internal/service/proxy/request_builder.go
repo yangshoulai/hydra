@@ -67,8 +67,8 @@ func (rb *RequestBuilder) BuildProxyRequest(
 		upstreamURL += "?" + c.Request.URL.RawQuery
 	}
 
-	// 创建新请求
-	req, err := http.NewRequest(c.Request.Method, upstreamURL, bytes.NewBuffer(modifiedBody))
+	// 创建新请求（绑定客户端上下文，客户端断开时可自动取消上游请求）
+	req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method, upstreamURL, bytes.NewBuffer(modifiedBody))
 	if err != nil {
 		return nil, originalBody, err
 	}
