@@ -116,21 +116,49 @@ func (rb *RequestBuilder) getEndpointByPath(path string) (endpoint.Endpoint, err
 	return nil, errors.New("endpoint not found")
 }
 
-// copyHeaders 复制必要的请求头
+// copyHeaders 尽量复制客户端请求头
+// 仅过滤可能导致代理异常的 hop-by-hop 头以及会与上游鉴权冲突的头
 func (rb *RequestBuilder) copyHeaders(src *http.Request, dst *http.Request) {
-	// 需要复制的 Headers 白名单
-	// 注意：不复制 Accept-Encoding，让 Go 的 HTTP 客户端自动处理 gzip 解压
-	headersToCopy := []string{
-		"Accept",
-		"Accept-Language",
-		"User-Agent",
-		"X-Request-Id",
+	hopByHop := map[string]struct{}{
+		"connection":          {},
+		"proxy-connection":    {},
+		"keep-alive":          {},
+		"te":                  {},
+		"trailer":             {},
+		"transfer-encoding":   {},
+		"upgrade":             {},
+		"proxy-authorization": {},
+		"proxy-authenticate":  {},
 	}
 
-	for _, header := range headersToCopy {
-		if value := src.Header.Get(header); value != "" {
-			dst.Header.Set(header, value)
+	// 连接头里声明的 hop-by-hop 头也要过滤
+	for _, value := range src.Header.Values("Connection") {
+		for _, item := range strings.Split(value, ",") {
+			name := strings.ToLower(strings.TrimSpace(item))
+			if name != "" {
+				hopByHop[name] = struct{}{}
+			}
 		}
+	}
+
+	for key, values := range src.Header {
+		lowerKey := strings.ToLower(key)
+		if _, skip := hopByHop[lowerKey]; skip {
+			continue
+		}
+		// 不转发 Authorization，避免覆盖上游 Key
+		if lowerKey == "authorization" {
+			continue
+		}
+		// 不转发 Host/Content-Length，交由 http.Client 自行处理
+		if lowerKey == "host" || lowerKey == "content-length" {
+			continue
+		}
+		// 不转发 Accept-Encoding，避免上游返回压缩响应导致解析异常
+		if lowerKey == "accept-encoding" {
+			continue
+		}
+		dst.Header[key] = append([]string(nil), values...)
 	}
 }
 

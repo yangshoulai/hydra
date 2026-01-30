@@ -28,6 +28,8 @@ func NewRetryCoordinator(logger *slog.Logger, maxRetries int, retryDelay time.Du
 type RetryContext struct {
 	AttemptCount     int         // 尝试次数
 	FailedChannelIDs []uint      // 已失败的 Channel ID
+	FailedModelIDs   []uint      // 已失败的模型配置 ID
+	FailedKeyIDs     []uint      // 已失败的 Key ID
 	LastError        error       // 最后一次错误
 	LastFailureType  FailureType // 最后一次故障类型
 	StartTime        time.Time   // 开始时间
@@ -38,6 +40,8 @@ func NewRetryContext() *RetryContext {
 	return &RetryContext{
 		AttemptCount:     0,
 		FailedChannelIDs: make([]uint, 0),
+		FailedModelIDs:   make([]uint, 0),
+		FailedKeyIDs:     make([]uint, 0),
 		StartTime:        time.Now(),
 	}
 }
@@ -67,7 +71,7 @@ func (rc *RetryCoordinator) ShouldRetry(retryCtx *RetryContext) bool {
 }
 
 // RecordAttempt 记录一次尝试
-func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint, channelName string, err error, failureType FailureType) {
+func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint, channelName string, modelConfigID uint, keyID uint, err error, failureType FailureType) {
 	if retryCtx == nil {
 		return
 	}
@@ -80,13 +84,23 @@ func (rc *RetryCoordinator) RecordAttempt(retryCtx *RetryContext, channelID uint
 	if !rc.containsChannel(retryCtx.FailedChannelIDs, channelID) {
 		retryCtx.FailedChannelIDs = append(retryCtx.FailedChannelIDs, channelID)
 	}
+	if modelConfigID != 0 && !rc.containsUint(retryCtx.FailedModelIDs, modelConfigID) {
+		retryCtx.FailedModelIDs = append(retryCtx.FailedModelIDs, modelConfigID)
+	}
+	if keyID != 0 && !rc.containsUint(retryCtx.FailedKeyIDs, keyID) {
+		retryCtx.FailedKeyIDs = append(retryCtx.FailedKeyIDs, keyID)
+	}
 
 	rc.logger.Info("重试尝试已记录",
 		slog.Int("attempt_count", retryCtx.AttemptCount),
 		slog.Uint64("channel_id", uint64(channelID)),
 		slog.String("channel_name", channelName),
+		slog.Uint64("model_config_id", uint64(modelConfigID)),
+		slog.Uint64("key_id", uint64(keyID)),
 		slog.String("failure_type", string(failureType)),
 		slog.Int("failed_channels_count", len(retryCtx.FailedChannelIDs)),
+		slog.Int("failed_models_count", len(retryCtx.FailedModelIDs)),
+		slog.Int("failed_keys_count", len(retryCtx.FailedKeyIDs)),
 	)
 }
 
@@ -126,6 +140,15 @@ func (rc *RetryCoordinator) calculateDelay(attemptCount int) time.Duration {
 func (rc *RetryCoordinator) containsChannel(channelIDs []uint, channelID uint) bool {
 	for _, id := range channelIDs {
 		if id == channelID {
+			return true
+		}
+	}
+	return false
+}
+
+func (rc *RetryCoordinator) containsUint(ids []uint, target uint) bool {
+	for _, id := range ids {
+		if id == target {
 			return true
 		}
 	}

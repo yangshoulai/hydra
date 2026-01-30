@@ -41,7 +41,8 @@ func NewChannelSelector(
 }
 
 // SelectChannel 按优先级和权重选择一个可用的 Channel
-func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, endpointType string, traceID string) (*models.Channel, error) {
+// excludeChannelIDs: 需要排除的渠道集合（可为空）
+func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, endpointType string, traceID string, excludeChannelIDs map[uint]bool) (*models.Channel, error) {
 	// 获取所有支持该模型和端点类型的 Channel
 	channels, err := cs.channelRepo.FindByModel(ctx, modelName)
 	if err != nil {
@@ -53,7 +54,7 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 	}
 
 	// 过滤出可用的 Channel
-	availableChannels := cs.filterAvailableChannels(channels, modelName, endpointType, traceID)
+	availableChannels := cs.filterAvailableChannels(channels, modelName, endpointType, traceID, excludeChannelIDs)
 
 	if len(availableChannels) == 0 {
 		return nil, ErrNoAvailableChannel
@@ -81,9 +82,12 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 }
 
 // filterAvailableChannels 过滤出可用的 Channel
-func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, modelName string, endpointType string, traceID string) []models.Channel {
+func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, modelName string, endpointType string, traceID string, excludeChannelIDs map[uint]bool) []models.Channel {
 	available := make([]models.Channel, 0, len(channels))
 	for _, channel := range channels {
+		if excludeChannelIDs != nil && excludeChannelIDs[channel.ID] {
+			continue
+		}
 		var filteredModelConfigs []models.ChannelModelConfig
 		var filteredKeys []models.Key
 		modelKeyGroups := make(map[string]struct{})
