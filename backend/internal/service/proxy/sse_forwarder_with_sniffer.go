@@ -70,19 +70,19 @@ func (sf *SSEForwarderWithSniffer) DetectFirstFrame(resp *http.Response) (*First
 	var lineBuffer bytes.Buffer
 	newlineCount := 0
 	const maxNewlines = 5 // 只检测前5行
+	doneSeen := false
 
 	for {
 		n, err := resp.Body.Read(buf)
-		if err != nil {
+		if n == 0 {
+			if err == nil {
+				continue
+			}
 			if err == io.EOF {
 				result.HasMoreData = false
 				break
 			}
 			return nil, err
-		}
-
-		if n == 0 {
-			continue
 		}
 
 		ch := buf[0]
@@ -102,8 +102,8 @@ func (sf *SSEForwarderWithSniffer) DetectFirstFrame(resp *http.Response) (*First
 
 				// 检查是否为结束标记
 				if dataContent == "[DONE]" {
-					result.HasMoreData = false
-					break
+					// 不立即结束，继续读取到事件的空行，保证 SSE 事件完整性
+					doneSeen = true
 				}
 
 				// 检查数据内容是否包含错误
@@ -113,6 +113,12 @@ func (sf *SSEForwarderWithSniffer) DetectFirstFrame(resp *http.Response) (*First
 					sf.logger.Warn("SSE首帧检测到错误", slog.String("data", truncateStringInSniffer(dataContent, 2048)))
 					break
 				}
+			}
+
+			// 如果已看到 [DONE]，等到空行再结束，避免丢失事件终止符
+			if doneSeen && line == "" {
+				result.HasMoreData = false
+				break
 			}
 
 			lineBuffer.Reset()
@@ -126,6 +132,11 @@ func (sf *SSEForwarderWithSniffer) DetectFirstFrame(resp *http.Response) (*First
 
 		// 限制首帧大小（避免读取太多数据）
 		if len(result.FirstChunk) >= 4096 {
+			break
+		}
+
+		if err == io.EOF {
+			result.HasMoreData = false
 			break
 		}
 	}
@@ -181,7 +192,7 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 	startTime := time.Now()
 
 	// 设置响应头
-	c.Header("Content-Type", "text/event-stream")
+	c.Header("Content-Type", "text/event-stream; charset=utf-8")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
@@ -254,7 +265,10 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 	buf := make([]byte, 1)
 	for firstFrame.HasMoreData {
 		n, err := upstreamResp.Body.Read(buf)
-		if err != nil {
+		if n == 0 {
+			if err == nil {
+				continue
+			}
 			if err == io.EOF {
 				sf.logger.Info("流式转发完成",
 					slog.String("trace_id", traceID),
@@ -264,10 +278,6 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 				break
 			}
 			return captureBuffer.String(), chunkCount, firstChunkTime, err
-		}
-
-		if n == 0 {
-			continue
 		}
 
 		ch := buf[0]
@@ -307,6 +317,15 @@ func (sf *SSEForwarderWithSniffer) ForwardStreamWithDetection(
 			)
 			return captureBuffer.String(), chunkCount, firstChunkTime, c.Request.Context().Err()
 		default:
+		}
+
+		if err == io.EOF {
+			sf.logger.Info("流式转发完成",
+				slog.String("trace_id", traceID),
+				slog.Int("bytes_sent", bytesSent),
+				slog.Int("chunk_count", chunkCount),
+			)
+			break
 		}
 	}
 
