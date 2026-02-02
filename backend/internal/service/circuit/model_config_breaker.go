@@ -30,20 +30,6 @@ type ModelConfigBreaker struct {
 	coolingDuration  time.Duration
 }
 
-// NewModelConfigBreaker 创建模型配置熔断器
-func NewModelConfigBreaker(configID uint, channelID uint, failureThreshold int, coolingDuration time.Duration) *ModelConfigBreaker {
-	return &ModelConfigBreaker{
-		configID:         configID,
-		channelID:        channelID,
-		state:            ModelConfigStateActive,
-		failureCount:     0,
-		lastFailure:      time.Time{},
-		lastSuccess:      time.Time{},
-		failureThreshold: failureThreshold,
-		coolingDuration:  coolingDuration,
-	}
-}
-
 // RecordSuccess 记录成功请求
 func (mb *ModelConfigBreaker) RecordSuccess() {
 	mb.mu.Lock()

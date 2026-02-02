@@ -14,7 +14,7 @@ func (e *ChatCompletionsEndpoint) GetName() string {
 }
 
 func (e *ChatCompletionsEndpoint) GetType() string {
-	return "openai"
+	return "openai-chat"
 }
 
 func (e *ChatCompletionsEndpoint) GetPath() string {

@@ -714,7 +714,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
           const status = testStatus.value[row.key]?.[type] || 'idle'
           const config = statusMap[status]
           const typeLabelMap: Record<string, string> = {
-            openai: 'OpenAI Chat',
+            'openai-chat': 'OpenAI Chat',
             'openai-response': 'OpenAI Responses',
             'openai-image': 'OpenAI Images',
             anthropic: 'Anthropic Messages',

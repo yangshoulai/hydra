@@ -106,22 +106,28 @@ func NewProxyService(
 
 // ProxyRequest 通用代理请求入口
 func (ps *ProxyService) ProxyRequest(c *gin.Context, endpointPath string) error {
-	return ps.proxyRequest(c, endpointPath)
+	traceID := GetTraceIDFromContext(c)
+	ep, err := ps.getEndpoint(endpointPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": gin.H{
+				"message": err.Error(),
+				"type":    "hydra_error",
+				"code":    http.StatusNotFound,
+			},
+		})
+		return err
+	}
+	return ps.proxyRequest(c, ep, traceID)
 }
 
 // proxyRequest 通用代理请求处理
-func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error {
+func (ps *ProxyService) proxyRequest(c *gin.Context, ep endpoint.Endpoint, traceID string) error {
 	ctx := c.Request.Context()
 	startTime := time.Now()
-	traceID := GetTraceIDFromContext(c)
-
-	endpointType, err := ps.getEndpointType(endpointPath)
-	if err != nil {
-		return err
-	}
 	mainLog := logger.NewMainLogBuilder().
 		TraceID(traceID).
-		EndpointType(endpointType).
+		EndpointType(ep.GetType()).
 		RequestPath(c.Request.URL.Path).
 		RequestMethod(c.Request.Method).
 		AccessToken(getAccessTokenFromContext(c)).
@@ -142,7 +148,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 	requestBodyStr := string(bodyBytes)
 
 	// 2. 解析请求获取模型名
-	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes, endpointType, c.Request.URL.Path)
+	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes, ep.GetType(), c.Request.URL.Path)
 	if err != nil {
 		ps.logErrorWithTrace("获取请求模型异常", traceID, slog.String("error", err.Error()))
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Invalid request: "+err.Error(), traceID)
@@ -152,26 +158,25 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 	}
 
 	if ps.modelConfigRepo != nil {
-		supported, validateErr := ps.modelConfigRepo.ExistsActiveUnifiedModel(ctx, unifiedModel, endpointType)
+		supported, validateErr := ps.modelConfigRepo.ExistsActiveUnifiedModel(ctx, unifiedModel, ep.GetType())
 		if validateErr != nil {
 			ps.logErrorWithTrace("校验模型异常", traceID, slog.String("error", validateErr.Error()))
-			ps.responseForwarder.ForwardErrorResponse(c, http.StatusInternalServerError, "Failed to validate model", traceID)
-			mainLog.EndTime(time.Now()).StatusCode(http.StatusInternalServerError).ErrorMessage("校验模型异常: " + validateErr.Error())
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable, "model unavailable", traceID)
+			mainLog.EndTime(time.Now()).StatusCode(http.StatusServiceUnavailable).ErrorMessage("模型不可用: " + validateErr.Error())
 			ps.auditLogger.LogAsync(mainLog.Build())
 			return validateErr
 		}
 		if !supported {
-			ps.responseForwarder.ForwardErrorResponse(c, http.StatusNotFound, "Model not found: "+unifiedModel, traceID)
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable, "model unavailable: "+unifiedModel, traceID)
 			return ErrModelNotFound
 		}
 	}
 
-	isStream := ps.requestBuilder.IsStreamRequest(bodyBytes, endpointType, c.Request.URL.Path)
+	isStream := ps.requestBuilder.IsStreamRequest(bodyBytes, ep.GetType(), c.Request.URL.Path)
 	mainLog.RequestedModel(unifiedModel).IsStream(isStream)
 
 	ps.logWithTrace("处理请求", traceID,
-		slog.String("endpoint", endpointPath),
-		slog.String("endpoint_type", endpointType),
+		slog.String("endpoint_type", ep.GetType()),
 		slog.String("model", unifiedModel),
 		slog.Bool("stream", isStream),
 	)
@@ -186,7 +191,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 		routeResult, err := ps.loadBalancer.RouteWithRetry(
 			ctx,
 			unifiedModel,
-			endpointType,
+			ep.GetType(),
 			ps.retryCoordinator.maxRetries-retryCtx.AttemptCount,
 			retryCtx.FailedChannelIDs,
 			retryCtx.FailedModelIDs,
@@ -196,7 +201,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 
 		if err != nil {
 			ps.logErrorWithTrace("路由异常", traceID, slog.String("model", unifiedModel), slog.String("error", err.Error()))
-			ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "Error when route model: "+unifiedModel, traceID)
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "model unavailable: "+unifiedModel, traceID)
 			mainLog.EndTime(time.Now()).StatusCode(http.StatusBadGateway).ErrorMessage(err.Error())
 			ps.auditLogger.LogAsync(mainLog.Build())
 			return err
@@ -204,7 +209,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 		ps.logWithTrace("路由成功", traceID, slog.Uint64("channel_id", uint64(routeResult.Channel.ID)), slog.String("channel_name", routeResult.Channel.Name), slog.Uint64("key_id", uint64(routeResult.Key.ID)), slog.Uint64("model_config_id", uint64(routeResult.ModelConfigID)), slog.String("unified_model", unifiedModel), slog.String("upstream_model", routeResult.UpstreamModel))
 
 		// 构建上游请求
-		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, endpointPath)
+		upstreamReq, _, err := ps.requestBuilder.BuildProxyRequest(c, routeResult, ep)
 
 		detailLog := logger.NewDetailLogBuilder().
 			ChannelID(routeResult.Channel.ID).
@@ -220,16 +225,16 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 			ps.logErrorWithTrace("构建代理请求失败", traceID, slog.String("error", err.Error()))
 			ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, routeResult.Channel.Name, routeResult.ModelConfigID, routeResult.Key.ID, err, FailureTypeHard, traceID)
 
-			detailLog.StatusCode(http.StatusInternalServerError).
+			detailLog.StatusCode(http.StatusBadGateway).
 				IsSuccess(false).
 				Status("failed").
 				ErrorMessage("构建代理请求异常" + err.Error()).
 				EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 
 			mainLog.AddDetail(detailLog)
-			mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusInternalServerError).ErrorMessage("构建代理请求异常" + err.Error()).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
+			mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage("构建代理请求异常" + err.Error()).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
 			if !ps.retryCoordinator.ShouldRetry(retryCtx) {
-				ps.responseForwarder.ForwardErrorResponse(c, http.StatusInternalServerError, "Failed to build proxy request", traceID)
+				ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "Failed to build proxy request", traceID)
 				ps.auditLogger.LogAsync(mainLog.Build())
 				return err
 			}
@@ -301,7 +306,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 		upstreamIsStream := isStream && isEventStreamResponse(upstreamResp)
 		if isStream && !upstreamIsStream {
 			ps.logWarnWithTrace("上游响应非流式，降级为非流式处理", traceID,
-				slog.String("endpoint", endpointPath),
+				slog.String("endpoint_type", ep.GetType()),
 				slog.String("content_type", safeHeaderValue(upstreamResp, "Content-Type")),
 			)
 		}
@@ -377,28 +382,24 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 				continue
 			}
 
-			if ep, epErr := endpoint.Get(endpointType); epErr == nil {
-				if valid, errMsg := ep.ValidateResponse(upstreamResp.StatusCode, sniffResult.Body); !valid {
-					ps.logErrorWithTrace("响应校验失败", traceID,
-						slog.String("error", errMsg),
-						slog.String("endpoint_type", endpointType),
-					)
-					ps.recordFailure(routeResult, FailureTypeSoft, FailureScopeModelConfig, errMsg)
-					ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, routeResult.Channel.Name, routeResult.ModelConfigID, routeResult.Key.ID, errors.New(errMsg), FailureTypeSoft, traceID)
-					detailLog.EndTime(time.Now()).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds())).IsSuccess(false).Status("failed").ResponseBody(string(sniffResult.Body)).ErrorMessage(errMsg)
-					mainLog.AddDetail(detailLog)
-					mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage(errMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
-					if !ps.retryCoordinator.ShouldRetry(retryCtx) {
-						ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
-						ps.auditLogger.LogAsync(mainLog.Build())
-						return errors.New(errMsg)
-					}
-
-					_ = ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
-					continue
+			if valid, errMsg := ep.ValidateResponse(upstreamResp.StatusCode, sniffResult.Body); !valid {
+				ps.logErrorWithTrace("响应校验失败", traceID,
+					slog.String("error", errMsg),
+					slog.String("endpoint_type", ep.GetType()),
+				)
+				ps.recordFailure(routeResult, FailureTypeSoft, FailureScopeModelConfig, errMsg)
+				ps.retryCoordinator.RecordAttempt(retryCtx, routeResult.Channel.ID, routeResult.Channel.Name, routeResult.ModelConfigID, routeResult.Key.ID, errors.New(errMsg), FailureTypeSoft, traceID)
+				detailLog.EndTime(time.Now()).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds())).IsSuccess(false).Status("failed").ResponseBody(string(sniffResult.Body)).ErrorMessage(errMsg)
+				mainLog.AddDetail(detailLog)
+				mainLog.EndTime(time.Now()).Duration(int(time.Now().Sub(startTime))).StatusCode(http.StatusBadGateway).ErrorMessage(errMsg).LastChannelID(routeResult.Channel.ID).LastChannelName(routeResult.Channel.Name).LastModel(routeResult.UpstreamModel)
+				if !ps.retryCoordinator.ShouldRetry(retryCtx) {
+					ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "All upstream attempts failed", traceID)
+					ps.auditLogger.LogAsync(mainLog.Build())
+					return errors.New(errMsg)
 				}
-			} else {
-				ps.logWarnWithTrace("未找到端点配置，跳过响应校验", traceID, slog.String("endpoint_type", endpointType))
+
+				_ = ps.retryCoordinator.WaitBeforeRetry(ctx, retryCtx)
+				continue
 			}
 
 			responseBodyStr, forwardErr = ps.responseForwarder.ForwardJSONResponse(c, upstreamResp, routeResult.UpstreamModel, routeResult.UnifiedModel, traceID)
@@ -421,7 +422,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, endpointPath string) error 
 			ErrorMessage(errorMsg).EndTime(time.Now()).Duration(int(time.Now().Sub(attemptStartTime).Milliseconds()))
 
 		if forwardErr == nil {
-			promptTokens, completionTokens := ps.parseTokenUsage(endpointType, bodyBytes, responseBodyStr, isStream, traceID)
+			promptTokens, completionTokens := ps.parseTokenUsage(ep.GetType(), bodyBytes, responseBodyStr, isStream, traceID)
 			detailLog.PromptTokens(promptTokens).CompletionTokens(completionTokens)
 			mainLog.PromptTokens(promptTokens).CompletionTokens(completionTokens)
 			ps.recordTokenUsageAsync(routeResult, getAccessTokenIDFromContext(c), promptTokens, completionTokens, traceID)
@@ -738,21 +739,21 @@ func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
 	}
 }
 
-// getEndpointType 根据端点路径确定端点类型
-func (ps *ProxyService) getEndpointType(endpointPath string) (string, error) {
+// getEndpoint 根据端点路径确定端点类型
+func (ps *ProxyService) getEndpoint(endpointPath string) (endpoint.Endpoint, error) {
 	// 从端点注册中心查找匹配的端点
 	for _, ep := range endpoint.GetAll() {
 		epPath := ep.GetPath()
 		if epPath == endpointPath {
-			return ep.GetType(), nil
+			return ep, nil
 		}
 		if strings.Contains(epPath, "*") {
 			prefix := strings.Split(epPath, "*")[0]
 			if prefix != "" && strings.HasPrefix(endpointPath, prefix) {
-				return ep.GetType(), nil
+				return ep, nil
 			}
 		}
 	}
 
-	return "openai", errors.New("unsupported endpoint")
+	return nil, errors.New("unsupported endpoint")
 }

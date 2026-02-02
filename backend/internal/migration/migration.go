@@ -89,6 +89,13 @@ func RunMigrations(db *gorm.DB) error {
 				return V1_12_0_RemoveUnusedSettings(tx)
 			},
 		},
+		// v1.13.0 变更 openai 端点类型
+		{
+			ID: "v1.13.0_change_openai_endpoint_type",
+			Migrate: func(tx *gorm.DB) error {
+				return V1_13_0_ChangeOpenaiEndpointType(tx)
+			},
+		},
 	})
 
 	if err := m.Migrate(); err != nil {

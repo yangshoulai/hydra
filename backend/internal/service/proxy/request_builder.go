@@ -44,7 +44,7 @@ type ChatCompletionRequest struct {
 func (rb *RequestBuilder) BuildProxyRequest(
 	c *gin.Context,
 	routeResult *RouteResult,
-	endpoint string,
+	ep endpoint.Endpoint,
 ) (*http.Request, []byte, error) {
 	if routeResult == nil {
 		return nil, nil, errors.New("route result is nil")
@@ -77,20 +77,14 @@ func (rb *RequestBuilder) BuildProxyRequest(
 	rb.copyHeaders(c.Request, req)
 
 	// 使用端点的配置方法设置请求头和请求体
-	ep, err := rb.getEndpointByPath(endpoint)
-	if err == nil {
-		updatedBody, err := ep.ConfigureRequest(req, routeResult.Key.KeyValue, routeResult.UpstreamModel, modifiedBody)
-		if err != nil {
-			return nil, originalBody, err
-		}
-		if updatedBody != nil {
-			modifiedBody = updatedBody
-			req.Body = io.NopCloser(bytes.NewBuffer(modifiedBody))
-			req.ContentLength = int64(len(modifiedBody))
-		}
-	} else {
-		// 如果无法获取端点，使用默认配置
-		req.Header.Set("Authorization", "Bearer "+routeResult.Key.KeyValue)
+	updatedBody, err := ep.ConfigureRequest(req, routeResult.Key.KeyValue, routeResult.UpstreamModel, modifiedBody)
+	if err != nil {
+		return nil, originalBody, err
+	}
+	if updatedBody != nil {
+		modifiedBody = updatedBody
+		req.Body = io.NopCloser(bytes.NewBuffer(modifiedBody))
+		req.ContentLength = int64(len(modifiedBody))
 	}
 
 	return req, originalBody, nil

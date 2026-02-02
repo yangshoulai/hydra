@@ -216,8 +216,12 @@ func (r *ChannelModelConfigRepository) ListUnifiedModels(ctx context.Context) ([
 func (r *ChannelModelConfigRepository) ExistsActiveUnifiedModel(ctx context.Context, unifiedModel string, endpointType string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Model(&models.Model{}).
-		Where("name = ?", unifiedModel).
+		Model(&models.ChannelModelConfig{}).
+		Joins("INNER JOIN channels ON channels.id = channel_model_configs.channel_id").
+		Where("channel_model_configs.unified_model = ?", unifiedModel).
+		Where("channel_model_configs.status in ('active', 'cooling')").
+		Where("channels.status in ('active', 'cooling')").
+		Where("channel_model_configs.endpoint_types like '%\"" + endpointType + "\"%'").
 		Limit(1).
 		Count(&count).Error
 	if err != nil {
