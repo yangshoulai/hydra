@@ -411,7 +411,7 @@ const keyGroupOptions = ref<{ label: string; value: string }[]>([
 const modelForm = reactive({
   upstream_model: '',
   unified_model: '',
-  endpoint_types: ['openai'],
+  endpoint_types: ['openai-chat'],
   key_groups: ['Default']
 })
 const modelRules = {
@@ -507,7 +507,7 @@ const displayModels = computed<ModelDisplayType[]>(() => {
       key: config.upstream_model,
       upstream_model: config.upstream_model,
       unified_model: config.unified_model,
-      endpoint_types: config.endpoint_types || ['openai'],
+      endpoint_types: config.endpoint_types || ['openai-chat'],
       key_groups: config.key_groups || ['Default'],
       status: 'configured' as const,
       disabled: false,
@@ -532,26 +532,26 @@ const displayModels = computed<ModelDisplayType[]>(() => {
     const unifiedModel = editMap.value[d.upstream_model] || d.upstream_model
     let status: 'configured' | 'to_add' | 'to_remove'
     let disabled = false
-    let endpointTypes = ['openai']
+    let endpointTypes = ['openai-chat']
     let keyGroups = ['Default']
     let channelStatus: 'active' | 'disabled' | 'non_exist' | 'unconfigured' | 'cooling' = 'unconfigured'
 
     if (d.type === 'existing') {
       status = 'configured'
       disabled = false
-      endpointTypes = d.existing_config?.endpoint_types || ['openai']
+      endpointTypes = d.existing_config?.endpoint_types || ['openai-chat']
       keyGroups = d.key_groups || d.existing_config?.key_groups || ['Default']
       channelStatus = d.existing_config?.status || 'unconfigured'
     } else if (d.type === 'added') {
       status = 'to_add'
       disabled = false
-      endpointTypes = ['openai']
+      endpointTypes = ['openai-chat']
       keyGroups = d.key_groups || ['Default']
       channelStatus = 'unconfigured'
     } else {
       status = 'to_remove'
       disabled = true // 待删除的模型默认选中且禁用
-      endpointTypes = d.existing_config?.endpoint_types || ['openai']
+      endpointTypes = d.existing_config?.endpoint_types || ['openai-chat']
       keyGroups = d.existing_config?.key_groups || ['Default']
       channelStatus = d.existing_config?.status || 'unconfigured'
     }
@@ -761,17 +761,17 @@ function initEditMap() {
     syncResult.value.diff.diffs.forEach((d) => {
       if (d.type === 'existing' && d.existing_config) {
         editMap.value[d.upstream_model] = d.existing_config.unified_model
-        endpointTypesEditMap.value[d.upstream_model] = d.existing_config.endpoint_types || ['openai']
+        endpointTypesEditMap.value[d.upstream_model] = d.existing_config.endpoint_types || ['openai-chat']
         keyGroupsEditMap.value[d.upstream_model] = d.key_groups || d.existing_config.key_groups || ['Default']
         defaultChecked.push(d.upstream_model)
       } else if (d.type === 'added') {
         editMap.value[d.upstream_model] = d.upstream_model
-        endpointTypesEditMap.value[d.upstream_model] = ['openai']
+        endpointTypesEditMap.value[d.upstream_model] = ['openai-chat']
         keyGroupsEditMap.value[d.upstream_model] = d.key_groups || ['Default']
         // 新增的模型默认不选中
       } else if (d.type === 'removed') {
         editMap.value[d.upstream_model] = d.existing_config?.unified_model || d.upstream_model
-        endpointTypesEditMap.value[d.upstream_model] = d.existing_config?.endpoint_types || ['openai']
+        endpointTypesEditMap.value[d.upstream_model] = d.existing_config?.endpoint_types || ['openai-chat']
         keyGroupsEditMap.value[d.upstream_model] = d.existing_config?.key_groups || ['Default']
         // 删除的模型默认选中
         defaultChecked.push(d.upstream_model)
@@ -781,7 +781,7 @@ function initEditMap() {
     // 仅本地配置
     localConfigs.value.forEach(config => {
       editMap.value[config.upstream_model] = config.unified_model
-      endpointTypesEditMap.value[config.upstream_model] = config.endpoint_types || ['openai']
+      endpointTypesEditMap.value[config.upstream_model] = config.endpoint_types || ['openai-chat']
       keyGroupsEditMap.value[config.upstream_model] = config.key_groups || ['Default']
       defaultChecked.push(config.upstream_model)
     })
@@ -900,7 +900,7 @@ async function handleAddModel() {
     showAddModelDialog.value = false
     modelForm.upstream_model = ''
     modelForm.unified_model = ''
-    modelForm.endpoint_types = ['openai']
+    modelForm.endpoint_types = ['openai-chat']
     modelForm.key_groups = ['Default']
     await loadLocalConfigs()
     initEditMap()

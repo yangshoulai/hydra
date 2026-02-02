@@ -15,7 +15,7 @@ type KeyGroups []string
 // Scan 实现 sql.Scanner 接口
 func (e *EndpointTypes) Scan(value interface{}) error {
 	if value == nil {
-		*e = []string{"openai"}
+		*e = []string{"openai-chat"}
 		return nil
 	}
 
@@ -26,7 +26,7 @@ func (e *EndpointTypes) Scan(value interface{}) error {
 	case string:
 		bytes = []byte(v)
 	default:
-		*e = []string{"openai"}
+		*e = []string{"openai-chat"}
 		return nil
 	}
 
@@ -36,7 +36,7 @@ func (e *EndpointTypes) Scan(value interface{}) error {
 // Value 实现 driver.Valuer 接口
 func (e EndpointTypes) Value() (driver.Value, error) {
 	if len(e) == 0 {
-		e = []string{"openai"}
+		e = []string{"openai-chat"}
 	}
 	return json.Marshal(e)
 }

@@ -159,7 +159,7 @@ func (r *ChannelRepository) ListWithFilter(ctx context.Context, offset, limit in
 }
 
 // FindByModel 根据统一模型名查询所有支持该模型的渠道
-func (r *ChannelRepository) FindByModel(ctx context.Context, unifiedModel string) ([]models.Channel, error) {
+func (r *ChannelRepository) FindByModel(ctx context.Context, unifiedModel string, endpointType string) ([]models.Channel, error) {
 	var channels []models.Channel
 
 	// 子查询:找到所有支持该模型的 channel_id
@@ -168,10 +168,11 @@ func (r *ChannelRepository) FindByModel(ctx context.Context, unifiedModel string
 		Joins("INNER JOIN channel_model_configs ON channel_model_configs.channel_id = channels.id").
 		Joins("INNER JOIN keys ON keys.channel_id = channels.id AND keys.status IN ?", []string{"active", "cooling"}).
 		Where("channel_model_configs.unified_model = ?", unifiedModel).
+		Where("channel_model_configs.endpoint_types like ?", "%"+endpointType+"%").
 		Where("channel_model_configs.status IN ?", []string{"active", "cooling"}).
 		Where("channels.status = ?", "active").
 		Preload("Keys", "status IN ?", []string{"active", "cooling"}).
-		Preload("ModelConfigs", "unified_model = ? AND status IN ?", unifiedModel, []string{"active", "cooling"}).
+		Preload("ModelConfigs", "unified_model = ? AND status IN ? AND endpoint_types like ?", unifiedModel, []string{"active", "cooling"}, "%"+endpointType+"%").
 		Order("channels.priority DESC, channels.weight DESC").
 		Find(&channels).Error
 

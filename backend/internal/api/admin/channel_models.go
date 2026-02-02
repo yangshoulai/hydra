@@ -100,7 +100,7 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	// 创建模型配置对象
 	endpointTypes := req.EndpointTypes
 	if len(endpointTypes) == 0 {
-		endpointTypes = []string{"openai"}
+		endpointTypes = []string{"openai-chat"}
 	}
 	keyGroups := req.KeyGroups
 	if len(keyGroups) == 0 {

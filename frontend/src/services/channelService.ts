@@ -153,7 +153,7 @@ export const channelApi = {
         channel_id: channelId,
         unified_model: unifiedModel,
         upstream_model: upstreamModel,
-        endpoint_types: endpointTypes || ['openai'],
+        endpoint_types: endpointTypes || ['openai-chat'],
         key_groups: keyGroups || ['Default']
       }
     )

@@ -44,7 +44,7 @@ func NewChannelSelector(
 // excludeChannelIDs: 需要排除的渠道集合（可为空）
 func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, endpointType string, traceID string, excludeChannelIDs map[uint]bool) (*models.Channel, error) {
 	// 获取所有支持该模型和端点类型的 Channel
-	channels, err := cs.channelRepo.FindByModel(ctx, modelName)
+	channels, err := cs.channelRepo.FindByModel(ctx, modelName, endpointType)
 	if err != nil {
 		return nil, err
 	}
@@ -98,11 +98,9 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, mo
 				continue
 			}
 
-			if cs.hasEndpointType(config.EndpointTypes, endpointType) {
-				filteredModelConfigs = append(filteredModelConfigs, config)
-				for _, kg := range config.KeyGroups {
-					modelKeyGroups[kg] = struct{}{}
-				}
+			filteredModelConfigs = append(filteredModelConfigs, config)
+			for _, kg := range config.KeyGroups {
+				modelKeyGroups[kg] = struct{}{}
 			}
 		}
 

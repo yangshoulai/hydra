@@ -97,7 +97,7 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		// 处理端点类型，如果为空则使用默认值
 		endpointTypes := item.EndpointTypes
 		if len(endpointTypes) == 0 {
-			endpointTypes = []string{"openai"}
+			endpointTypes = []string{"openai-chat"}
 		}
 		keyGroups := item.KeyGroups
 		if len(keyGroups) == 0 {
