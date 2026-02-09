@@ -4,8 +4,10 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 )
@@ -88,8 +90,90 @@ func (e *ImagesEditEndpoint) ParseTokenUsage(_ []byte, _ string, _ bool) (int64,
 
 func (e *ImagesEditEndpoint) ConfigureRequest(req *http.Request, apiKey string, modelName string, requestBody []byte) ([]byte, error) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	if req.Header.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", "multipart/form-data")
+	updatedBody, newContentType, err := replaceModelInMultipart(requestBody, req.Header.Get("Content-Type"), modelName)
+	if err != nil {
+		return requestBody, nil
 	}
-	return requestBody, nil
+	req.Header.Set("Content-Type", newContentType)
+	return updatedBody, nil
+}
+
+func (e *ImagesEditEndpoint) GetModelFromRequest(req *http.Request, body []byte) (string, error) {
+	contentType := req.Header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "multipart/form-data" {
+		return "", errors.New("invalid content type for images/edits endpoint")
+	}
+	boundary := params["boundary"]
+	if boundary == "" {
+		return "", errors.New("missing boundary in content type")
+	}
+	reader := multipart.NewReader(bytes.NewReader(body), boundary)
+	for {
+		part, err := reader.NextPart()
+		if err != nil {
+			break
+		}
+		if part.FormName() == "model" {
+			val, err := io.ReadAll(part)
+			_ = part.Close()
+			if err != nil {
+				return "", err
+			}
+			model := string(val)
+			if model == "" {
+				return "", errors.New("model field is empty")
+			}
+			return model, nil
+		}
+		_ = part.Close()
+	}
+	return "", errors.New("model field is missing")
+}
+
+// replaceModelInMultipart 解析 multipart body，替换 model 字段，重建 body
+func replaceModelInMultipart(body []byte, contentType string, modelName string) ([]byte, string, error) {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "multipart/form-data" {
+		return nil, "", errors.New("invalid content type")
+	}
+	boundary := params["boundary"]
+	if boundary == "" {
+		return nil, "", errors.New("missing boundary")
+	}
+
+	reader := multipart.NewReader(bytes.NewReader(body), boundary)
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	for {
+		part, err := reader.NextPart()
+		if err != nil {
+			break
+		}
+		if part.FormName() == "model" {
+			_ = part.Close()
+			_ = writer.WriteField("model", modelName)
+			continue
+		}
+		// 复制其他字段（包括文件字段）
+		var dst io.Writer
+		if part.FileName() != "" {
+			dst, err = writer.CreateFormFile(part.FormName(), part.FileName())
+		} else {
+			dst, err = writer.CreateFormField(part.FormName())
+		}
+		if err != nil {
+			_ = part.Close()
+			return nil, "", err
+		}
+		_, err = io.Copy(dst, part)
+		_ = part.Close()
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	_ = writer.Close()
+	return buf.Bytes(), writer.FormDataContentType(), nil
 }

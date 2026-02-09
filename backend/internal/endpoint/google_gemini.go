@@ -115,6 +115,20 @@ func (e *GeminiEndpoint) ConfigureRequest(req *http.Request, apiKey string, mode
 	return requestBody, nil
 }
 
+func (e *GeminiEndpoint) GetModelFromRequest(req *http.Request, body []byte) (string, error) {
+	// 先从 URL path 提取模型名
+	model := extractGeminiModelPath(req.URL.Path)
+	if model != "" {
+		// 去掉 :action 部分
+		parts := strings.SplitN(model, ":", 2)
+		if parts[0] != "" {
+			return parts[0], nil
+		}
+	}
+	// 回退到 JSON body
+	return GetModelFromJSONBody(body)
+}
+
 func parseGeminiTokenUsageFromJSON(responseBody string) (int64, int64) {
 	var payload map[string]interface{}
 	if err := json.Unmarshal([]byte(responseBody), &payload); err != nil {

@@ -92,3 +92,7 @@ func (e *ResponsesEndpoint) ConfigureRequest(req *http.Request, apiKey string, m
 	}
 	return replaceRequestModel(requestBody, req.Header.Get("Content-Type"), modelName)
 }
+
+func (e *ResponsesEndpoint) GetModelFromRequest(_ *http.Request, body []byte) (string, error) {
+	return GetModelFromJSONBody(body)
+}

@@ -20,22 +20,6 @@ func NewRequestBuilder() *RequestBuilder {
 	return &RequestBuilder{}
 }
 
-// ChatCompletionRequest OpenAI Chat Completion 请求结构
-type ChatCompletionRequest struct {
-	Model            string                   `json:"model"`
-	Messages         []map[string]interface{} `json:"messages"`
-	Temperature      *float64                 `json:"temperature,omitempty"`
-	TopP             *float64                 `json:"top_p,omitempty"`
-	N                *int                     `json:"n,omitempty"`
-	Stream           bool                     `json:"stream,omitempty"`
-	Stop             interface{}              `json:"stop,omitempty"`
-	MaxTokens        *int                     `json:"max_tokens,omitempty"`
-	PresencePenalty  *float64                 `json:"presence_penalty,omitempty"`
-	FrequencyPenalty *float64                 `json:"frequency_penalty,omitempty"`
-	LogitBias        map[string]float64       `json:"logit_bias,omitempty"`
-	User             string                   `json:"user,omitempty"`
-}
-
 // BuildProxyRequest 构建代理请求
 // 将客户端请求转换为上游请求,包括:
 // 1. 替换模型名
@@ -147,15 +131,6 @@ func (rb *RequestBuilder) copyHeaders(src *http.Request, dst *http.Request) {
 	}
 }
 
-// ParseChatCompletionRequest 解析 Chat Completion 请求
-func (rb *RequestBuilder) ParseChatCompletionRequest(body []byte) (*ChatCompletionRequest, error) {
-	var req ChatCompletionRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
-	}
-	return &req, nil
-}
-
 // IsStreamRequest 判断是否为流式请求
 func (rb *RequestBuilder) IsStreamRequest(body []byte, endpointType string, requestPath string) bool {
 	if endpointType == "gemini" {
@@ -169,50 +144,4 @@ func (rb *RequestBuilder) IsStreamRequest(body []byte, endpointType string, requ
 
 	stream, ok := reqData["stream"].(bool)
 	return ok && stream
-}
-
-// GetModelFromRequest 从请求中提取模型名
-func (rb *RequestBuilder) GetModelFromRequest(body []byte, endpointType string, requestPath string) (string, error) {
-	if endpointType == "gemini" {
-		if model, err := rb.getModelFromGeminiPath(requestPath); err == nil {
-			return model, nil
-		}
-		return rb.getModelFromRequestBody(body)
-	}
-
-	return rb.getModelFromRequestBody(body)
-}
-
-func (rb *RequestBuilder) getModelFromRequestBody(body []byte) (string, error) {
-	var reqData map[string]interface{}
-	if err := json.Unmarshal(body, &reqData); err != nil {
-		return "", err
-	}
-
-	model, ok := reqData["model"].(string)
-	if !ok || model == "" {
-		return "", errors.New("model field is missing or invalid")
-	}
-
-	return model, nil
-}
-
-func (rb *RequestBuilder) getModelFromGeminiPath(requestPath string) (string, error) {
-	index := strings.Index(requestPath, "/models/")
-	if index < 0 {
-		return "", errors.New("model field is missing or invalid")
-	}
-
-	raw := requestPath[index+len("/models/"):]
-	if raw == "" {
-		return "", errors.New("model field is missing or invalid")
-	}
-
-	parts := strings.SplitN(raw, ":", 2)
-	model := parts[0]
-	if model == "" {
-		return "", errors.New("model field is missing or invalid")
-	}
-
-	return model, nil
 }

@@ -89,3 +89,7 @@ func (e *ChatCompletionsEndpoint) ConfigureRequest(req *http.Request, apiKey str
 	}
 	return replaceRequestModel(requestBody, req.Header.Get("Content-Type"), modelName)
 }
+
+func (e *ChatCompletionsEndpoint) GetModelFromRequest(_ *http.Request, body []byte) (string, error) {
+	return GetModelFromJSONBody(body)
+}

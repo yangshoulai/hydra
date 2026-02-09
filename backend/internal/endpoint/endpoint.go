@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -42,6 +43,11 @@ type Endpoint interface {
 
 	// ConfigureTestRequest 配置测试请求
 	ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error
+
+	// GetModelFromRequest 从请求中提取统一模型名
+	// req: 原始请求（用于获取 URL path、Content-Type 等）
+	// body: 已读取的请求体字节
+	GetModelFromRequest(req *http.Request, body []byte) (string, error)
 }
 
 // EndpointInfo 端点信息（用于API返回）
@@ -76,4 +82,17 @@ func ValidateJSONResponse(body []byte) (map[string]interface{}, error) {
 // IsSuccessStatusCode 判断状态码是否为成功
 func IsSuccessStatusCode(statusCode int) bool {
 	return statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices
+}
+
+// GetModelFromJSONBody 从 JSON 请求体中提取 model 字段（通用辅助函数）
+func GetModelFromJSONBody(body []byte) (string, error) {
+	var reqData map[string]interface{}
+	if err := json.Unmarshal(body, &reqData); err != nil {
+		return "", err
+	}
+	model, ok := reqData["model"].(string)
+	if !ok || model == "" {
+		return "", errors.New("model field is missing or invalid")
+	}
+	return model, nil
 }

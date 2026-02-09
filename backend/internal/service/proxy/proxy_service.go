@@ -148,7 +148,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, ep endpoint.Endpoint, trace
 	requestBodyStr := string(bodyBytes)
 
 	// 2. 解析请求获取模型名
-	unifiedModel, err := ps.requestBuilder.GetModelFromRequest(bodyBytes, ep.GetType(), c.Request.URL.Path)
+	unifiedModel, err := ep.GetModelFromRequest(c.Request, bodyBytes)
 	if err != nil {
 		ps.logErrorWithTrace("获取请求模型异常", traceID, slog.String("error", err.Error()))
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, "Invalid request: "+err.Error(), traceID)
