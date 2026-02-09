@@ -1,8 +1,10 @@
 package endpoint
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -29,8 +31,8 @@ func (e *MessagesEndpoint) GetColor() string {
 	return "#f59e0b"
 }
 
-func (e *MessagesEndpoint) GetTestPayload(modelName string) map[string]interface{} {
-	return map[string]interface{}{
+func (e *MessagesEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
+	payload := map[string]interface{}{
 		"model": modelName,
 		"messages": []map[string]interface{}{
 			{
@@ -39,6 +41,17 @@ func (e *MessagesEndpoint) GetTestPayload(modelName string) map[string]interface
 			},
 		},
 	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Anthropic-Version", "2023-06-01")
+	req.Header.Set("X-Api-Key", apiKey)
+	req.Body = io.NopCloser(bytes.NewBuffer(data))
+	req.ContentLength = int64(len(data))
+	return nil
 }
 
 func (e *MessagesEndpoint) ValidateResponse(statusCode int, body []byte) (bool, string) {

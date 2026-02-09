@@ -1,8 +1,10 @@
 package endpoint
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,8 +33,8 @@ func (e *GeminiEndpoint) GetColor() string {
 	return "#22c55e"
 }
 
-func (e *GeminiEndpoint) GetTestPayload(modelName string) map[string]interface{} {
-	return map[string]interface{}{
+func (e *GeminiEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
+	payload := map[string]interface{}{
 		"contents": []map[string]interface{}{
 			{
 				"role": "user",
@@ -42,6 +44,24 @@ func (e *GeminiEndpoint) GetTestPayload(modelName string) map[string]interface{}
 			},
 		},
 	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		query := req.URL.Query()
+		if query.Get("key") == "" {
+			query.Set("key", apiKey)
+			req.URL.RawQuery = query.Encode()
+		}
+		req.Header.Set("X-Goog-Api-Key", apiKey)
+	}
+	action := extractGeminiAction(req.URL.Path)
+	req.URL.Path = buildGeminiPath(modelName, action)
+	req.Body = io.NopCloser(bytes.NewBuffer(data))
+	req.ContentLength = int64(len(data))
+	return nil
 }
 
 func (e *GeminiEndpoint) ValidateResponse(statusCode int, body []byte) (bool, string) {

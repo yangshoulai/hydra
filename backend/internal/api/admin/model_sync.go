@@ -1,9 +1,7 @@
 package admin
 
 import (
-	"bytes"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -304,31 +302,18 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 		return false, fmt.Sprintf("不支持的端点类型: %s", endpointType), "", err
 	}
 
-	// 使用端点的测试报文生成方法
-	requestBody := ep.GetTestPayload(upstreamModel)
-
 	// 构造请求URL
 	url := fmt.Sprintf("%s%s", channel.BaseURL, ep.GetPath())
 
-	jsonData, err := json.Marshal(requestBody)
-	if err != nil {
-		return false, "序列化测试请求报文异常", "", err
-	}
-
 	// 创建HTTP请求
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return false, "无法创建测试请求", "", err
 	}
 
-	// 使用端点的配置方法设置请求头和请求体
-	updatedBody, err := ep.ConfigureRequest(req, apiKey, upstreamModel, jsonData)
-	if err != nil {
+	// 使用端点的测试请求配置方法
+	if err := ep.ConfigureTestRequest(req, apiKey, upstreamModel); err != nil {
 		return false, "配置测试请求异常", "", err
-	}
-	if updatedBody != nil {
-		req.Body = io.NopCloser(bytes.NewBuffer(updatedBody))
-		req.ContentLength = int64(len(updatedBody))
 	}
 
 	// 记录开始时间
@@ -365,7 +350,6 @@ func (h *ModelSyncHandler) testModelViaUpstream(channel *models.Channel, apiKey,
 		slog.String("endpoint_type", endpointType),
 		slog.String("url", req.URL.String()),
 		slog.Uint64("status_code", uint64(resp.StatusCode)),
-		slog.String("request_body", string(updatedBody)),
 		slog.String("response_body", string(body)),
 	)
 	// 使用端点的验证方法验证响应

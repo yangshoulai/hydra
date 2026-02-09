@@ -1,8 +1,10 @@
 package endpoint
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -10,7 +12,7 @@ import (
 type ImagesGenerationsEndpoint struct{}
 
 func (e *ImagesGenerationsEndpoint) GetName() string {
-	return "OpenAI Images"
+	return "OpenAI Images Generations"
 }
 
 func (e *ImagesGenerationsEndpoint) GetType() string {
@@ -29,13 +31,22 @@ func (e *ImagesGenerationsEndpoint) GetColor() string {
 	return "#ec4899"
 }
 
-func (e *ImagesGenerationsEndpoint) GetTestPayload(modelName string) map[string]interface{} {
-	return map[string]interface{}{
+func (e *ImagesGenerationsEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
+	payload := map[string]interface{}{
 		"model":  modelName,
 		"prompt": "请生成一只戴着耳机的柯基",
 		"n":      1,
 		"size":   "512x512",
 	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Body = io.NopCloser(bytes.NewBuffer(data))
+	req.ContentLength = int64(len(data))
+	return nil
 }
 
 func (e *ImagesGenerationsEndpoint) ValidateResponse(statusCode int, body []byte) (bool, string) {

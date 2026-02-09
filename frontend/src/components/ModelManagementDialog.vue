@@ -716,7 +716,8 @@ const columns: DataTableColumns<ModelDisplayType> = [
           const typeLabelMap: Record<string, string> = {
             'openai-chat': 'OpenAI Chat',
             'openai-response': 'OpenAI Responses',
-            'openai-image': 'OpenAI Images',
+            'openai-image': 'OpenAI Images Generations',
+            'openai-image-edit': 'OpenAI Images Edits',
             anthropic: 'Anthropic Messages',
             gemini: 'Google Gemini'
           }

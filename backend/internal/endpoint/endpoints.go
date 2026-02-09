@@ -5,6 +5,7 @@ func init() {
 	Register(&ChatCompletionsEndpoint{})
 	Register(&ResponsesEndpoint{})
 	Register(&ImagesGenerationsEndpoint{})
+	Register(&ImagesEditEndpoint{})
 	Register(&MessagesEndpoint{})
 	Register(&GeminiEndpoint{})
 }

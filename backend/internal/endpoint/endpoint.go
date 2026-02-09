@@ -16,10 +16,6 @@ type Endpoint interface {
 	// GetPath 获取端点请求路径
 	GetPath() string
 
-	// GetTestPayload 获取测试报文
-	// modelName: 实际的上游模型名称
-	GetTestPayload(modelName string) map[string]interface{}
-
 	// ValidateResponse 验证响应是否符合当前端点格式
 	// 返回 (是否有效, 错误信息)
 	ValidateResponse(statusCode int, body []byte) (bool, string)
@@ -43,6 +39,9 @@ type Endpoint interface {
 
 	// GetColor 获取端点颜色（用于前端展示）
 	GetColor() string
+
+	// ConfigureTestRequest 配置测试请求
+	ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error
 }
 
 // EndpointInfo 端点信息（用于API返回）

@@ -1,8 +1,10 @@
 package endpoint
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -29,8 +31,8 @@ func (e *ChatCompletionsEndpoint) GetColor() string {
 	return "#10b981"
 }
 
-func (e *ChatCompletionsEndpoint) GetTestPayload(modelName string) map[string]interface{} {
-	return map[string]interface{}{
+func (e *ChatCompletionsEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
+	payload := map[string]interface{}{
 		"model": modelName,
 		"messages": []map[string]interface{}{
 			{
@@ -39,6 +41,15 @@ func (e *ChatCompletionsEndpoint) GetTestPayload(modelName string) map[string]in
 			},
 		},
 	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Body = io.NopCloser(bytes.NewBuffer(data))
+	req.ContentLength = int64(len(data))
+	return nil
 }
 
 func (e *ChatCompletionsEndpoint) ValidateResponse(statusCode int, body []byte) (bool, string) {
