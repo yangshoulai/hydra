@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"sort"
 	"strings"
@@ -145,7 +147,7 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, ep endpoint.Endpoint, trace
 		return err
 	}
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-	requestBodyStr := string(bodyBytes)
+	requestBodyStr := extractRequestBodyStr(c.Request.Header.Get("Content-Type"), bodyBytes)
 
 	// 2. 解析请求获取模型名
 	unifiedModel, err := ep.GetModelFromRequest(c.Request, bodyBytes)
@@ -434,6 +436,36 @@ func (ps *ProxyService) proxyRequest(c *gin.Context, ep endpoint.Endpoint, trace
 		ps.auditLogger.LogAsync(mainLog.Build())
 		return forwardErr
 	}
+}
+
+// extractRequestBodyStr 从请求体中提取可安全存储的字符串
+// 对于 multipart/form-data 请求，过滤掉二进制文件字段，只保留文本字段并序列化为 JSON
+func extractRequestBodyStr(contentType string, body []byte) string {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "multipart/form-data" {
+		return string(body)
+	}
+	boundary := params["boundary"]
+	if boundary == "" {
+		return string(body)
+	}
+	reader := multipart.NewReader(bytes.NewReader(body), boundary)
+	fields := make(map[string]string)
+	for {
+		part, err := reader.NextPart()
+		if err != nil {
+			break
+		}
+		if part.FileName() != "" {
+			_ = part.Close()
+			continue
+		}
+		val, _ := io.ReadAll(part)
+		fields[part.FormName()] = string(val)
+		_ = part.Close()
+	}
+	data, _ := json.Marshal(fields)
+	return string(data)
 }
 
 // recordFailure 记录故障到熔断器
