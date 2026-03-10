@@ -219,8 +219,8 @@ async function handleTest(row: ModelConfig, channelId: number) {
     // 对每个端点类型进行测试
     const testPromises = row.endpoint_types.map(async (endpointType) => {
       try {
-        await channelApi.testModel(channelId, row.upstream_model, props.modelName, endpointType)
-        return {endpointType, success: true}
+        const result = await channelApi.testModel(channelId, row.upstream_model, props.modelName, endpointType)
+        return {endpointType, success: result.success}
       } catch (error) {
         return {endpointType, success: false, error}
       }
