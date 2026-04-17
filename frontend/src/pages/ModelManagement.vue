@@ -1,428 +1,212 @@
 <template>
-  <div class="space-y-4">
-    <!-- 页面头部 -->
-    <n-card :bordered="false" class="page-header-card">
-      <n-space justify="space-between" align="center">
-        <n-space vertical :size="4">
-          <n-text class="page-title">模型管理</n-text>
-          <n-text depth="3" class="page-subtitle">
-            管理系统中的所有统一模型，用于将不同渠道的模型映射到统一名称
-          </n-text>
-        </n-space>
-        <n-button type="primary" @click="showCreateDialog = true" size="large" strong>
-          <template #icon>
-            <n-icon>
-              <AddOutline/>
-            </n-icon>
-          </template>
-          添加模型
-        </n-button>
+  <div class="app-page">
+    <n-alert v-if="listError" type="error" :bordered="false">
+      <n-space align="center" justify="space-between" style="width: 100%">
+        <span>{{ listError }}</span>
+        <n-button text type="error" @click="loadModels">重试</n-button>
       </n-space>
-    </n-card>
+    </n-alert>
 
-    <!-- 过滤表单 -->
-    <n-form inline :label-width="80" :model="filters" :label-placement="'left'" :label-align="'left'" :show-feedback="false">
-      <n-grid :cols="24" :x-gap="24" responsive="screen">
-        <n-form-item-gi :span="6" label="模型名称">
+    <section class="panel-card">
+      <header class="panel-card__header table-toolbar">
+        <div class="table-toolbar__title">
+          <h3 class="panel-card__title">模型列表</h3>
+        </div>
+        <div class="table-toolbar__actions">
+          <n-button size="small" type="primary" @click="showCreateDialog = true">
+            <template #icon>
+              <n-icon>
+                <AddOutline />
+              </n-icon>
+            </template>
+            添加模型
+          </n-button>
+        </div>
+      </header>
+      <div class="panel-card__body">
+        <div class="table-inline-search">
           <n-input
-              v-model:value="filters.name"
-              placeholder="输入模型名称"
-              clearable
-              @update:value="handleFilterChange"
-          />
-        </n-form-item-gi>
-        <n-form-item-gi :span="6" label="厂商" :label-width="50">
+            v-model:value="filters.name"
+            class="table-filter-input"
+            size="small"
+            clearable
+            placeholder="模型名称"
+            @keyup.enter="handleSearch"
+          >
+            <template #prefix>
+              <n-icon><SearchOutline /></n-icon>
+            </template>
+          </n-input>
           <n-select
-              v-model:value="filters.provider_id"
-              placeholder="选择厂商"
-              clearable
-              :options="providerOptions"
-              @update:value="handleFilterChange"
+            v-model:value="filters.provider_id"
+            class="table-filter-select"
+            size="small"
+            clearable
+            filterable
+            placeholder="厂商"
+            :options="providerOptions"
           />
-        </n-form-item-gi>
-        <n-form-item-gi :span="6">
-          <n-space>
-            <n-button type="primary" @click="handleSearch">
-              <template #icon>
-                <n-icon>
-                  <SearchOutline/>
-                </n-icon>
-              </template>
-              查询
-            </n-button>
-            <n-button @click="handleReset">
-              <template #icon>
-                <n-icon>
-                  <RefreshOutline/>
-                </n-icon>
-              </template>
-              重置
-            </n-button>
-          </n-space>
-        </n-form-item-gi>
-      </n-grid>
-    </n-form>
+          <n-button size="small" type="primary" @click="handleSearch">查询</n-button>
+          <n-button size="small" quaternary @click="handleReset">重置</n-button>
+        </div>
 
-    <!-- 模型列表 -->
-    <n-data-table
-        :columns="columns"
-        :data="models"
-        :pagination="false"
-        :bordered="true"
-        striped
-        :single-line="false"
-        :loading="loading"
-        :scroll-x="1160"
-        :row-key="(row: Model) => row.id"
-        @update:sorter="handleSorterChange"
-    />
+        <n-data-table
+          :columns="columns"
+          :data="models"
+          :pagination="false"
+          :loading="loading"
+          :locale="tableLocale"
+          :single-line="false"
+          :scroll-x="980"
+          :row-key="(row: Model) => row.id"
+          @update:sorter="handleSorterChange"
+        />
 
-    <div class="flex justify-end">
-      <n-pagination
-          :page="pagination.page"
-          :on-update-page="pagination.onChange"
-          @update:page-size="pagination.onUpdatePageSize"
-          :page-size="pagination.pageSize"
-          :item-count="pagination.total"
-          :page-sizes="pagination.pageSizes"
-          :show-size-picker="pagination.showSizePicker"
-      />
-    </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 16px">
+          <n-pagination
+            :page="pagination.page"
+            :on-update-page="pagination.onChange"
+            :page-size="pagination.pageSize"
+            :on-update:page-size="pagination.onUpdatePageSize"
+            :item-count="pagination.total"
+            :page-sizes="pagination.pageSizes"
+            :show-size-picker="pagination.showSizePicker"
+          />
+        </div>
+      </div>
+    </section>
 
-    <!-- 创建模型对话框 -->
-    <n-modal
-        v-model:show="showCreateDialog"
-        preset="card"
-        title="添加模型"
-        :style="{ width: '600px' }"
-        :mask-closable="false"
-        :closable="true"
-        @close="showCreateDialog = false"
-        @keydown.esc="showCreateDialog = false"
-        :bordered="false"
-        class="model-dialog"
-    >
-      <n-space vertical :size="20">
-        <n-alert type="info" :bordered="false">
-          <template #icon>
-            <n-icon>
-              <InformationCircleOutline/>
-            </n-icon>
-          </template>
-          创建新的统一模型。统一模型用于将不同渠道的相同模型映射到统一名称。
-        </n-alert>
-
-        <n-form
-            ref="createFormRef"
-            :model="createForm"
-            :rules="createRules"
-            label-placement="top"
-            size="large"
-        >
-          <n-space vertical :size="12">
-            <n-form-item label="模型名称" path="name">
-              <n-input
-                  v-model:value="createForm.name"
-                  placeholder="请输入模型名称，如：gpt-4"
-                  @input="createForm.name = createForm.name.toLowerCase()"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <CodeOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                统一的模型标识名称，自动转换为小写
-              </template>
-            </n-form-item>
-
-            <n-form-item label="厂商" path="provider_id">
-              <n-select
-                  v-model:value="createForm.provider_id"
-                  :options="providerOptions"
-                  placeholder="请选择厂商"
-                  :loading="loadingProviders"
-                  filterable
-              >
-                <template #prefix>
-                  <n-icon>
-                    <BuildOutline/>
-                  </n-icon>
-                </template>
-              </n-select>
-              <template #feedback>
-                选择模型所属的厂商或提供商
-              </template>
-            </n-form-item>
-
-            <n-form-item label="备注" path="remark">
-              <n-input
-                  v-model:value="createForm.remark"
-                  type="textarea"
-                  placeholder="请输入备注（可选）"
-                  :autosize="{ minRows: 3, maxRows: 6 }"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <TextOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-            </n-form-item>
-          </n-space>
-        </n-form>
-      </n-space>
+    <n-modal v-model:show="showCreateDialog" preset="card" title="添加模型" style="width: 520px">
+      <n-form ref="createFormRef" :model="createForm" :rules="createRules" label-placement="top" size="medium">
+        <n-form-item label="模型名称" path="name">
+          <n-input v-model:value="createForm.name" placeholder="例如：gpt-4o" @input="createForm.name = createForm.name.toLowerCase()" />
+        </n-form-item>
+        <n-form-item label="所属厂商" path="provider_id">
+          <n-select v-model:value="createForm.provider_id" :options="providerOptions" filterable :loading="loadingProviders" placeholder="请选择厂商" />
+        </n-form-item>
+        <n-form-item label="备注" path="remark">
+          <n-input v-model:value="createForm.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选备注" />
+        </n-form-item>
+      </n-form>
 
       <template #footer>
-        <n-space justify="end" :size="12">
-          <n-button @click="showCreateDialog = false" size="large">
-            取消
-          </n-button>
-          <n-button type="primary" @click="handleCreate" :loading="creating" size="large" strong>
-            <template #icon>
-              <n-icon>
-                <AddOutline/>
-              </n-icon>
-            </template>
-            确定
-          </n-button>
+        <n-space justify="end">
+          <n-button @click="showCreateDialog = false">取消</n-button>
+          <n-button type="primary" :loading="creating" @click="handleCreate">确认创建</n-button>
         </n-space>
       </template>
     </n-modal>
 
-    <!-- 模型渠道抽屉 -->
-    <ModelChannelsDrawer
-        :model-id="selectedModelId"
-        :model-name="selectedModelName"
-        v-model:show="showChannelsDrawer"
-    />
-
-    <!-- 编辑模型对话框 -->
-    <n-modal
-        v-model:show="showEditDialog"
-        preset="card"
-        title="编辑模型"
-        :style="{ width: '600px' }"
-        :mask-closable="false"
-        :closable="true"
-        @close="showEditDialog = false"
-        @keydown.esc="showEditDialog = false"
-        :bordered="false"
-        class="model-dialog"
-    >
-      <n-space vertical :size="20">
-        <n-alert type="info" :bordered="false" class="info-alert">
-          <template #icon>
-            <n-icon>
-              <InformationCircleOutline/>
-            </n-icon>
-          </template>
-          修改统一模型的配置信息。
-        </n-alert>
-
-        <n-form
-            ref="editFormRef"
-            :model="editForm"
-            :rules="editRules"
-            label-placement="top"
-            size="large"
-        >
-          <n-space vertical :size="12">
-            <n-form-item label="模型名称" path="name">
-              <n-input
-                  v-model:value="editForm.name"
-                  placeholder="请输入模型名称"
-                  @input="editForm.name = editForm.name?.toLowerCase()"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <CodeOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                统一的模型标识名称，自动转换为小写
-              </template>
-            </n-form-item>
-
-            <n-form-item label="厂商" path="provider_id">
-              <n-select
-                  v-model:value="editForm.provider_id"
-                  :options="providerOptions"
-                  placeholder="请选择厂商"
-                  :loading="loadingProviders"
-                  filterable
-              >
-                <template #prefix>
-                  <n-icon>
-                    <BuildOutline/>
-                  </n-icon>
-                </template>
-              </n-select>
-              <template #feedback>
-                选择模型所属的厂商或提供商
-              </template>
-            </n-form-item>
-
-            <n-form-item label="备注" path="remark">
-              <n-input
-                  v-model:value="editForm.remark"
-                  type="textarea"
-                  placeholder="请输入备注（可选）"
-                  :autosize="{ minRows: 3, maxRows: 6 }"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <TextOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-            </n-form-item>
-          </n-space>
-        </n-form>
-      </n-space>
+    <n-modal v-model:show="showEditDialog" preset="card" title="编辑模型" style="width: 520px">
+      <n-form ref="editFormRef" :model="editForm" :rules="editRules" label-placement="top" size="medium">
+        <n-form-item label="模型名称" path="name">
+          <n-input v-model:value="editForm.name" placeholder="请输入模型名称" @input="editForm.name = editForm.name?.toLowerCase()" />
+        </n-form-item>
+        <n-form-item label="所属厂商" path="provider_id">
+          <n-select v-model:value="editForm.provider_id" :options="providerOptions" filterable :loading="loadingProviders" placeholder="请选择厂商" />
+        </n-form-item>
+        <n-form-item label="备注" path="remark">
+          <n-input v-model:value="editForm.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选备注" />
+        </n-form-item>
+      </n-form>
 
       <template #footer>
-        <n-space justify="end" :size="12">
-          <n-button @click="showEditDialog = false" size="large">
-            取消
-          </n-button>
-          <n-button type="primary" @click="handleUpdate" :loading="updating" size="large" strong>
-            <template #icon>
-              <n-icon>
-                <SaveOutline/>
-              </n-icon>
-            </template>
-            保存
-          </n-button>
+        <n-space justify="end">
+          <n-button @click="showEditDialog = false">取消</n-button>
+          <n-button type="primary" :loading="updating" @click="handleUpdate">保存</n-button>
         </n-space>
       </template>
     </n-modal>
+
+    <ModelChannelsDrawer :model-id="selectedModelId" :model-name="selectedModelName" v-model:show="showChannelsDrawer" />
   </div>
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck
-import {computed, h, onMounted, reactive, ref} from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import {
   type DataTableColumns,
   type FormInst,
   type FormRules,
   NAlert,
   NButton,
-  NCard,
   NDataTable,
   NForm,
   NFormItem,
-  NFormItemGi,
-  NGrid,
   NIcon,
   NInput,
   NModal,
   NPagination,
   NSelect,
   NSpace,
+  NTag,
   NText,
-  NTooltip
+  NTooltip,
 } from 'naive-ui'
-import {
-  AddOutline,
-  BuildOutline,
-  ClipboardOutline,
-  CodeOutline,
-  CreateOutline,
-  InformationCircleOutline,
-  LayersOutline,
-  RefreshOutline,
-  SaveOutline,
-  SearchOutline,
-  TextOutline,
-  TrashOutline
-} from '@vicons/ionicons5'
-import {type CreateModelRequest, modelApi, type ModelListParams, type UpdateModelRequest} from '../services/modelService'
-import type {Model} from '../types/model'
+import { AddOutline, CopyOutline, LayersOutline, PencilOutline, SearchOutline, TrashOutline } from '@vicons/ionicons5'
+import { type CreateModelRequest, modelApi, type UpdateModelRequest } from '@/services/modelService'
+import type { Model, ModelListParams, Provider } from '@/types/model'
 import providerApi from '@/services/providerService'
-import type {Provider} from '@/types/model'
 import ModelChannelsDrawer from '@/components/ModelChannelsDrawer.vue'
+import { getErrorMessage, toastApiError } from '@/utils/error'
 
-// 状态
 const loading = ref(false)
+const listError = ref('')
 const creating = ref(false)
 const updating = ref(false)
 const loadingProviders = ref(false)
+
 const models = ref<Model[]>([])
 const providers = ref<Provider[]>([])
+
 const showCreateDialog = ref(false)
 const showEditDialog = ref(false)
 const showChannelsDrawer = ref(false)
+
 const currentEditModel = ref<Model | null>(null)
 const selectedModelId = ref(0)
 const selectedModelName = ref('')
 
-// 过滤条件
 const filters = reactive<ModelListParams>({
   name: '',
-  provider_id: null
+  provider_id: null,
 })
 
-// 排序状态
 const sortState = reactive({
   columnKey: '' as 'id' | 'name' | '',
-  order: false as boolean | 'asc' | 'desc'
+  order: false as boolean | 'asc' | 'desc',
 })
 
-// 厂商选项
-const providerOptions = ref<Array<{ label: string, value: string }>>([])
+const providerOptions = ref<Array<{ label: string; value: string }>>([])
 
-// 表单引用
 const createFormRef = ref<FormInst | null>(null)
 const editFormRef = ref<FormInst | null>(null)
 
-// 创建表单
 const createForm = reactive<CreateModelRequest>({
   name: '',
   provider_id: null,
-  remark: ''
+  remark: '',
 })
 
-// 编辑表单
 const editForm = reactive<UpdateModelRequest>({
   name: '',
   provider_id: undefined,
-  remark: ''
+  remark: '',
 })
 
-// 创建表单验证规则
 const createRules: FormRules = {
-  name: {
-    required: true,
-    message: '请输入模型名称',
-    trigger: ['blur', 'input']
-  },
-  provider_id: {
-    required: true,
-    type: 'string',
-    message: '请选择厂商',
-    trigger: ['blur', 'change']
-  }
+  name: { required: true, message: '请输入模型名称', trigger: ['blur', 'input'] },
+  provider_id: { required: true, type: 'string', message: '请选择厂商', trigger: ['blur', 'change'] },
 }
 
-// 编辑表单验证规则
 const editRules: FormRules = {
-  name: {
-    required: true,
-    message: '请输入模型名称',
-    trigger: ['blur', 'input']
-  },
-  provider_id: {
-    type: 'string',
-    message: '请选择厂商',
-    trigger: ['blur', 'change']
-  }
+  name: { required: true, message: '请输入模型名称', trigger: ['blur', 'input'] },
 }
 
-// 分页配置
+const tableLocale = computed(() => ({
+  emptyText: loading.value ? '加载中...' : '暂无模型数据',
+}))
+
 const pagination = reactive({
   page: 1,
   pageSize: 20,
@@ -433,164 +217,167 @@ const pagination = reactive({
     pagination.page = page
     loadModels()
   },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize
+  onUpdatePageSize: (size: number) => {
+    pagination.pageSize = size
     pagination.page = 1
     loadModels()
-  }
+  },
 })
 
-// 表格列定义（使用 computed 响应式更新排序状态）
-const columns = computed<DataTableColumns<Model>>(() => {
-  const getSortOrder = (key: string) => {
-    if (sortState.columnKey === key) {
-      return sortState.order === 'asc' ? 'ascend' : sortState.order === 'desc' ? 'descend' : false
-    }
-    return false
+function getSortOrder(key: string) {
+  if (sortState.columnKey === key) {
+    return sortState.order === 'asc' ? 'ascend' : sortState.order === 'desc' ? 'descend' : false
   }
+  return false
+}
 
-  return [
-    {
-      title: 'ID',
-      key: 'id',
-      width: 80,
-      align: 'left',
-      sortable: true,
-      sorter: 'default',
-      sortOrder: getSortOrder('id')
-    },
-    {
-      title: '模型名称',
-      key: 'name',
-      width: 280,
-      render: (row) => {
-        return h(
+const columns = computed<DataTableColumns<Model>>(() => [
+  {
+    title: 'ID',
+    key: 'id',
+    width: 70,
+    sortable: true,
+    sorter: 'default',
+    sortOrder: getSortOrder('id'),
+  },
+  {
+    title: '模型名称',
+    key: 'name',
+    minWidth: 260,
+    sortable: true,
+    sorter: 'default',
+    sortOrder: getSortOrder('name'),
+    render: (row) =>
+      h(NSpace, { size: 8, align: 'center' }, {
+        default: () => [
+          h(NText, { code: true, style: 'max-width: 280px' }, { default: () => row.name }),
+          h(
             NTooltip,
-            {},
+            null,
             {
               trigger: () =>
-                  h(
-                      NButton,
-                      {
-                        text: true,
-                        type: 'primary',
-                        onClick: (e: MouseEvent) => handleCopyModelName(row, e)
-                      },
-                      {
-                        default: () => [
-                          h(NText, {code: true, style: {cursor: 'pointer'}}, {default: () => row.name}),
-                          h(NIcon, {style: {marginLeft: '8px', fontSize: '14px'}}, {
-                            default: () => h(ClipboardOutline)
-                          })
-                        ]
-                      }
-                  ),
-              default: () => '点击复制模型名称'
-            }
-        )
-      },
-      sortable: true,
-      sorter: 'default',
-      sortOrder: getSortOrder('name')
-    },
-    {
-      title: '厂商',
-      key: 'provider',
-      width: 160,
-      render: (row) => {
-        if (row.provider) {
-          return h(NText, {tag: 'strong'}, {default: () => row.provider!.name})
-        }
-        return h(NText, {depth: 3}, {default: () => '未设置'})
-      }
-    },
-    {
-      title: '渠道数',
-      key: 'channel_count',
-      width: 80,
-      align: 'right',
-      render: (row) => row.channel_count || 0
-    },
-    {
-      title: '创建时间',
-      key: 'created_at',
-      width: 200,
-      align: 'center',
-      render: (row) => {
-        return new Date(row.created_at).toLocaleString('zh-CN')
-      }
-    },
-    {
-      title: '备注',
-      key: 'remark',
-      width: 120,
-      ellipsis: {
-        tooltip: true
-      }
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 240,
-      fixed: 'right',
-      align: 'center',
-      render: (row) => {
-        return h(
-            NSpace,
-            {size: 'small', justify: 'center'},
-            {
-              default: () => [
                 h(
-                    NButton,
-                    {
-                      size: 'tiny',
-                      type: 'primary',
-                      onClick: () => handleViewChannels(row)
-                    },
-                    {
-                      default: () => '渠道',
-                      icon: () => h(NIcon, null, {default: () => h(LayersOutline)})
-                    }
+                  NButton,
+                  {
+                    class: 'table-action-btn',
+                    quaternary: true,
+                    circle: true,
+                    size: 'tiny',
+                    'aria-label': `复制模型名 ${row.name}`,
+                    onClick: (event: MouseEvent) => handleCopyModelName(row, event),
+                  },
+                  { icon: () => h(NIcon, null, { default: () => h(CopyOutline) }) },
                 ),
-                h(
-                    NButton,
-                    {
-                      size: 'tiny',
-                      type: 'warning',
-                      onClick: () => handleEdit(row)
-                    },
-                    {
-                      default: () => '编辑',
-                      icon: () => h(NIcon, null, {default: () => h(CreateOutline)})
-                    }
-                ),
-                h(
-                    NButton,
-                    {
-                      size: 'tiny',
-                      type: 'error',
-                      onClick: () => handleDelete(row)
-                    },
-                    {
-                      default: () => '删除',
-                      icon: () => h(NIcon, null, {default: () => h(TrashOutline)})
-                    }
-                )
-              ]
-            }
-        )
+              default: () => '复制模型名',
+            },
+          ),
+        ],
+      }),
+  },
+  {
+    title: '厂商',
+    key: 'provider',
+    width: 150,
+    render: (row) => {
+      if (!row.provider) {
+        return h(NTag, { bordered: false, size: 'small' }, { default: () => '未设置' })
       }
-    }
-  ]
-})
+      return h(NTag, { type: 'info', bordered: false, size: 'small' }, { default: () => row.provider?.name })
+    },
+  },
+  {
+    title: '渠道数',
+    key: 'channel_count',
+    width: 100,
+    align: 'center',
+    render: (row) => row.channel_count ?? 0,
+  },
+  {
+    title: '创建时间',
+    key: 'created_at',
+    width: 180,
+    align: 'center',
+    render: (row) => new Date(row.created_at).toLocaleString('zh-CN'),
+  },
+  {
+    title: '备注',
+    key: 'remark',
+    minWidth: 160,
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 140,
+    fixed: 'right',
+    align: 'center',
+    render: (row) =>
+      h(NSpace, { size: 4, justify: 'center', class: 'table-action-group' }, {
+        default: () => [
+          renderActionIcon({
+            tooltip: '关联渠道',
+            ariaLabel: `查看模型 ${row.name} 的关联渠道`,
+            icon: LayersOutline,
+            type: 'info',
+            onClick: () => handleViewChannels(row),
+          }),
+          renderActionIcon({
+            tooltip: '编辑',
+            ariaLabel: `编辑模型 ${row.name}`,
+            icon: PencilOutline,
+            type: 'warning',
+            onClick: () => handleEdit(row),
+          }),
+          renderActionIcon({
+            tooltip: '删除',
+            ariaLabel: `删除模型 ${row.name}`,
+            icon: TrashOutline,
+            type: 'error',
+            onClick: () => handleDelete(row),
+          }),
+        ],
+      }),
+  },
+])
 
-// 处理排序变化
+function renderActionIcon(options: {
+  tooltip: string
+  ariaLabel: string
+  icon: any
+  type?: 'default' | 'primary' | 'info' | 'warning' | 'error' | 'success'
+  onClick: () => void
+}) {
+  return h(
+    NTooltip,
+    null,
+    {
+      trigger: () =>
+        h(
+          NButton,
+          {
+            class: 'table-action-btn',
+            size: 'tiny',
+            quaternary: true,
+            type: options.type,
+            circle: true,
+            'aria-label': options.ariaLabel,
+            onClick: options.onClick,
+          },
+          {
+            icon: () => h(NIcon, null, { default: () => h(options.icon) }),
+          },
+        ),
+      default: () => options.tooltip,
+    },
+  )
+}
+
 function handleSorterChange(sorter: { columnKey: string; order: 'ascend' | 'descend' | false }) {
   if (sorter.columnKey) {
     sortState.columnKey = sorter.columnKey as 'id' | 'name'
     sortState.order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : false
   } else {
-    sortState.columnKey = '' as 'id' | 'name'
+    sortState.columnKey = ''
     sortState.order = false
   }
 
@@ -598,18 +385,11 @@ function handleSorterChange(sorter: { columnKey: string; order: 'ascend' | 'desc
   loadModels()
 }
 
-// 过滤条件变化时重置到第一页
-function handleFilterChange() {
-  pagination.page = 1
-}
-
-// 搜索
 function handleSearch() {
   pagination.page = 1
   loadModels()
 }
 
-// 重置
 function handleReset() {
   filters.name = ''
   filters.provider_id = null
@@ -617,18 +397,17 @@ function handleReset() {
   loadModels()
 }
 
-// 加载模型列表
 async function loadModels() {
   loading.value = true
+  listError.value = ''
   try {
     const params: ModelListParams = {
       page: pagination.page,
       page_size: pagination.pageSize,
       name: filters.name || undefined,
-      provider_id: filters.provider_id || undefined
+      provider_id: filters.provider_id || undefined,
     }
 
-    // 添加排序参数
     if (sortState.columnKey && sortState.order) {
       params.sort_by = sortState.columnKey
       params.sort_order = sortState.order as 'asc' | 'desc'
@@ -637,15 +416,30 @@ async function loadModels() {
     const result = await modelApi.list(params)
     models.value = result.items
     pagination.total = result.total
-  } catch (error: any) {
-    console.error('Failed to load models:', error)
-    window.$message?.error(error.response?.data?.error || '加载模型列表失败')
+  } catch (err) {
+    listError.value = getErrorMessage(err, '加载模型列表失败')
+    window.$message?.error(listError.value)
   } finally {
     loading.value = false
   }
 }
 
-// 创建模型
+async function loadProviders() {
+  loadingProviders.value = true
+  try {
+    const providerList = await providerApi.list()
+    providers.value = providerList
+    providerOptions.value = providerList.map((provider) => ({
+      label: provider.name,
+      value: provider.id,
+    }))
+  } catch (err) {
+    toastApiError(err, '加载厂商列表失败')
+  } finally {
+    loadingProviders.value = false
+  }
+}
+
 async function handleCreate() {
   if (!createFormRef.value) return
 
@@ -655,46 +449,23 @@ async function handleCreate() {
 
     await modelApi.create(createForm)
 
-    window.$message?.success('创建成功')
+    window.$message?.success('模型创建成功')
     showCreateDialog.value = false
 
-    // 重置表单
     createForm.name = ''
     createForm.provider_id = null
     createForm.remark = ''
 
     await loadModels()
-  } catch (error: any) {
-    console.error('Failed to create model:', error)
-    if (error.errors) {
-      // 表单验证错误
-      return
+  } catch (err) {
+    if (!(err as { errors?: unknown })?.errors) {
+      toastApiError(err, '创建失败')
     }
-    window.$message?.error(error.response?.data?.error || '创建失败')
   } finally {
     creating.value = false
   }
 }
 
-// 加载厂商列表
-async function loadProviders() {
-  loadingProviders.value = true
-  try {
-    const providerList = await providerApi.list()
-    providers.value = providerList
-    providerOptions.value = providerList.map(p => ({
-      label: p.name,
-      value: p.id
-    }))
-  } catch (error: any) {
-    console.error('Failed to load providers:', error)
-    window.$message?.error(error.response?.data?.error || '加载厂商列表失败')
-  } finally {
-    loadingProviders.value = false
-  }
-}
-
-// 编辑模型
 function handleEdit(model: Model) {
   currentEditModel.value = model
   editForm.name = model.name
@@ -703,7 +474,6 @@ function handleEdit(model: Model) {
   showEditDialog.value = true
 }
 
-// 更新模型
 async function handleUpdate() {
   if (!editFormRef.value || !currentEditModel.value) return
 
@@ -718,56 +488,47 @@ async function handleUpdate() {
     currentEditModel.value = null
 
     await loadModels()
-  } catch (error: any) {
-    console.error('Failed to update model:', error)
-    if (error.errors) {
-      // 表单验证错误
-      return
+  } catch (err) {
+    if (!(err as { errors?: unknown })?.errors) {
+      toastApiError(err, '更新失败')
     }
-    window.$message?.error(error.response?.data?.error || '更新失败')
   } finally {
     updating.value = false
   }
 }
 
-// 删除模型
 async function handleDelete(model: Model) {
   await window.$dialog?.warning({
     title: '确认删除',
-    content: `确定要删除模型 "${model.name}" 吗？`,
-    positiveText: '删除',
+    content: `确定删除模型“${model.name}”吗？`,
+    positiveText: '确认删除',
     negativeText: '取消',
     onPositiveClick: async () => {
       try {
         await modelApi.delete(model.id)
         window.$message?.success('删除成功')
         await loadModels()
-      } catch (error: any) {
-        console.error('Failed to delete model:', error)
-        window.$message?.error(error.response?.data?.error || '删除失败')
+      } catch (err) {
+        toastApiError(err, '删除失败')
       }
-    }
+    },
   })
 }
 
-// 查看模型关联的渠道
 function handleViewChannels(model: Model) {
   selectedModelId.value = model.id
   selectedModelName.value = model.name
   showChannelsDrawer.value = true
 }
 
-// 复制模型名称
 function handleCopyModelName(model: Model, event: MouseEvent) {
   event.stopPropagation()
-  navigator.clipboard.writeText(model.name).then(() => {
-    window.$message?.success(`已复制: ${model.name}`)
-  }).catch(() => {
-    window.$message?.error('复制失败')
-  })
+  navigator.clipboard
+    .writeText(model.name)
+    .then(() => window.$message?.success(`已复制模型名：${model.name}`))
+    .catch(() => window.$message?.error('复制失败'))
 }
 
-// 初始化
 onMounted(() => {
   loadProviders()
   loadModels()
@@ -775,50 +536,10 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 页面头部卡片 */
-.page-header-card {
-  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  border-radius: 12px;
-  padding: 24px;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #333;
-  line-height: 1.4;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-/* 对话框样式 */
-.model-dialog {
-  --n-border-radius: 12px;
-}
-
-.model-dialog :deep(.n-card__content) {
-  padding: 24px;
-}
-
-/* 提示信息样式 */
-.info-alert {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-left: 4px solid var(--info-color);
-}
-
-
-/* Alert 样式优化 */
-.model-dialog :deep(.n-alert) {
-  border-radius: 8px;
-  padding: 16px 20px;
-}
-
-.model-dialog :deep(.n-alert .n-alert-body) {
-  font-size: 13px;
-  line-height: 1.6;
+.table-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 </style>

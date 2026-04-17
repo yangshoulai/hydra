@@ -12,6 +12,11 @@ type JWTService struct {
 	secretKey []byte
 }
 
+const (
+	RefreshTokenDefaultTTL  = 7 * 24 * time.Hour
+	RefreshTokenRememberTTL = 30 * 24 * time.Hour
+)
+
 type Claims struct {
 	UserID   uint   `json:"user_id"`
 	Username string `json:"username"`
@@ -34,9 +39,22 @@ func (s *JWTService) GenerateAccessToken(userID uint, username string) (string, 
 	return s.generateTokenWithType(userID, username, "access", 2*time.Hour)
 }
 
-// GenerateRefreshToken 生成刷新令牌（长有效期，7天）
-func (s *JWTService) GenerateRefreshToken(userID uint, username string) (string, error) {
-	return s.generateTokenWithType(userID, username, "refresh", 7*24*time.Hour)
+// GenerateRefreshToken 生成刷新令牌
+// remember=false -> 7 天；remember=true -> 30 天。
+func (s *JWTService) GenerateRefreshToken(userID uint, username string, remember bool) (string, error) {
+	ttl := RefreshTokenDefaultTTL
+	if remember {
+		ttl = RefreshTokenRememberTTL
+	}
+	return s.generateTokenWithType(userID, username, "refresh", ttl)
+}
+
+// GenerateRefreshTokenWithTTL 使用指定有效期生成刷新令牌（用于刷新时保持剩余 TTL）。
+func (s *JWTService) GenerateRefreshTokenWithTTL(userID uint, username string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		ttl = time.Minute
+	}
+	return s.generateTokenWithType(userID, username, "refresh", ttl)
 }
 
 // generateTokenWithType 根据类型生成不同有效期的令牌
@@ -72,7 +90,7 @@ func (s *JWTService) GenerateToken(userID uint, username string) (string, error)
 }
 
 func (s *JWTService) ValidateToken(tokenString string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("invalid signing method")
 		}

@@ -16,7 +16,7 @@ func (e *ImagesGenerationsEndpoint) GetName() string {
 }
 
 func (e *ImagesGenerationsEndpoint) GetType() string {
-	return "openai-image"
+	return TypeOpenAIImagesGenerations
 }
 
 func (e *ImagesGenerationsEndpoint) GetPath() string {
@@ -32,7 +32,7 @@ func (e *ImagesGenerationsEndpoint) GetColor() string {
 }
 
 func (e *ImagesGenerationsEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"model":  modelName,
 		"prompt": "请生成一只戴着耳机的柯基",
 		"n":      1,
@@ -59,7 +59,7 @@ func (e *ImagesGenerationsEndpoint) ValidateResponse(statusCode int, body []byte
 		return false, "invalid JSON response"
 	}
 
-	data, ok := result["data"].([]interface{})
+	data, ok := result["data"].([]any)
 	if !ok || len(data) == 0 {
 		if errMsg, ok := result["error"]; ok {
 			errBytes, _ := json.Marshal(errMsg)

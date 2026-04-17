@@ -6,11 +6,25 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ResponseForwarder 非流式响应转发器
+// NonStreamForwardResult 非流式转发结果
+type NonStreamForwardResult struct {
+	ResponseBody string
+}
+
+// StreamForwardResult 流式转发结果
+type StreamForwardResult struct {
+	ResponseBody string
+	StreamChunks int
+	FirstChunkMS int
+}
+
+// ResponseForwarder 响应转发器（统一处理流式与非流式）
 type ResponseForwarder struct {
 	logger *slog.Logger
 }
@@ -22,56 +36,8 @@ func NewResponseForwarder(logger *slog.Logger) *ResponseForwarder {
 	}
 }
 
-// ForwardResponse 转发非流式响应
-// 读取完整响应并转发到客户端
-func (rf *ResponseForwarder) ForwardResponse(c *gin.Context, upstreamResp *http.Response, traceID string) ([]byte, error) {
-	defer upstreamResp.Body.Close()
-
-	// 读取响应 Body
-	body, err := io.ReadAll(upstreamResp.Body)
-	if err != nil {
-		rf.logger.Error("读取上游响应体失败",
-			slog.String("trace_id", traceID),
-			slog.String("error", err.Error()),
-			slog.Int("status_code", upstreamResp.StatusCode),
-		)
-		return nil, err
-	}
-
-	rf.logger.Debug("收到上游响应",
-		slog.String("trace_id", traceID),
-		slog.Int("status_code", upstreamResp.StatusCode),
-		slog.Int("body_size", len(body)),
-	)
-
-	// 复制必要的响应头
-	rf.copyResponseHeaders(upstreamResp, c)
-
-	// 设置状态码
-	c.Status(upstreamResp.StatusCode)
-
-	// 写入响应 Body
-	if len(body) > 0 {
-		contentType := upstreamResp.Header.Get("Content-Type")
-		if contentType != "" {
-			c.Header("Content-Type", contentType)
-		}
-
-		if _, err := c.Writer.Write(body); err != nil {
-			rf.logger.Error("写入响应到客户端失败",
-				slog.String("trace_id", traceID),
-				slog.String("error", err.Error()),
-			)
-			return body, err
-		}
-	}
-
-	return body, nil
-}
-
 // copyResponseHeaders 复制响应头
 func (rf *ResponseForwarder) copyResponseHeaders(upstreamResp *http.Response, c *gin.Context) {
-	// 需要复制的 Headers 白名单
 	headersToCopy := []string{
 		"Content-Type",
 		"Content-Encoding",
@@ -88,79 +54,175 @@ func (rf *ResponseForwarder) copyResponseHeaders(upstreamResp *http.Response, c 
 	}
 }
 
-// ForwardJSONResponse 转发 JSON 响应(带模型名替换)
-// 将上游模型名替换回统一模型名
-// 返回响应body字符串用于日志记录
-func (rf *ResponseForwarder) ForwardJSONResponse(
+// ForwardNonStreamResponse 转发非流式响应
+// 调用方负责在进入该函数前完成嗅探与响应校验。
+func (rf *ResponseForwarder) ForwardNonStreamResponse(
 	c *gin.Context,
 	upstreamResp *http.Response,
-	upstreamModel string,
-	unifiedModel string,
+	body []byte,
+	channelModel string,
+	model string,
 	traceID string,
-) (string, error) {
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(upstreamResp.Body)
-
-	// 读取响应 Body
-	body, err := io.ReadAll(upstreamResp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// 如果是 JSON 响应,尝试替换模型名
+) (*NonStreamForwardResult, error) {
 	contentType := upstreamResp.Header.Get("Content-Type")
 	if len(body) > 0 && (contentType == "" || bytes.Contains([]byte(contentType), []byte("application/json"))) {
-		modifiedBody, err := rf.replaceModelInJSON(body, upstreamModel, unifiedModel, traceID)
-		if err != nil {
+		modifiedBody, replaceErr := rf.replaceModelInJSON(body, channelModel, model, traceID)
+		if replaceErr != nil {
 			rf.logger.Debug("替换 JSON 响应中的模型名失败",
 				slog.String("trace_id", traceID),
-				slog.String("error", err.Error()),
+				slog.String("error", replaceErr.Error()),
 			)
 		} else {
 			body = modifiedBody
 		}
 	}
 
-	// 复制响应头
 	rf.copyResponseHeaders(upstreamResp, c)
-
-	// 设置状态码和 Content-Type
 	c.Status(upstreamResp.StatusCode)
-	c.Header("Content-Type", "application/json")
+	if c.Writer.Header().Get("Content-Type") == "" {
+		c.Header("Content-Type", "application/json")
+	}
 
-	// 写入响应（分片写入 + flush，避免大响应体写入超时）
-	const chunkSize = 16 * 1024 // 16KB 每块
+	const chunkSize = 16 * 1024
 	for i := 0; i < len(body); i += chunkSize {
 		end := i + chunkSize
 		if end > len(body) {
 			end = len(body)
 		}
-
 		if _, err := c.Writer.Write(body[i:end]); err != nil {
-			return string(body), err
+			return &NonStreamForwardResult{
+				ResponseBody: string(body),
+			}, err
 		}
-
-		// 每次写入后刷新，确保数据及时发送给客户端
 		c.Writer.Flush()
 	}
 
-	return string(body), nil
+	return &NonStreamForwardResult{
+		ResponseBody: string(body),
+	}, nil
+}
+
+// ForwardStreamResponse 转发流式响应
+// 调用方负责在进入该函数前完成嗅探与探测缓存回灌。
+func (rf *ResponseForwarder) ForwardStreamResponse(
+	c *gin.Context,
+	upstreamResp *http.Response,
+	traceID string,
+) (*StreamForwardResult, error) {
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(upstreamResp.Body)
+
+	startTime := time.Now()
+	firstChunkMS := 0
+	firstChunkSeen := false
+
+	var (
+		captureBuffer bytes.Buffer
+		lineBuffer    bytes.Buffer
+		streamChunks  int
+	)
+
+	rf.copyResponseHeaders(upstreamResp, c)
+	if c.Writer.Header().Get("Content-Type") == "" {
+		c.Header("Content-Type", "text/event-stream; charset=utf-8")
+	}
+	if c.Writer.Header().Get("Cache-Control") == "" {
+		c.Header("Cache-Control", "no-cache")
+	}
+	if c.Writer.Header().Get("Connection") == "" {
+		c.Header("Connection", "keep-alive")
+	}
+	c.Header("X-Accel-Buffering", "no")
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	c.Status(upstreamResp.StatusCode)
+	flusher.Flush()
+
+	chunkBuf := make([]byte, 1024)
+	for {
+		n, readErr := upstreamResp.Body.Read(chunkBuf)
+		if n > 0 {
+			if !firstChunkSeen {
+				firstChunkSeen = true
+				firstChunkMS = int(time.Since(startTime).Milliseconds())
+			}
+
+			part := chunkBuf[:n]
+			if _, err := c.Writer.Write(part); err != nil {
+				return &StreamForwardResult{
+					ResponseBody: captureBuffer.String(),
+					StreamChunks: streamChunks,
+					FirstChunkMS: firstChunkMS,
+				}, err
+			}
+			flusher.Flush()
+			captureBuffer.Write(part)
+
+			for i := 0; i < len(part); i++ {
+				ch := part[i]
+				lineBuffer.WriteByte(ch)
+				if ch == '\n' {
+					line := strings.TrimSpace(lineBuffer.String())
+					if strings.HasPrefix(line, "data:") {
+						streamChunks++
+					}
+					lineBuffer.Reset()
+				}
+			}
+
+			select {
+			case <-c.Request.Context().Done():
+				return &StreamForwardResult{
+					ResponseBody: captureBuffer.String(),
+					StreamChunks: streamChunks,
+					FirstChunkMS: firstChunkMS,
+				}, c.Request.Context().Err()
+			default:
+			}
+		}
+
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return &StreamForwardResult{
+				ResponseBody: captureBuffer.String(),
+				StreamChunks: streamChunks,
+				FirstChunkMS: firstChunkMS,
+			}, readErr
+		}
+	}
+
+	if captureBuffer.Len() == 0 {
+		return nil, &EmptySSEBodyError{
+			TraceID: traceID,
+			Message: "空流式响应体",
+		}
+	}
+
+	return &StreamForwardResult{
+		ResponseBody: captureBuffer.String(),
+		StreamChunks: streamChunks,
+		FirstChunkMS: firstChunkMS,
+	}, nil
 }
 
 // replaceModelInJSON 在 JSON 响应中替换模型名
-func (rf *ResponseForwarder) replaceModelInJSON(body []byte, upstreamModel string, unifiedModel string, traceID string) ([]byte, error) {
-	var data map[string]interface{}
+func (rf *ResponseForwarder) replaceModelInJSON(body []byte, channelModel string, model string, traceID string) ([]byte, error) {
+	var data map[string]any
 	if err := json.Unmarshal(body, &data); err != nil {
 		return body, err
 	}
 
-	// 替换顶层的 model 字段
-	if model, ok := data["model"].(string); ok && model == upstreamModel {
-		data["model"] = unifiedModel
+	if upstream, ok := data["model"].(string); ok && upstream == channelModel {
+		data["model"] = model
 	}
 
-	// 序列化回 JSON
 	modifiedBody, err := json.Marshal(data)
 	if err != nil {
 		return body, err
@@ -168,8 +230,8 @@ func (rf *ResponseForwarder) replaceModelInJSON(body []byte, upstreamModel strin
 
 	rf.logger.Debug("响应中的模型名已替换",
 		slog.String("trace_id", traceID),
-		slog.String("upstream_model", upstreamModel),
-		slog.String("unified_model", unifiedModel),
+		slog.String("channel_model", channelModel),
+		slog.String("model", model),
 	)
 
 	return modifiedBody, nil
@@ -190,9 +252,4 @@ func (rf *ResponseForwarder) ForwardErrorResponse(c *gin.Context, statusCode int
 			"code":    statusCode,
 		},
 	})
-}
-
-// GetResponseSize 获取响应大小
-func (rf *ResponseForwarder) GetResponseSize(body []byte) int {
-	return len(body)
 }

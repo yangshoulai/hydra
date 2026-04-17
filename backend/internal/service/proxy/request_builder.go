@@ -3,7 +3,6 @@ package proxy
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -30,10 +29,6 @@ func (rb *RequestBuilder) BuildProxyRequest(
 	routeResult *RouteResult,
 	ep endpoint.Endpoint,
 ) (*http.Request, []byte, error) {
-	if routeResult == nil {
-		return nil, nil, errors.New("route result is nil")
-	}
-
 	// 读取原始请求 Body
 	originalBody, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -61,7 +56,7 @@ func (rb *RequestBuilder) BuildProxyRequest(
 	rb.copyHeaders(c.Request, req)
 
 	// 使用端点的配置方法设置请求头和请求体
-	updatedBody, err := ep.ConfigureRequest(req, routeResult.Key.KeyValue, routeResult.UpstreamModel, modifiedBody)
+	updatedBody, err := ep.ConfigureRequest(req, routeResult.Key.ChannelKeyValue, routeResult.ChannelModel, modifiedBody)
 	if err != nil {
 		return nil, originalBody, err
 	}
@@ -72,17 +67,6 @@ func (rb *RequestBuilder) BuildProxyRequest(
 	}
 
 	return req, originalBody, nil
-}
-
-// getEndpointByPath 根据路径获取端点
-func (rb *RequestBuilder) getEndpointByPath(path string) (endpoint.Endpoint, error) {
-	// 遍历所有端点，找到匹配的路径
-	for _, ep := range endpoint.GetAll() {
-		if ep.GetPath() == path {
-			return ep, nil
-		}
-	}
-	return nil, errors.New("endpoint not found")
 }
 
 // copyHeaders 尽量复制客户端请求头
@@ -133,11 +117,11 @@ func (rb *RequestBuilder) copyHeaders(src *http.Request, dst *http.Request) {
 
 // IsStreamRequest 判断是否为流式请求
 func (rb *RequestBuilder) IsStreamRequest(body []byte, endpointType string, requestPath string) bool {
-	if endpointType == "gemini" {
+	if endpointType == endpoint.TypeGemini {
 		return strings.Contains(requestPath, ":streamGenerateContent")
 	}
 
-	var reqData map[string]interface{}
+	var reqData map[string]any
 	if err := json.Unmarshal(body, &reqData); err != nil {
 		return false
 	}

@@ -1,496 +1,462 @@
 <template>
-  <div class="space-y-4 settings-page">
-    <!-- 页面头部 -->
-    <n-card :bordered="false" class="page-header-card">
-      <n-space justify="space-between" align="center">
-        <n-space vertical :size="4">
-          <n-text class="page-title">系统设置</n-text>
-          <n-text depth="3" class="page-subtitle">
-            配置系统运行参数和行为策略
-          </n-text>
-        </n-space>
+  <div class="app-page settings-page">
+    <n-alert v-if="loadError" type="error" :bordered="false">
+      <n-space align="center" justify="space-between" style="width: 100%">
+        <span>{{ loadError }}</span>
+        <n-button text type="error" @click="loadSettings">重试</n-button>
       </n-space>
-    </n-card>
+    </n-alert>
 
-    <div class="settings-content">
-      <!-- 熔断器设置 -->
-      <n-card class="settings-card" :bordered="true">
-        <template #header>
-          <div class="card-header">
-            <div class="card-title">
-              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke-width="2" stroke-linecap="round"
-                      stroke-linejoin="round"/>
-              </svg>
-              <span>熔断器设置</span>
-            </div>
-            <n-tag size="small" :bordered="false" type="info">Circuit Breaker</n-tag>
-          </div>
-        </template>
-        <n-text class="card-description">保护系统免受级联故障影响，自动隔离异常服务</n-text>
-        <n-form :model="formData" label-placement="left" label-width="140px" class="settings-form">
-          <div class="form-item-wrapper">
-            <n-form-item label="失败阈值" path="circuit_breaker_failure_threshold">
-              <n-input-number
-                  v-model:value="formData.circuit_breaker_failure_threshold"
-                  :min="1"
-                  :max="100"
-                  style="width: 100%"
-              >
-                <template #suffix>次</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">连续失败多少次后触发熔断</n-text>
-          </div>
-
-          <div class="form-item-wrapper">
-            <n-form-item label="冷却时长" path="circuit_breaker_cooling_duration">
-              <n-input-number
-                  v-model:value="formData.circuit_breaker_cooling_duration"
-                  :min="10"
-                  :max="3600"
-                  style="width: 100%"
-              >
-                <template #suffix>秒</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">熔断后等待多久再尝试恢复</n-text>
-          </div>
-
-        </n-form>
-      </n-card>
-
-      <!-- 代理设置 -->
-      <n-card class="settings-card" :bordered="true">
-        <template #header>
-          <div class="card-header">
-            <div class="card-title">
-              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <circle cx="12" cy="12" r="10" stroke-width="2"/>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-                      stroke-width="2"/>
-                <path d="M2 12h20" stroke-width="2"/>
-              </svg>
-              <span>代理设置</span>
-            </div>
-            <n-tag size="small" :bordered="false" type="success">Proxy</n-tag>
-          </div>
-        </template>
-        <n-text class="card-description">控制请求代理行为和性能参数</n-text>
-
-        <n-form label-placement="left" label-width="140px" class="settings-form">
-
-          <div class="form-item-wrapper">
-            <n-form-item label="请求超时" path="proxy_request_timeout">
-              <n-input-number
-                  v-model:value="formData.proxy_request_timeout"
-                  :min="10"
-                  :max="300"
-                  style="width: 100%"
-              >
-                <template #suffix>秒</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">上游请求的超时时间</n-text>
-          </div>
-          <div class="form-item-wrapper">
-            <n-form-item label="最大并发数" path="proxy_max_concurrent">
-              <n-input-number
-                  v-model:value="formData.proxy_max_concurrent"
-                  :min="10"
-                  :max="10000"
-                  style="width: 100%"
-              >
-                <template #suffix>个</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">系统允许的最大并发请求数</n-text>
-          </div>
-
-          <div class="form-item-wrapper">
-            <n-form-item label="最大重试次数" path="proxy_max_retry">
-              <n-input-number
-                  v-model:value="formData.proxy_max_retry"
-                  :min="0"
-                  :max="10"
-                  style="width: 100%"
-              >
-                <template #suffix>次</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">单个请求失败后的最大重试次数</n-text>
-          </div>
-        </n-form>
-      </n-card>
-
-      <!-- 渠道同步设置 -->
-      <n-card class="settings-card" :bordered="true">
-        <template #header>
-          <div class="card-header">
-            <div class="card-title">
-              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M3 12a9 9 0 0 1 9-9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M21 12a9 9 0 0 1-9 9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <polyline points="3 12 3 6 9 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <polyline points="21 12 21 18 15 18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span>渠道同步设置</span>
-            </div>
-            <n-tag size="small" :bordered="false" type="primary">Channel Sync</n-tag>
-          </div>
-        </template>
-        <n-text class="card-description">定时拉取渠道模型信息，自动更新模型状态</n-text>
-        <n-form label-placement="left" label-width="140px" class="settings-form">
-          <div class="form-item-wrapper">
-            <n-form-item label="渠道模型定时同步" path="channel_global_sync_enabled">
-              <n-switch v-model:value="formData.channel_global_sync_enabled"/>
-            </n-form-item>
-            <n-text class="field-hint">开启后允许渠道按计划自动同步模型状态</n-text>
-          </div>
-        </n-form>
-      </n-card>
-
-      <!-- 响应嗅探设置 -->
-      <n-card class="settings-card" :bordered="true">
-        <template #header>
-          <div class="card-header">
-            <div class="card-title">
-              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" stroke-linecap="round"
-                      stroke-linejoin="round"/>
-              </svg>
-              <span>响应嗅探设置</span>
-            </div>
-            <n-tag size="small" :bordered="false" type="error">Sniffer</n-tag>
-          </div>
-        </template>
-        <n-text class="card-description">配置明文错误关键词，用于识别假 200 响应</n-text>
-
-        <n-form label-placement="left" label-width="140px" class="settings-form">
-          <div class="form-item-wrapper">
-            <n-form-item label="错误关键词" path="sniffer_plain_text_error_keywords">
-              <n-input
-                  v-model:value="snifferKeywords"
-                  type="textarea"
-                  placeholder="每行一个关键词，不区分大小写"
-                  :autosize="{ minRows: 10, maxRows: 20 }"
-                  style="width: 100%"
-              />
-            </n-form-item>
-            <n-text class="field-hint">响应 Body 包含这些关键词时将被识别为错误响应，每行一个关键词</n-text>
-          </div>
-        </n-form>
-      </n-card>
-
-      <!-- 日志设置 -->
-      <n-card class="settings-card" :bordered="true">
-        <template #header>
-          <div class="card-header">
-            <div class="card-title">
-              <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke-width="2"/>
-                <polyline points="14 2 14 8 20 8" stroke-width="2"/>
-                <line x1="16" y1="13" x2="8" y2="13" stroke-width="2"/>
-                <line x1="16" y1="17" x2="8" y2="17" stroke-width="2"/>
-                <polyline points="10 9 9 9 8 9" stroke-width="2"/>
-              </svg>
-              <span>日志设置</span>
-            </div>
-            <n-tag size="small" :bordered="false" type="warning">Logging</n-tag>
-          </div>
-        </template>
-        <n-text class="card-description">控制日志记录行为和存储策略</n-text>
-
-        <n-form label-placement="left" label-width="140px" class="settings-form">
-
-          <div class="form-item-wrapper">
-            <n-form-item label="日志保留天数" path="log_retention_days">
-              <n-input-number
-                  v-model:value="formData.log_retention_days"
-                  :min="1"
-                  :max="365"
-                  style="width: 100%"
-              >
-                <template #suffix>天</template>
-              </n-input-number>
-            </n-form-item>
-            <n-text class="field-hint">审计日志保留天数</n-text>
-          </div>
-
-          <div class="form-item-wrapper">
-            <n-form-item label="调试模式" path="debug_mode">
-              <div class="switch-wrapper">
-                <n-switch v-model:value="debugModeEnabled"/>
-                <n-tag v-if="debugModeEnabled" size="small" type="warning" :bordered="false">
-                  已启用
-                </n-tag>
-                <n-tag v-else size="small" type="default" :bordered="false">
-                  已关闭
-                </n-tag>
-              </div>
-            </n-form-item>
-            <n-text class="field-hint">记录完整请求/响应，仅用于排查问题</n-text>
-          </div>
-        </n-form>
-      </n-card>
-
-      <!-- 操作按钮 -->
-      <div class="action-bar">
-        <n-space>
-          <n-button size="large" @click="handleReset" :disabled="isSaving">
-            <template #icon>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 16px; height: 16px;">
-                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" stroke-width="2"/>
-                <path d="M21 3v5h-5" stroke-width="2"/>
-                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" stroke-width="2"/>
-                <path d="M3 21v-5h5" stroke-width="2"/>
-              </svg>
-            </template>
-            重置为默认值
-          </n-button>
-          <n-button type="primary" size="large" :loading="isSaving" @click="handleSave">
-            <template #icon>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 16px; height: 16px;">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke-width="2"/>
-                <polyline points="17 21 17 13 7 13 7 21" stroke-width="2"/>
-                <polyline points="7 3 7 8 15 8" stroke-width="2"/>
-              </svg>
-            </template>
-            保存设置
-          </n-button>
-        </n-space>
+    <section v-if="isLoading" class="panel-card">
+      <div class="panel-card__body">
+        <n-skeleton text :repeat="8" />
       </div>
-    </div>
-  </div>
+    </section>
 
-  <!-- 调试模式确认对话框 -->
-  <n-modal v-model:show="showDebugModeConfirm" preset="dialog" title="启用调试模式">
-    <template #icon>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 24px; height: 24px; color: #f0a020;">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-              stroke-width="2"/>
-        <line x1="12" y1="9" x2="12" y2="13" stroke-width="2"/>
-        <line x1="12" y1="17" x2="12.01" y2="17" stroke-width="2"/>
-      </svg>
+    <template v-else>
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">服务与网络</h3>
+        </header>
+        <div class="panel-card__body panel-card__body--flush">
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">
+                服务端口
+                <n-tag size="tiny" type="warning" :bordered="false">保存后自动重启</n-tag>
+              </div>
+              <div class="setting-row__desc">保存后服务将自动重启，存在约 1 秒不可用。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.server_port" :min="1" :max="65535" style="width: 100%" placeholder="1-65535" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">
+                读取超时（秒）
+                <n-tag size="tiny" type="warning" :bordered="false">保存后自动重启</n-tag>
+              </div>
+              <div class="setting-row__desc">保存后服务将自动重启，存在约 1 秒不可用。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.server_read_timeout" :min="1" :max="600" style="width: 100%" placeholder="1-600" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">
+                写出超时（秒）
+                <n-tag size="tiny" type="warning" :bordered="false">保存后自动重启</n-tag>
+              </div>
+              <div class="setting-row__desc">保存后服务将自动重启，存在约 1 秒不可用。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.server_write_timeout" :min="0" :max="600" style="width: 100%" placeholder="0-600" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">代理请求超时（秒）</div>
+              <div class="setting-row__desc">调用上游厂商接口的超时时间，超时后触发重试。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.proxy_request_timeout" :min="10" :max="300" style="width: 100%" placeholder="10-300" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">最大重试次数</div>
+              <div class="setting-row__desc">单次请求失败后的最大重试次数，0 表示不重试。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.proxy_max_retry" :min="0" :max="10" style="width: 100%" placeholder="0-10" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">网络代理地址</div>
+              <div class="setting-row__desc">访问上游 API 使用的正向代理，支持 HTTP / HTTPS / SOCKS5，留空直连。</div>
+            </div>
+            <div class="setting-row__control setting-row__control--wide">
+              <n-input
+                v-model:value="formData.proxy_network_url"
+                clearable
+                placeholder="例如：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+                style="width: 100%"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">稳定性与嗅探</h3>
+        </header>
+        <div class="panel-card__body panel-card__body--flush">
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">熔断失败阈值</div>
+              <div class="setting-row__desc">密钥连续失败达到阈值后触发熔断，隔离故障密钥。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number
+                v-model:value="formData.circuit_breaker_failure_threshold"
+                :min="1"
+                :max="100"
+                style="width: 100%"
+                placeholder="1-100"
+              />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">熔断冷却时长（秒）</div>
+              <div class="setting-row__desc">熔断触发后，冷却这段时间再尝试恢复。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number
+                v-model:value="formData.circuit_breaker_cooling_duration"
+                :min="10"
+                :max="3600"
+                style="width: 100%"
+                placeholder="10-3600"
+              />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">响应嗅探</div>
+              <div class="setting-row__desc">解析上游响应正文，识别 HTTP 200 但业务失败的情况，计入熔断。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-space align="center">
+                <n-switch v-model:value="formData.sniffer_enabled" />
+                <n-tag :type="formData.sniffer_enabled ? 'success' : 'default'" :bordered="false" size="small">
+                  {{ formData.sniffer_enabled ? '已启用' : '已关闭' }}
+                </n-tag>
+              </n-space>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">流式探测包数</div>
+              <div class="setting-row__desc">流式响应仅检查前 N 个数据包，避免扫描全量 body。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number
+                v-model:value="formData.sniffer_stream_packet_count"
+                :min="1"
+                :max="20"
+                :disabled="!formData.sniffer_enabled"
+                style="width: 100%"
+                placeholder="1-20"
+              />
+            </div>
+          </div>
+
+          <div class="setting-row setting-row--block">
+            <div class="setting-row__info">
+              <div class="setting-row__label">错误关键词</div>
+              <div class="setting-row__desc">
+                响应文本中包含任一关键词即判定失败，可用于识别配额超限、鉴权失效等业务错误。每行一个。
+              </div>
+            </div>
+            <div class="setting-row__control setting-row__control--block">
+              <n-input
+                v-model:value="snifferKeywords"
+                type="textarea"
+                :disabled="!formData.sniffer_enabled"
+                :autosize="{ minRows: 4, maxRows: 10 }"
+                placeholder="每行一个关键词，例如：&#10;rate limit&#10;insufficient quota&#10;invalid api key"
+                style="width: 100%"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">日志与调试</h3>
+        </header>
+        <div class="panel-card__body panel-card__body--flush">
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">日志保留天数</div>
+              <div class="setting-row__desc">访问日志在数据库中的保留天数，过期自动清理。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.log_retention_days" :min="1" :max="365" style="width: 100%" placeholder="1-365" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">调试模式</div>
+              <div class="setting-row__desc">记录完整请求与响应正文，便于排障。含敏感信息，排障完成后建议关闭。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-space align="center">
+                <n-switch v-model:value="debugModeEnabled" />
+                <n-tag :type="debugModeEnabled ? 'warning' : 'default'" :bordered="false" size="small">
+                  {{ debugModeEnabled ? '已启用' : '已关闭' }}
+                </n-tag>
+              </n-space>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">模型测试</h3>
+        </header>
+        <div class="panel-card__body panel-card__body--flush">
+          <div class="setting-row setting-row--block">
+            <div class="setting-row__info">
+              <div class="setting-row__label">默认测试提示词</div>
+              <div class="setting-row__desc">
+                渠道模型测试时默认使用的提示词。若某个渠道模型单独配置了测试提示词，将优先使用模型自己的配置。
+              </div>
+            </div>
+            <div class="setting-row__control setting-row__control--block">
+              <n-input
+                v-model:value="formData.model_test_prompt"
+                type="textarea"
+                :autosize="{ minRows: 3, maxRows: 8 }"
+                placeholder="例如：Hi"
+                style="width: 100%"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-footer">
+        <n-space justify="end">
+          <n-button :disabled="isSaving" @click="handleReset">重置</n-button>
+          <n-button type="primary" :loading="isSaving" @click="handleSave">保存设置</n-button>
+        </n-space>
+      </section>
     </template>
-    <n-space vertical :size="16">
-      <n-alert type="warning" :show-icon="false">
-        <n-text>您即将启用调试模式，请注意以下事项：</n-text>
-      </n-alert>
-      <n-ul style="margin: 0; padding-left: 24px;">
-        <n-li>完整的请求/响应 Body 将被记录到日志文件</n-li>
-        <n-li>可能会产生大量日志文件，占用磁盘空间</n-li>
-        <n-li>可能包含敏感信息，请勿在生产环境长期启用</n-li>
-        <n-li>建议仅在排查问题时临时启用</n-li>
-      </n-ul>
-    </n-space>
-    <template #action>
-      <n-space>
-        <n-button @click="cancelDebugMode">取消</n-button>
-        <n-button type="warning" @click="confirmDebugMode">确定启用</n-button>
+
+    <n-modal v-model:show="showDebugModeConfirm" preset="dialog" title="启用调试模式">
+      <n-space vertical :size="6">
+        <n-text>调试模式会记录更完整请求/响应内容，可能包含敏感信息。</n-text>
+        <n-text depth="3" style="font-size: 12px">· 仅建议在问题排查阶段临时开启</n-text>
+        <n-text depth="3" style="font-size: 12px">· 可能产生大量日志，注意磁盘占用</n-text>
       </n-space>
-    </template>
-  </n-modal>
+      <template #action>
+        <n-space>
+          <n-button @click="cancelDebugMode">取消</n-button>
+          <n-button type="warning" @click="confirmDebugMode">确认启用</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+  </div>
 </template>
 
 <script setup lang="ts">
-import {onMounted, ref, watch} from 'vue'
-import {NAlert, NButton, NCard, NForm, NFormItem, NInput, NInputNumber, NLi, NModal, NSpace, NSwitch, NTag, NText, NUl, useDialog, useMessage,} from 'naive-ui'
+import { onMounted, ref, watch } from 'vue'
+import {
+  NAlert,
+  NButton,
+  NInput,
+  NInputNumber,
+  NModal,
+  NSkeleton,
+  NSpace,
+  NSwitch,
+  NTag,
+  NText,
+  useDialog,
+  useMessage,
+} from 'naive-ui'
 import settingsService from '@/services/settingsService'
 
 const dialog = useDialog()
 const message = useMessage()
 
 interface SettingsData {
+  server_port: number
+  server_read_timeout: number
+  server_write_timeout: number
   circuit_breaker_failure_threshold: number
   circuit_breaker_cooling_duration: number
+  proxy_network_url: string
   proxy_request_timeout: number
-  proxy_max_concurrent: number
   proxy_max_retry: number
+  sniffer_enabled: boolean
+  sniffer_stream_packet_count: number
   log_retention_days: number
   log_debug_enabled: boolean
-  channel_global_sync_enabled: boolean
+  model_test_prompt: string
 }
 
 const isLoading = ref(false)
 const isSaving = ref(false)
+const loadError = ref('')
 const debugModeEnabled = ref(false)
-const originalDebugModeValue = ref(false) // 用于保存原始值
 const showDebugModeConfirm = ref(false)
-const isConfirming = ref(false) // 标志位：是否正在确认中，防止 watch 循环
-const snifferKeywords = ref('') // 嗅探器错误关键词（每行一个）
+const isConfirming = ref(false)
+const snifferKeywords = ref('')
 
 const formData = ref<SettingsData>({
+  server_port: 8080,
+  server_read_timeout: 120,
+  server_write_timeout: 0,
   circuit_breaker_failure_threshold: 3,
   circuit_breaker_cooling_duration: 60,
-  proxy_request_timeout: 60,
-  proxy_max_concurrent: 1000,
+  proxy_network_url: '',
+  proxy_request_timeout: 120,
   proxy_max_retry: 3,
+  sniffer_enabled: true,
+  sniffer_stream_packet_count: 1,
   log_retention_days: 30,
   log_debug_enabled: false,
-  channel_global_sync_enabled: false
+  model_test_prompt: 'Hi',
 })
 
-// 加载系统设置
 const loadSettings = async () => {
   isLoading.value = true
+  loadError.value = ''
   try {
     const settings = await settingsService.getAllSettings()
 
-    // 设置标志位，防止加载时触发 watch
     isConfirming.value = true
 
-    // 更新表单数据
+    if (settings.server_port) formData.value.server_port = parseInt(settings.server_port)
+    if (settings.server_read_timeout) formData.value.server_read_timeout = parseInt(settings.server_read_timeout)
+    if (settings.server_write_timeout !== undefined) formData.value.server_write_timeout = parseInt(settings.server_write_timeout)
     if (settings.circuit_breaker_failure_threshold) {
-      formData.value.circuit_breaker_failure_threshold = parseInt(
-          settings.circuit_breaker_failure_threshold
-      )
+      formData.value.circuit_breaker_failure_threshold = parseInt(settings.circuit_breaker_failure_threshold)
     }
     if (settings.circuit_breaker_cooling_duration) {
-      formData.value.circuit_breaker_cooling_duration = parseInt(
-          settings.circuit_breaker_cooling_duration
-      )
+      formData.value.circuit_breaker_cooling_duration = parseInt(settings.circuit_breaker_cooling_duration)
     }
-    if (settings.proxy_request_timeout) {
-      formData.value.proxy_request_timeout = parseInt(
-          settings.proxy_request_timeout
-      )
+    if (settings.proxy_request_timeout) formData.value.proxy_request_timeout = parseInt(settings.proxy_request_timeout)
+    if (settings.proxy_network_url !== undefined) formData.value.proxy_network_url = settings.proxy_network_url || ''
+    if (settings.proxy_max_retry) formData.value.proxy_max_retry = parseInt(settings.proxy_max_retry)
+    if (settings.sniffer_enabled !== undefined) formData.value.sniffer_enabled = settings.sniffer_enabled === 'true'
+    if (settings.sniffer_stream_packet_count) {
+      formData.value.sniffer_stream_packet_count = Math.max(1, parseInt(settings.sniffer_stream_packet_count))
     }
-    if (settings.proxy_max_concurrent) {
-      formData.value.proxy_max_concurrent = parseInt(
-          settings.proxy_max_concurrent
-      )
-    }
-    if (settings.proxy_max_retry) {
-      formData.value.proxy_max_retry = parseInt(settings.proxy_max_retry)
-    }
-    if (settings.log_retention_days) {
-      formData.value.log_retention_days = parseInt(
-          settings.log_retention_days
-      )
-    }
+    if (settings.log_retention_days) formData.value.log_retention_days = parseInt(settings.log_retention_days)
     if (settings.log_debug_enabled !== undefined) {
-      const debugMode = settings.log_debug_enabled === 'true'
-      debugModeEnabled.value = debugMode
-      originalDebugModeValue.value = debugMode // 保存原始值
+      debugModeEnabled.value = settings.log_debug_enabled === 'true'
+    }
+    if (settings.model_test_prompt !== undefined) {
+      formData.value.model_test_prompt = settings.model_test_prompt || 'Hi'
     }
 
-    if (settings.channel_global_sync_enabled !== undefined) {
-      formData.value.channel_global_sync_enabled = settings.channel_global_sync_enabled === 'true'
-    }
-
-    // 加载嗅探器关键词（从通用设置中获取）
     if (settings.sniffer_plain_text_error_rules) {
       try {
         const keywords = JSON.parse(settings.sniffer_plain_text_error_rules)
-        if (keywords && keywords.length > 0) {
-          snifferKeywords.value = keywords.join('\n')
-        }
-      } catch (error) {
-        console.error('Failed to parse sniffer keywords:', error)
+        snifferKeywords.value = Array.isArray(keywords) ? keywords.join('\n') : ''
+      } catch {
+        snifferKeywords.value = ''
       }
+    } else {
+      snifferKeywords.value = ''
     }
-    // 重置标志位
+
     setTimeout(() => {
       isConfirming.value = false
     }, 0)
-  } catch (error) {
-    console.error('Failed to load settings:', error)
-    message.error('无法加载系统设置，请稍后重试')
-    isConfirming.value = false // 出错时也要重置
+  } catch {
+    loadError.value = '加载系统设置失败'
+    message.error(loadError.value)
+    isConfirming.value = false
   } finally {
     isLoading.value = false
   }
 }
 
-// 监听调试模式切换 - 只在从 false 变为 true 时弹窗确认
 watch(debugModeEnabled, (newValue, oldValue) => {
-  // 如果正在确认中，跳过（防止循环）
-  if (isConfirming.value) {
-    return
-  }
+  if (isConfirming.value) return
 
-  // 只在用户手动打开时弹窗（从 false 变为 true）
   if (newValue && !oldValue) {
-    // 设置确认标志，阻止状态改变
     isConfirming.value = true
     debugModeEnabled.value = false
-    // 显示确认对话框
     showDebugModeConfirm.value = true
-    // 下一个 tick 后重置标志
     setTimeout(() => {
       isConfirming.value = false
     }, 0)
   }
 })
 
-// 确认启用调试模式
 const confirmDebugMode = () => {
-  isConfirming.value = true // 设置标志，防止触发 watch
-  debugModeEnabled.value = true // 确认后真正设置为 true
+  isConfirming.value = true
+  debugModeEnabled.value = true
   showDebugModeConfirm.value = false
-  // 重置标志
   setTimeout(() => {
     isConfirming.value = false
   }, 0)
 }
 
-// 取消调试模式
 const cancelDebugMode = () => {
-  // 保持为 false，不需要额外操作
   showDebugModeConfirm.value = false
 }
 
-// 保存设置
 const handleSave = async () => {
+  if (!formData.value.log_retention_days || formData.value.log_retention_days < 1) {
+    message.error('日志保留天数必须大于 0')
+    return
+  }
+
   isSaving.value = true
   try {
-    // 准备嗅探器关键词
     const keywords = snifferKeywords.value
-        .split('\n')
-        .map(k => k.trim())
-        .filter(k => k.length > 0)
+      .split('\n')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
 
-    // 保存所有设置（包括嗅探器关键词）
     await settingsService.updateSettings({
       settings: {
-        circuit_breaker_failure_threshold:
-            formData.value.circuit_breaker_failure_threshold.toString(),
-        circuit_breaker_cooling_duration:
-            formData.value.circuit_breaker_cooling_duration.toString(),
-        proxy_request_timeout:
-            formData.value.proxy_request_timeout.toString(),
-        proxy_max_concurrent: formData.value.proxy_max_concurrent.toString(),
+        server_port: formData.value.server_port.toString(),
+        server_read_timeout: formData.value.server_read_timeout.toString(),
+        server_write_timeout: formData.value.server_write_timeout.toString(),
+        circuit_breaker_failure_threshold: formData.value.circuit_breaker_failure_threshold.toString(),
+        circuit_breaker_cooling_duration: formData.value.circuit_breaker_cooling_duration.toString(),
+        proxy_network_url: formData.value.proxy_network_url.trim(),
+        proxy_request_timeout: formData.value.proxy_request_timeout.toString(),
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
+        sniffer_enabled: formData.value.sniffer_enabled.toString(),
+        sniffer_stream_packet_count: Math.max(1, formData.value.sniffer_stream_packet_count).toString(),
         log_retention_days: formData.value.log_retention_days.toString(),
         log_debug_enabled: debugModeEnabled.value.toString(),
-        channel_global_sync_enabled: formData.value.channel_global_sync_enabled.toString(),
-        sniffer_plain_text_error_rules: JSON.stringify(keywords), // 嗅探器关键词以JSON格式保存
+        model_test_prompt: formData.value.model_test_prompt.trim(),
+        sniffer_plain_text_error_rules: JSON.stringify(keywords),
       },
     })
 
-    // 保存成功后更新原始值，避免重复弹窗
-    originalDebugModeValue.value = debugModeEnabled.value
-
-    message.success('系统设置已更新，配置已立即生效')
-  } catch (error) {
-    console.error('Failed to save settings:', error)
-    message.error('无法保存系统设置，请稍后重试')
+    message.success('设置已保存')
+  } catch {
+    message.error('保存设置失败')
   } finally {
     isSaving.value = false
   }
 }
 
-// 重置设置
 const handleReset = () => {
   dialog.warning({
     title: '重置确认',
-    content: '确定要重置所有设置为默认值吗？',
-    positiveText: '确定',
+    content: '确定重新加载并恢复当前系统设置吗？',
+    positiveText: '确认',
     negativeText: '取消',
     onPositiveClick: async () => {
       await loadSettings()
-      message.info('设置已重置为默认值')
+      message.info('已恢复当前系统设置')
     },
   })
 }
@@ -501,128 +467,90 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 页面样式 */
 .settings-page {
-  --primary-color: #18a058;
-  --primary-color-hover: #36ad6a;
-  --info-color: #2080f0;
-  --warning-color: #f0a020;
-  --success-color: #18a058;
-  --error-color: #d03050;
-  animation: fadeIn 0.3s ease-in;
+  max-width: 1100px;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 页面头部卡片 */
-.page-header-card {
-  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  border-radius: 12px;
-  padding: 24px;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #333;
-  line-height: 1.4;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.settings-content {
+.settings-footer {
   display: flex;
-  flex-direction: column;
-  gap: 24px;
+  justify-content: flex-end;
+  padding: 4px 0 8px;
 }
 
-.settings-card {
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  background: #ffffff;
+.panel-card__body--flush {
+  padding: 0 18px;
 }
 
-.settings-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  transform: translateY(-2px);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 32px;
   align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--hydra-border);
+}
+
+.setting-row:last-child {
+  border-bottom: none;
+}
+
+.setting-row__info {
+  min-width: 0;
+}
+
+.setting-row__label {
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--hydra-text);
+  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-row__desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--hydra-text-tertiary);
+}
+
+.setting-row__control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.setting-row__control--wide {
   width: 100%;
 }
 
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #18181b;
+/* textarea 这类高控件：上下结构（信息在上，控件在下占满宽度） */
+.setting-row--block {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
 }
 
-.card-icon {
-  width: 20px;
-  height: 20px;
-  color: #6366f1;
+.setting-row--block .setting-row__control {
+  justify-content: stretch;
+  width: 100%;
 }
 
-.card-description {
-  display: block;
-  margin: -8px 0 24px 0;
-  font-size: 13px;
-  color: #71717a;
-  line-height: 1.6;
+.setting-row__control--block {
+  width: 100%;
 }
 
-.settings-form {
-  margin-top: 16px;
-  max-width: 480px;
-}
+@media (max-width: 820px) {
+  .setting-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 
-.form-item-wrapper {
-  margin-bottom: 24px;
+  .setting-row__control {
+    justify-content: stretch;
+    width: 100%;
+  }
 }
-
-:deep(.form-item-wrapper .n-form-item-feedback-wrapper) {
-  min-height: unset;
-}
-
-.field-hint {
-  display: block;
-  margin-top: 6px;
-  font-size: 12px;
-  color: #a1a1aa;
-  line-height: 1.5;
-  text-align: left;
-  padding-left: 140px;
-}
-
-.switch-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.action-bar {
-  display: flex;
-  justify-content: flex-end;
-}
-
 </style>

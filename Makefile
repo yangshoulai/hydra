@@ -41,7 +41,7 @@ dev-frontend: ## 开发模式运行前端
 
 dev-backend: ## 开发模式运行后端
 	@echo "==> Running backend in development mode..."
-	cd backend && go run $(CMD_DIR) -config ../configs/config.example.yaml
+	cd backend && go run $(CMD_DIR) --data-dir ../data
 
 dev: ## 同时运行前后端开发模式
 	@echo "==> Starting development mode (frontend & backend)..."
@@ -49,7 +49,7 @@ dev: ## 同时运行前后端开发模式
 
 run: build ## 编译并运行
 	@echo "==> Running $(APP_NAME)..."
-	$(BUILD_DIR)/$(APP_NAME) -config ./configs/config.example.yaml
+	$(BUILD_DIR)/$(APP_NAME) --data-dir ./data
 
 test: ## 运行测试
 	@echo "==> Running tests..."
@@ -86,11 +86,15 @@ docker-build: ## 构建 Docker 镜像
 
 docker-run: ## 运行 Docker 容器
 	@echo "==> Running Docker container..."
-	docker-compose -f deployments/docker-compose.yml up -d
+	docker run -d --name $(APP_NAME) \
+		-p 8080:8080 \
+		-v $(PWD)/data:/app/data \
+		$(APP_NAME):$(VERSION)
 
 docker-stop: ## 停止 Docker 容器
 	@echo "==> Stopping Docker container..."
-	docker-compose -f deployments/docker-compose.yml down
+	-docker stop $(APP_NAME)
+	-docker rm $(APP_NAME)
 
 logs: ## 查看日志
 	@tail -f data/logs/hydra.log

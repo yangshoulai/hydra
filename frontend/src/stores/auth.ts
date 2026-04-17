@@ -5,7 +5,7 @@
 import {defineStore} from 'pinia'
 import {computed, ref} from 'vue'
 import {authApi} from '../services/authService'
-import type {AdminUser, LoginRequest} from '../types/auth'
+import type {AdminUser} from '../types/auth'
 
 export const useAuthStore = defineStore('auth', () => {
     // State
@@ -23,12 +23,16 @@ export const useAuthStore = defineStore('auth', () => {
     /**
      * 登录
      */
-    async function login(credentials: LoginRequest) {
+    async function login(credentials: { username: string; password: string; rememberMe?: boolean }) {
         loading.value = true
         error.value = null
 
         try {
-            const response = await authApi.login(credentials)
+            const response = await authApi.login({
+                username: credentials.username,
+                password: credentials.password,
+                remember_me: !!credentials.rememberMe,
+            })
 
             // 保存 access_token 和 refresh_token
             token.value = response.access_token
@@ -39,8 +43,9 @@ export const useAuthStore = defineStore('auth', () => {
             user.value = response.user
 
             return {success: true}
-        } catch (err: any) {
-            error.value = err.response?.data?.error || '登录失败'
+        } catch (err) {
+            const axiosErr = err as { response?: { data?: { error?: string } } }
+            error.value = axiosErr.response?.data?.error || '登录失败'
             return {success: false, error: error.value}
         } finally {
             loading.value = false

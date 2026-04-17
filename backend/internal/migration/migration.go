@@ -2,105 +2,124 @@ package migration
 
 import (
 	"fmt"
+	"time"
 
-	"github.com/go-gormigrate/gormigrate/v2"
+	"github.com/yangshoulai/hydra/internal/models"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-// RunMigrations 执行所有数据库迁移
+// RunMigrations 执行数据库初始化（全新库场景）
+//
+// 当前项目按“从头开始”策略运行，不再兼容历史字段/表结构迁移逻辑。
 func RunMigrations(db *gorm.DB) error {
-	m := gormigrate.New(db, gormigrate.DefaultOptions, []*gormigrate.Migration{
-		// v1.0.0 初始化 Schema（合并所有迁移）
-		v1_0_0_Init(),
-		// v1.2.0 添加端点类型
-		{
-			ID: "v1.2.0_add_endpoint_types",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_2_0_AddEndpointTypes(tx)
-			},
-		},
-		// v1.3.0 移除软删除功能
-		{
-			ID: "v1.3.0_remove_soft_delete",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_3_0_RemoveSoftDelete(tx)
-			},
-		},
-		// v1.4.0 添加请求头和响应头字段
-		{
-			ID: "v1.4.0_add_request_response_headers",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_4_0_AddRequestResponseHeaders(tx)
-			},
-		},
-		// v1.5.0 添加总响应时间字段
-		{
-			ID: "v1.5.0_add_total_response_time",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_5_0_AddTotalResponseTime(tx)
-			},
-		},
-		// v1.6.0 添加请求日志主表和明细表
-		{
-			ID: "v1.6.0_add_request_log_main_detail",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_6_0_AddRequestLogMainDetail(tx)
-			},
-		},
-		// v1.7.0 删除旧的 RequestLog 表
-		{
-			ID: "v1.7.0_drop_request_log",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_7_0_DropRequestLog(tx)
-			},
-		},
-		// v1.8.0 添加渠道同步字段
-		{
-			ID: "v1.8.0_add_channel_sync_fields",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_8_0_AddChannelSyncFields(tx)
-			},
-		},
-		// v1.9.0 添加 token 统计字段
-		{
-			ID: "v1.9.0_add_token_usage",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_9_0_AddTokenUsage(tx)
-			},
-		},
-		// v1.10.0 添加密钥分组字段
-		{
-			ID: "v1.10.0_add_key_groups",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_10_0_AddKeyGroups(tx)
-			},
-		},
-		// v1.11.0 添加模型配置冷却字段
-		{
-			ID: "v1.11.0_add_model_config_cooling",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_11_0_AddModelConfigCooling(tx)
-			},
-		},
-		// v1.12.0 清理废弃系统设置
-		{
-			ID: "v1.12.0_remove_unused_settings",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_12_0_RemoveUnusedSettings(tx)
-			},
-		},
-		// v1.13.0 变更 openai 端点类型
-		{
-			ID: "v1.13.0_change_openai_endpoint_type",
-			Migrate: func(tx *gorm.DB) error {
-				return V1_13_0_ChangeOpenaiEndpointType(tx)
-			},
-		},
-	})
+	if err := renameLegacyWeightColumns(db); err != nil {
+		return fmt.Errorf("重命名历史权重字段失败: %w", err)
+	}
 
-	if err := m.Migrate(); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
+	if err := db.AutoMigrate(
+		&models.Provider{},
+		&models.AdminUser{},
+		&models.AccessToken{},
+		&models.SystemSetting{},
+		&models.Channel{},
+		&models.ChannelKey{},
+		&models.ChannelModelConfig{},
+		&models.Model{},
+		&models.RequestLog{},
+		&models.RequestLogDetail{},
+		&models.RequestLogAttempt{},
+	); err != nil {
+		return fmt.Errorf("初始化数据库表结构失败: %w", err)
+	}
+
+	if err := seedDefaultAdmin(db); err != nil {
+		return fmt.Errorf("初始化默认管理员失败: %w", err)
+	}
+
+	if err := seedDefaultProviders(db); err != nil {
+		return fmt.Errorf("初始化默认厂商失败: %w", err)
 	}
 
 	return nil
+}
+
+func renameLegacyWeightColumns(db *gorm.DB) error {
+	type columnRename struct {
+		table     string
+		oldColumn string
+		newColumn string
+	}
+
+	renames := []columnRename{
+		{table: "channels", oldColumn: "priority", newColumn: "weight"},
+		{table: "channel_model_configs", oldColumn: "priority", newColumn: "weight"},
+	}
+
+	for _, item := range renames {
+		if db.Migrator().HasColumn(item.table, item.newColumn) {
+			continue
+		}
+		if !db.Migrator().HasColumn(item.table, item.oldColumn) {
+			continue
+		}
+		if err := db.Migrator().RenameColumn(item.table, item.oldColumn, item.newColumn); err != nil {
+			return fmt.Errorf("%s.%s -> %s: %w", item.table, item.oldColumn, item.newColumn, err)
+		}
+	}
+
+	return nil
+}
+
+func seedDefaultAdmin(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&models.AdminUser{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	return db.Create(&models.AdminUser{
+		Username:     "hydra",
+		PasswordHash: string(hash),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}).Error
+}
+
+func seedDefaultProviders(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&models.Provider{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	now := time.Now()
+	providers := []models.Provider{
+		{ID: "openai", Name: "OpenAI", Icon: "https://openai.com/favicon.ico", Remark: "GPT 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "anthropic", Name: "Anthropic", Icon: "https://www.anthropic.com/favicon.ico", Remark: "Claude 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "google", Name: "Google", Icon: "https://ai.google.dev/favicon.ico", Remark: "Gemini 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "xai", Name: "xAI", Icon: "https://x.ai/favicon.ico", Remark: "Grok 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "meta", Name: "Meta", Icon: "https://ai.meta.com/favicon.ico", Remark: "Llama 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "mistral", Name: "Mistral AI", Icon: "https://mistral.ai/favicon.ico", Remark: "Mistral 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "cohere", Name: "Cohere", Icon: "https://cohere.com/favicon.ico", Remark: "Command 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "deepseek", Name: "DeepSeek", Icon: "https://www.deepseek.com/favicon.ico", Remark: "DeepSeek 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "alibaba", Name: "Alibaba Cloud", Icon: "https://www.aliyun.com/favicon.ico", Remark: "通义千问系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "baidu", Name: "Baidu", Icon: "https://www.baidu.com/favicon.ico", Remark: "文心大模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "zhipu", Name: "Zhipu AI", Icon: "https://www.zhipuai.cn/favicon.ico", Remark: "GLM 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "moonshot", Name: "Moonshot AI", Icon: "https://moonshot.cn/favicon.ico", Remark: "Kimi 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "tencent", Name: "Tencent Cloud", Icon: "https://cloud.tencent.com/favicon.ico", Remark: "混元系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "bytedance", Name: "ByteDance", Icon: "https://www.volcengine.com/favicon.ico", Remark: "豆包大模型", CreatedAt: now, UpdatedAt: now},
+	}
+
+	return db.Create(&providers).Error
 }

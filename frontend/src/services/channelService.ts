@@ -5,19 +5,20 @@
 import { apiClient } from './api'
 import type {
   Channel,
-  Key,
+  ChannelKey,
   ChannelModelConfig,
   CreateChannelRequest,
   UpdateChannelRequest,
   ChannelListResponse,
   ChannelListParams,
-  CreateKeyRequest,
-  ResetKeyRequest,
+  CreateChannelKeyRequest,
+  ResetChannelKeyRequest,
   ChannelHealthCheckResult,
-  SingleKeyHealthResult,
+  SingleChannelKeyHealthResult,
   SyncResult,
   ApplySyncRequest,
-  ApplySyncResponse
+  ApplySyncResponse,
+  TestModelResponse
 } from '../types/channel'
 
 export const channelApi = {
@@ -64,65 +65,65 @@ export const channelApi = {
   },
 
   /**
-   * 添加Key
+   * 添加渠道密钥
    */
-  async addKey(data: CreateKeyRequest): Promise<Key> {
-    const response = await apiClient.post<Key>('/admin/api/keys', data)
+  async addChannelKey(data: CreateChannelKeyRequest): Promise<ChannelKey> {
+    const response = await apiClient.post<ChannelKey>('/admin/api/channel-keys', data)
     return response.data
   },
 
   /**
-   * 批量添加Keys
+   * 批量添加渠道密钥
    */
-  async batchAddKeys(channelId: number, keyValues: string[], remark?: string, keyGroup?: string): Promise<any> {
-    const response = await apiClient.post('/admin/api/keys/batch', {
+  async batchAddChannelKeys(channelId: number, channelKeyValues: string[], remark?: string, channelKeyGroup?: string): Promise<any> {
+    const response = await apiClient.post('/admin/api/channel-keys/batch', {
       channel_id: channelId,
-      key_values: keyValues,
+      channel_key_values: channelKeyValues,
       remark: remark || '',
-      key_group: keyGroup || 'Default'
+      channel_key_group: channelKeyGroup || 'Default'
     })
     return response.data
   },
 
   /**
-   * 删除Key
+   * 删除渠道密钥
    */
-  async deleteKey(id: number): Promise<void> {
-    await apiClient.delete(`/admin/api/keys/${id}`)
+  async deleteChannelKey(id: number): Promise<void> {
+    await apiClient.delete(`/admin/api/channel-keys/${id}`)
   },
 
   /**
-   * 重置Key状态
+   * 重置渠道密钥状态
    */
-  async resetKey(id: number, data?: ResetKeyRequest): Promise<Key> {
-    const response = await apiClient.patch<Key>(`/admin/api/keys/${id}`, data || {})
+  async resetChannelKey(id: number, data?: ResetChannelKeyRequest): Promise<ChannelKey> {
+    const response = await apiClient.patch<ChannelKey>(`/admin/api/channel-keys/${id}`, data || {})
     return response.data
   },
 
   /**
-   * 重置Key状态（启用/禁用）
+   * 重置渠道密钥状态（启用/停用）
    */
-  async resetKeyStatus(id: number, status: 'active' | 'cooling' | 'disabled'): Promise<Key> {
-    const response = await apiClient.patch<Key>(`/admin/api/keys/${id}`, { status })
+  async resetChannelKeyStatus(id: number, status: 'active' | 'inactive'): Promise<ChannelKey> {
+    const response = await apiClient.patch<ChannelKey>(`/admin/api/channel-keys/${id}`, { status })
     return response.data
   },
 
   /**
-   * 测试渠道所有Key的健康状态
+   * 测试渠道所有渠道密钥的健康状态
    */
-  async testKeys(channelId: number): Promise<ChannelHealthCheckResult> {
+  async testChannelKeys(channelId: number): Promise<ChannelHealthCheckResult> {
     const response = await apiClient.post<ChannelHealthCheckResult>(
-      `/admin/api/channels/${channelId}/test-keys`
+      `/admin/api/channels/${channelId}/test-channel-keys`
     )
     return response.data
   },
 
   /**
-   * 测试单个Key的健康状态
+   * 测试单个渠道密钥的健康状态
    */
-  async testSingleKey(keyId: number): Promise<SingleKeyHealthResult> {
-    const response = await apiClient.post<SingleKeyHealthResult>(
-      `/admin/api/keys/${keyId}/test`
+  async testSingleChannelKey(channelKeyId: number): Promise<SingleChannelKeyHealthResult> {
+    const response = await apiClient.post<SingleChannelKeyHealthResult>(
+      `/admin/api/channel-keys/${channelKeyId}/test`
     )
     return response.data
   },
@@ -142,19 +143,23 @@ export const channelApi = {
    */
   async createModelConfig(
     channelId: number,
-    unifiedModel: string,
-    upstreamModel: string,
+    model: string,
+    channelModel: string,
+    weight?: number,
     endpointTypes?: string[],
-    keyGroups?: string[]
+    keyGroups?: string[],
+    testPrompt?: string,
   ): Promise<ChannelModelConfig> {
     const response = await apiClient.post<ChannelModelConfig>(
       '/admin/api/channel-models',
       {
         channel_id: channelId,
-        unified_model: unifiedModel,
-        upstream_model: upstreamModel,
-        endpoint_types: endpointTypes || ['openai-chat'],
-        key_groups: keyGroups || ['Default']
+        model: model,
+        channel_model: channelModel,
+        weight: weight,
+        endpoint_types: endpointTypes || ['OpenAIChatCompletions'],
+        key_groups: keyGroups || ['Default'],
+        test_prompt: testPrompt || '',
       }
     )
     return response.data
@@ -197,18 +202,24 @@ export const channelApi = {
    */
   async testModel(
     channelId: number,
-    upstreamModel: string,
-    unifiedModel: string,
+    channelModel: string,
+    model: string,
     endpointType: string,
-    keyGroups?: string[]
-  ): Promise<any> {
-    const response = await apiClient.post(
+    keyGroups?: string[],
+    options?: {
+      testPrompt?: string
+      imageData?: string
+    }
+  ): Promise<TestModelResponse> {
+    const response = await apiClient.post<TestModelResponse>(
       `/admin/api/channels/${channelId}/test-model`,
       {
-        upstream_model: upstreamModel,
-        unified_model: unifiedModel,
+        channel_model: channelModel,
+        model: model,
         endpoint_type: endpointType,
-        key_groups: keyGroups || []
+        key_groups: keyGroups || [],
+        test_prompt: options?.testPrompt || '',
+        image_data: options?.imageData || '',
       }
     )
     return response.data

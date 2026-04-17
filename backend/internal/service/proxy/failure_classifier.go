@@ -86,9 +86,6 @@ func (fc *FailureClassifier) ClassifyHTTPError(statusCode int) (FailureType, Fai
 // ClassifyNetworkError 分类网络错误
 // timeout, connection refused, DNS 等错误归类为软故障
 func (fc *FailureClassifier) ClassifyNetworkError(err error) (FailureType, FailureScope, string) {
-	if err == nil {
-		return FailureTypeNone, FailureScopeNone, "正常"
-	}
 	// 网络类错误归因到模型配置，避免把 Key 熔断掉
 	return FailureTypeSoft, FailureScopeModelConfig, "网络异常：" + err.Error()
 }
@@ -102,9 +99,5 @@ func (fc *FailureClassifier) ClassifyResponseError(resp *http.Response, networkE
 	}
 
 	// 处理 HTTP 错误
-	if resp != nil {
-		return fc.ClassifyHTTPError(resp.StatusCode)
-	}
-
-	return FailureTypeNone, FailureScopeNone, "正常"
+	return fc.ClassifyHTTPError(resp.StatusCode)
 }

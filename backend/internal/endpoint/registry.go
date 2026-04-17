@@ -63,14 +63,6 @@ func (r *Registry) GetAllInfo() []EndpointInfo {
 	return result
 }
 
-// Exists 检查端点类型是否存在
-func (r *Registry) Exists(endpointType string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	_, ok := r.endpoints[endpointType]
-	return ok
-}
-
 // GetGlobalRegistry 获取全局注册中心
 func GetGlobalRegistry() *Registry {
 	return globalRegistry

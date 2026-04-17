@@ -4,6 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"time"
+
+	"github.com/yangshoulai/hydra/internal/endpoint"
 )
 
 // EndpointTypes 端点类型列表
@@ -13,9 +15,9 @@ type EndpointTypes []string
 type KeyGroups []string
 
 // Scan 实现 sql.Scanner 接口
-func (e *EndpointTypes) Scan(value interface{}) error {
+func (e *EndpointTypes) Scan(value any) error {
 	if value == nil {
-		*e = []string{"openai-chat"}
+		*e = []string{endpoint.TypeOpenAIChatCompletions}
 		return nil
 	}
 
@@ -26,7 +28,7 @@ func (e *EndpointTypes) Scan(value interface{}) error {
 	case string:
 		bytes = []byte(v)
 	default:
-		*e = []string{"openai-chat"}
+		*e = []string{endpoint.TypeOpenAIChatCompletions}
 		return nil
 	}
 
@@ -36,13 +38,13 @@ func (e *EndpointTypes) Scan(value interface{}) error {
 // Value 实现 driver.Valuer 接口
 func (e EndpointTypes) Value() (driver.Value, error) {
 	if len(e) == 0 {
-		e = []string{"openai-chat"}
+		e = []string{endpoint.TypeOpenAIChatCompletions}
 	}
 	return json.Marshal(e)
 }
 
 // Scan 实现 sql.Scanner 接口
-func (k *KeyGroups) Scan(value interface{}) error {
+func (k *KeyGroups) Scan(value any) error {
 	if value == nil {
 		*k = []string{"Default"}
 		return nil
@@ -75,13 +77,14 @@ type ChannelModelConfig struct {
 	ID            uint          `gorm:"primarykey" json:"id"`
 	CreatedAt     time.Time     `json:"created_at"`
 	UpdatedAt     time.Time     `json:"updated_at"`
-	ChannelID     uint          `gorm:"not null;uniqueIndex:idx_channel_upstream" json:"channel_id"`
-	UnifiedModel  string        `gorm:"type:varchar(100);not null;index:idx_unified_model" json:"unified_model"`
-	UpstreamModel string        `gorm:"type:varchar(100);not null;uniqueIndex:idx_channel_upstream" json:"upstream_model"`
-	Status        string        `gorm:"type:varchar(20);not null;default:'active'" json:"status"` // active, cooling, disabled, non_exist
-	CoolingAt     *time.Time    `gorm:"index" json:"cooling_at"`
-	EndpointTypes EndpointTypes `gorm:"type:text;default:'[\"openai\"]'" json:"endpoint_types"`
+	ChannelID     uint          `gorm:"not null;uniqueIndex:idx_channel_model_configs_channel_model" json:"channel_id"`
+	Model         string        `gorm:"type:varchar(100);not null;index:idx_channel_model_configs_model" json:"model"`
+	ChannelModel  string        `gorm:"type:varchar(100);not null;uniqueIndex:idx_channel_model_configs_channel_model" json:"channel_model"`
+	Weight        int           `gorm:"not null;default:100;index:idx_channel_model_configs_weight" json:"weight"` // 越大权重越高
+	Status        string        `gorm:"type:varchar(20);not null;default:'active'" json:"status"`                  // active, inactive
+	EndpointTypes EndpointTypes `gorm:"type:text;default:'[\"OpenAIChatCompletions\"]'" json:"endpoint_types"`
 	KeyGroups     KeyGroups     `gorm:"type:text;default:'[\"Default\"]'" json:"key_groups"`
+	TestPrompt    string        `gorm:"type:text" json:"test_prompt"`
 	Remark        string        `gorm:"type:varchar(200)" json:"remark"`
 
 	// Token 统计

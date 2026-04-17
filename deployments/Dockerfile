@@ -33,30 +33,33 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o hydra ./cmd/hydra
 
 # Stage 3: Production Image
-FROM alpine:latest
+FROM alpine:3.20
 
 WORKDIR /app
 
 # Install runtime dependencies and timezone data
-RUN apk --no-cache add ca-certificates sqlite-libs tzdata && \
+RUN apk --no-cache add ca-certificates sqlite-libs tzdata wget && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
 
 # Set timezone environment variable
 ENV TZ=Asia/Shanghai
 
-# Copy binary and static files
-COPY --from=backend-builder /app/hydra ./
-COPY --from=backend-builder /app/static ./static
-COPY configs/config.example.yaml ./configs/config.yaml
+# Create non-root user (uid 1000 matches common host users for bind-mount friendliness)
+RUN adduser -D -u 1000 hydra
 
-# Create logs and data directories
-RUN mkdir -p /app/data
+# Copy binary and static files with correct ownership
+COPY --from=backend-builder --chown=hydra:hydra /app/hydra ./
+COPY --from=backend-builder --chown=hydra:hydra /app/static ./static
 
+# Data directory; ensureDataDir 会在启动时自行创建，这里仅声明挂载点
 VOLUME /app/data
 
-# Expose port
+USER hydra
+
 EXPOSE 8080
 
-# Run
-CMD ["./hydra", "-config", "./configs/config.yaml"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:8080/health || exit 1
+
+CMD ["./hydra", "--data-dir", "/app/data"]

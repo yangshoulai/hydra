@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
@@ -62,7 +63,7 @@ func (h *ModelsHandler) Handle(c *gin.Context) {
 // HandleV1Beta 处理 GET /v1beta/models 请求
 // 返回系统中所有支持 Gemini 端点的统一模型名列表
 func (h *ModelsHandler) HandleV1Beta(c *gin.Context) {
-	h.handleModelsByEndpointType(c, "gemini")
+	h.handleModelsByEndpointType(c, endpoint.TypeGemini)
 }
 
 func (h *ModelsHandler) handleModelsByEndpointType(c *gin.Context, endpointType string) {
@@ -80,7 +81,7 @@ func (h *ModelsHandler) handleModelsByEndpointType(c *gin.Context, endpointType 
 		modelList, err = h.modelRepo.ListWithActiveChannelConfigsByEndpointType(ctx, endpointType)
 	}
 	if err != nil {
-		h.logger.Error("查询启用令牌列表异常",
+		h.logger.Error("查询可用模型列表异常",
 			slog.String("trace_id", traceID),
 			slog.String("error", err.Error()),
 		)
@@ -94,7 +95,9 @@ func (h *ModelsHandler) handleModelsByEndpointType(c *gin.Context, endpointType 
 		return
 	}
 
-	if endpointType == "gemini" {
+	modelList = filterModelsByTokenScope(c, modelList)
+
+	if endpointType == endpoint.TypeGemini {
 		c.JSON(http.StatusOK, buildGeminiModelsResponse(modelList))
 		return
 	}
@@ -127,6 +130,31 @@ func (h *ModelsHandler) handleModelsByEndpointType(c *gin.Context, endpointType 
 	)
 
 	c.JSON(http.StatusOK, response)
+}
+
+func filterModelsByTokenScope(c *gin.Context, modelList []models.Model) []models.Model {
+	value, exists := c.Get("access_token_allowed_models")
+	if !exists {
+		return modelList
+	}
+
+	allowedModels, ok := value.([]string)
+	if !ok || len(allowedModels) == 0 {
+		return modelList
+	}
+
+	allowedSet := make(map[string]struct{}, len(allowedModels))
+	for _, model := range allowedModels {
+		allowedSet[model] = struct{}{}
+	}
+
+	filtered := make([]models.Model, 0, len(modelList))
+	for _, model := range modelList {
+		if _, ok := allowedSet[model.Name]; ok {
+			filtered = append(filtered, model)
+		}
+	}
+	return filtered
 }
 
 func buildGeminiModelsResponse(modelList []models.Model) GeminiModelsResponse {

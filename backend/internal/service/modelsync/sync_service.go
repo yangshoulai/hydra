@@ -13,7 +13,6 @@ import (
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
-	"github.com/yangshoulai/hydra/internal/service/circuit"
 )
 
 // SyncService 模型同步服务
@@ -21,8 +20,7 @@ type SyncService struct {
 	logger          *slog.Logger
 	channelRepo     *repository.ChannelRepository
 	modelConfigRepo *repository.ChannelModelConfigRepository
-	keyRepo         *repository.KeyRepository
-	circuitManager  *circuit.Manager
+	channelKeyRepo  *repository.ChannelKeyRepository
 	diffCalculator  *DiffCalculator
 	httpClient      *http.Client
 }
@@ -32,16 +30,14 @@ func NewSyncService(
 	logger *slog.Logger,
 	channelRepo *repository.ChannelRepository,
 	modelConfigRepo *repository.ChannelModelConfigRepository,
-	keyRepo *repository.KeyRepository,
-	circuitManager *circuit.Manager,
+	channelKeyRepo *repository.ChannelKeyRepository,
 ) *SyncService {
 	return &SyncService{
 		logger:          logger,
 		channelRepo:     channelRepo,
 		modelConfigRepo: modelConfigRepo,
-		keyRepo:         keyRepo,
-		circuitManager:  circuitManager,
-		diffCalculator:  NewDiffCalculator(logger),
+		channelKeyRepo:  channelKeyRepo,
+		diffCalculator:  NewDiffCalculator(),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -82,7 +78,7 @@ func (s *SyncService) SyncChannelModels(ctx context.Context, channel *models.Cha
 	if err != nil {
 		s.logger.Error("查询渠道模型列表异常",
 			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.String("channel_id", channel.Name),
+			slog.String("channel_name", channel.Name),
 			slog.String("error", err.Error()),
 		)
 		return nil, fmt.Errorf("failed to fetch upstream models: %w", err)
@@ -92,7 +88,7 @@ func (s *SyncService) SyncChannelModels(ctx context.Context, channel *models.Cha
 	if err != nil {
 		s.logger.Error("查询本地渠道模型配置异常",
 			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.String("channel_id", channel.Name),
+			slog.String("channel_name", channel.Name),
 			slog.String("error", err.Error()),
 		)
 		return nil, fmt.Errorf("failed to fetch local configs: %w", err)
@@ -113,7 +109,7 @@ func (s *SyncService) SyncChannelModels(ctx context.Context, channel *models.Cha
 
 	s.logger.Debug("渠道模型同步完成",
 		slog.Uint64("channel_id", uint64(channel.ID)),
-		slog.String("channel_id", channel.Name),
+		slog.String("channel_name", channel.Name),
 		slog.Int("upstream_count", diff.TotalUpstreamModels),
 		slog.Int("local_count", diff.TotalLocalModels),
 		slog.Int("added", diff.AddedCount),
@@ -129,30 +125,30 @@ func (s *SyncService) fetchUpstreamModels(ctx context.Context, channel *models.C
 	modelGroups := make(map[string][]string)
 	modelSet := make(map[string]struct{})
 
-	keys, err := s.keyRepo.FindNonDeadByChannelID(ctx, channel.ID)
+	keys, err := s.channelKeyRepo.FindActiveByChannelID(ctx, channel.ID)
 	if err != nil {
 		s.logger.Warn("查询渠道可用密钥异常",
 			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.String("channel_ nane", channel.Name),
+			slog.String("channel_name", channel.Name),
 			slog.String("error", err.Error()),
 		)
 	}
 
 	groupKeys := make(map[string]string)
 	for _, key := range keys {
-		group := strings.TrimSpace(key.KeyGroup)
+		group := strings.TrimSpace(key.ChannelKeyGroup)
 		if group == "" {
 			group = "Default"
 		}
 		if _, exists := groupKeys[group]; !exists {
-			groupKeys[group] = key.KeyValue
+			groupKeys[group] = key.ChannelKeyValue
 		}
 	}
 
 	if len(groupKeys) == 0 {
 		s.logger.Debug("渠道没有可用密钥，查询将以无认证的方式进行",
 			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.String("channel_ nane", channel.Name),
+			slog.String("channel_name", channel.Name),
 		)
 		groupKeys["Default"] = ""
 	}

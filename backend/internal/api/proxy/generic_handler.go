@@ -3,9 +3,9 @@ package proxy
 import (
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/service/proxy"
 )
@@ -14,43 +14,29 @@ import (
 type GenericHandler struct {
 	logger       *slog.Logger
 	proxyService *proxy.ProxyService
-	endpointPath string
-	endpointName string
+	endpoint     endpoint.Endpoint
 }
 
 // NewGenericHandler 创建通用端点处理器
-func NewGenericHandler(logger *slog.Logger, proxyService *proxy.ProxyService, endpointPath string, endpointName string) *GenericHandler {
+func NewGenericHandler(logger *slog.Logger, proxyService *proxy.ProxyService, ep endpoint.Endpoint) *GenericHandler {
 	return &GenericHandler{
 		logger:       logger,
 		proxyService: proxyService,
-		endpointPath: endpointPath,
-		endpointName: endpointName,
+		endpoint:     ep,
 	}
 }
 
 // Handle 处理请求
 func (h *GenericHandler) Handle(c *gin.Context) {
-	startTime := time.Now()
 	traceID := middleware.GetTraceID(c)
 
-	h.logger.Info("收到请求",
-		slog.String("trace_id", traceID),
-		slog.String("endpoint", h.endpointName),
-		slog.String("method", c.Request.Method),
-		slog.String("path", c.Request.URL.Path),
-		slog.String("client_ip", c.ClientIP()),
-	)
-
 	// 调用代理服务处理请求
-	err := h.proxyService.ProxyRequest(c, h.endpointPath)
-
-	duration := time.Since(startTime)
+	err := h.proxyService.ProxyRequest(c, h.endpoint)
 
 	if err != nil {
-		h.logger.Error("处理失败",
+		h.logger.Debug("代理处理返回错误",
 			slog.String("trace_id", traceID),
-			slog.String("endpoint", h.endpointName),
-			slog.Duration("duration", duration),
+			slog.String("endpoint", h.endpoint.GetName()),
 			slog.String("error", err.Error()),
 		)
 

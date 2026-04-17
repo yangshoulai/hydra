@@ -1,124 +1,109 @@
 package models
 
-import (
-	"time"
+import "time"
 
-	"gorm.io/gorm"
-)
+// RequestLog 请求日志主表
+//
+// 每次代理请求写一行，无论是否开启调试模式。记录请求的核心元信息与最终结果。
+// 详细的请求/响应 body 放在 RequestLogDetail，重试轨迹放在 RequestLogAttempt，
+// 这两张表只有在调试模式开启时才会写入。
+type RequestLog struct {
+	ID              uint      `gorm:"primarykey" json:"id"`
+	CreatedAt       time.Time `gorm:"index;index:idx_logs_channel_time,priority:2;index:idx_logs_model_time,priority:2;index:idx_logs_token_time,priority:2" json:"created_at"`
+	TraceID         string    `gorm:"type:varchar(64);not null;uniqueIndex" json:"trace_id"`
+	ClientIP        string    `gorm:"type:varchar(64)" json:"client_ip"`
+	AccessTokenID   uint      `gorm:"index;index:idx_logs_token_time,priority:1" json:"access_token_id"`
+	AccessTokenName string    `gorm:"type:varchar(100)" json:"access_token_name"`
+	Method          string    `gorm:"type:varchar(10)" json:"method"`
+	Path            string    `gorm:"type:varchar(500)" json:"path"`
+	EndpointType    string    `gorm:"type:varchar(50);index" json:"endpoint_type"`
+	Model           string    `gorm:"type:varchar(100);index;index:idx_logs_model_time,priority:1" json:"model"`
+	IsStream        bool      `json:"is_stream"`
+	StatusCode      int       `gorm:"index" json:"status_code"`
+	Success         bool      `gorm:"index" json:"success"`
+	DurationMS      int64     `json:"duration_ms"`
+	RouteAttempts   int       `json:"route_attempts"`
+	RetryCount      int       `json:"retry_count"`
 
-// RequestLogMain 请求日志主表：记录客户端请求的整体信息
-type RequestLogMain struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	FinalChannelID     uint   `gorm:"index;index:idx_logs_channel_time,priority:1" json:"final_channel_id"`
+	FinalChannelName   string `gorm:"type:varchar(100)" json:"final_channel_name"`
+	FinalKeyID         uint   `json:"final_key_id"`
+	FinalModelConfigID uint   `json:"final_model_config_id"`
+	FinalChannelModel  string `gorm:"type:varchar(100)" json:"final_channel_model"`
 
-	// 追踪标识
-	TraceID string `gorm:"type:varchar(36);not null;uniqueIndex;index" json:"trace_id"`
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
 
-	// 请求基本信息
-	EndpointType   string `gorm:"type:varchar(50);index" json:"endpoint_type"` // chat, completions, embeddings, etc.
-	RequestPath    string `gorm:"type:varchar(500);not null;index" json:"request_path"`
-	RequestMethod  string `gorm:"type:varchar(10);not null" json:"request_method"`
-	RequestedModel string `gorm:"type:varchar(100);index" json:"requested_model"`
-
-	// 客户端信息
-	AccessToken string `gorm:"type:varchar(64);index" json:"access_token"`
-	ClientIP    string `gorm:"type:varchar(50)" json:"client_ip"`
-	UserAgent   string `gorm:"type:varchar(500)" json:"user_agent"`
-
-	// 时间信息
-	StartTime time.Time `gorm:"not null;index" json:"start_time"`
-	EndTime   time.Time `gorm:"not null" json:"end_time"`
-	Duration  int       `gorm:"not null" json:"duration"` // 总耗时（毫秒）
-
-	// 最终结果
-	IsSuccess  bool `gorm:"not null;index" json:"is_success"`
-	StatusCode int  `gorm:"not null;index" json:"status_code"`
-	RetryCount int  `gorm:"not null;default:0" json:"retry_count"`
-	IsStream   bool `gorm:"not null;default:false;index" json:"is_stream"`
-
-	// Token 统计信息
-	PromptTokens     int64 `gorm:"not null;default:0" json:"prompt_tokens"`
-	CompletionTokens int64 `gorm:"not null;default:0" json:"completion_tokens"`
-
-	// 最后成功/失败的渠道信息
-	LastChannelID   *uint  `gorm:"index" json:"last_channel_id,omitempty"`
-	LastChannelName string `gorm:"type:varchar(100)" json:"last_channel_name,omitempty"`
-	LastModel       string `gorm:"type:varchar(100)" json:"last_model,omitempty"`
-
-	// 错误信息（记录在代理开始前或整体失败的错误）
-	ErrorMessage string `gorm:"type:text" json:"error_message,omitempty"`
-
-	// 关联明细记录
-	Details []RequestLogDetail `gorm:"foreignKey:MainLogID" json:"details"`
-}
-
-// AfterFind GORM 钩子：查询后自动填充本地时间字段
-func (rlm *RequestLogMain) AfterFind(tx *gorm.DB) error {
-	return nil
+	FailureType  string `gorm:"type:varchar(30)" json:"failure_type"`
+	FailureScope string `gorm:"type:varchar(30)" json:"failure_scope"`
+	FailureStage string `gorm:"type:varchar(50)" json:"failure_stage"`
+	ErrorMessage string `gorm:"type:varchar(500)" json:"error_message"`
 }
 
 // TableName 指定表名
-func (RequestLogMain) TableName() string {
-	return "request_logs_main"
+func (RequestLog) TableName() string {
+	return "request_logs"
 }
 
-// RequestLogDetail 请求日志明细表：记录每次重试的详细信息
+// RequestLogDetail 请求日志 1:1 详情表
+//
+// 仅在调试模式开启时写入。保存客户端请求头/体、最终响应头/体。
+// 敏感头（Authorization / X-Api-Key 等）在入库前已脱敏为 "***"。
 type RequestLogDetail struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
+	TraceID   string    `gorm:"type:varchar(64);primaryKey" json:"trace_id"`
+	CreatedAt time.Time `gorm:"index" json:"created_at"`
 
-	// 关联主表
-	MainLogID uint `gorm:"not null;index:idx_main_log_retry" json:"main_log_id"`
+	RequestHeadersJSON string `gorm:"type:text" json:"request_headers_json"`
+	RequestBody        string `gorm:"type:text" json:"request_body"`
+	RequestBodySize    int64  `json:"request_body_size"`
 
-	// 渠道和模型信息
-	ChannelID   *uint  `gorm:"index" json:"channel_id,omitempty"`
-	ChannelName string `gorm:"type:varchar(100);index" json:"channel_name"`
-	Model       string `gorm:"type:varchar(100)" json:"model"`
-
-	// 密钥信息
-	KeyID *uint `json:"key_id,omitempty"`
-
-	// 时间信息
-	StartTime time.Time `gorm:"not null" json:"start_time"`
-	EndTime   time.Time `gorm:"not null" json:"end_time"`
-	Duration  int       `gorm:"not null" json:"duration"` // 本次尝试耗时（毫秒）
-
-	// 请求和响应信息
-	RequestBodySize  int `gorm:"default:0" json:"request_body_size"`
-	ResponseBodySize int `gorm:"default:0" json:"response_body_size"`
-
-	// 状态信息
-	StatusCode int    `gorm:"not null" json:"status_code"`
-	IsSuccess  bool   `gorm:"not null" json:"is_success"`
-	Status     string `gorm:"type:varchar(50)" json:"status"`                       // success, failed, timeout, etc.
-	RetryIndex int    `gorm:"not null;index:idx_main_log_retry" json:"retry_index"` // 第几次重试（0表示首次尝试）
-
-	// Token 统计信息
-	PromptTokens     int64 `gorm:"not null;default:0" json:"prompt_tokens"`
-	CompletionTokens int64 `gorm:"not null;default:0" json:"completion_tokens"`
-
-	// 流式响应信息
-	IsStream             bool `gorm:"not null;default:false" json:"is_stream"`
-	StreamChunks         int  `gorm:"default:0" json:"stream_chunks"`
-	StreamFirstChunkTime *int `json:"stream_first_chunk_time,omitempty"` // 首帧响应时间（毫秒）
-
-	// 详细信息（仅在调试模式启用时记录）
-	RequestHeaders  string `gorm:"type:text" json:"request_headers,omitempty"`
-	RequestBody     string `gorm:"type:text" json:"request_body,omitempty"`
-	ResponseHeaders string `gorm:"type:text" json:"response_headers,omitempty"`
-	ResponseBody    string `gorm:"type:text" json:"response_body,omitempty"`
-
-	// 错误信息
-	ErrorMessage string `gorm:"type:text" json:"error_message,omitempty"`
-}
-
-// AfterFind GORM 钩子
-func (rld *RequestLogDetail) AfterFind(tx *gorm.DB) error {
-	return nil
+	ResponseHeadersJSON string `gorm:"type:text" json:"response_headers_json"`
+	ResponseBody        string `gorm:"type:text" json:"response_body"`
+	ResponseBodySize    int64  `json:"response_body_size"`
 }
 
 // TableName 指定表名
 func (RequestLogDetail) TableName() string {
-	return "request_logs_detail"
+	return "request_log_details"
+}
+
+// RequestLogAttempt 请求日志 1:N 渠道调用表
+//
+// 仅在调试模式开启时写入，每次上游尝试（路由 → 调用 → 响应）一行。
+// 允许回看「这次请求走过了哪几个渠道、每个渠道返回了什么」。
+type RequestLogAttempt struct {
+	ID         uint      `gorm:"primarykey" json:"id"`
+	CreatedAt  time.Time `gorm:"index" json:"created_at"`
+	TraceID    string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_trace_attempt,priority:1" json:"trace_id"`
+	AttemptNum int       `gorm:"uniqueIndex:idx_trace_attempt,priority:2" json:"attempt_num"`
+
+	ChannelID    uint   `json:"channel_id"`
+	ChannelName  string `gorm:"type:varchar(100)" json:"channel_name"`
+	ChannelModel string `gorm:"type:varchar(100)" json:"channel_model"`
+	KeyID        uint   `json:"key_id"`
+	KeyName      string `gorm:"type:varchar(200)" json:"key_name"`
+	KeyMasked    string `gorm:"type:varchar(64)" json:"key_masked"`
+
+	UpstreamURL        string `gorm:"type:varchar(1000)" json:"upstream_url"`
+	DurationMS         int64  `json:"duration_ms"`
+	UpstreamStatusCode int    `json:"upstream_status_code"`
+
+	Success      bool   `json:"success"`
+	FailureType  string `gorm:"type:varchar(30)" json:"failure_type"`
+	FailureScope string `gorm:"type:varchar(30)" json:"failure_scope"`
+	FailureStage string `gorm:"type:varchar(50)" json:"failure_stage"`
+	ErrorMessage string `gorm:"type:varchar(500)" json:"error_message"`
+
+	UpstreamRequestHeadersJSON string `gorm:"type:text" json:"upstream_request_headers_json"`
+	UpstreamRequestBody        string `gorm:"type:text" json:"upstream_request_body"`
+	UpstreamRequestBodySize    int64  `json:"upstream_request_body_size"`
+
+	UpstreamResponseHeadersJSON string `gorm:"type:text" json:"upstream_response_headers_json"`
+	UpstreamResponseBody        string `gorm:"type:text" json:"upstream_response_body"`
+	UpstreamResponseBodySize    int64  `json:"upstream_response_body_size"`
+}
+
+// TableName 指定表名
+func (RequestLogAttempt) TableName() string {
+	return "request_log_attempts"
 }

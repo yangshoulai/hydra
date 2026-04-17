@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/robfig/cron/v3"
 )
@@ -81,17 +80,6 @@ func (s *CronScheduler) AddJob(name string, spec string, task ScheduledTask) err
 	return nil
 }
 
-// RemoveJob 移除定时任务
-func (s *CronScheduler) RemoveJob(name string) {
-	s.logger.Info("移除定时任务",
-		slog.String("job_name", name),
-	)
-	if entryID, ok := s.jobs[name]; ok {
-		s.cron.Remove(entryID)
-		delete(s.jobs, name)
-	}
-}
-
 // Start 启动调度器
 func (s *CronScheduler) Start() {
 	s.cron.Start()
@@ -104,33 +92,8 @@ func (s *CronScheduler) Stop() {
 	s.logger.Info("定时任务调度器已停止")
 }
 
-// GetNextRunTime 获取任务下次运行时间
-func (s *CronScheduler) GetNextRunTime(spec string) (time.Time, error) {
-	schedule, err := cron.ParseStandard(spec)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return schedule.Next(time.Now()), nil
-}
-
 // Helper cron表达式常量
 const (
 	// EveryHour 每小时执行
 	EveryHour = "0 0 * * * *"
-	// EveryDayAt3AM 每天凌晨3点执行
-	EveryDayAt3AM = "0 0 3 * * *"
-	// EveryDayAtMidnight 每天午夜执行
-	EveryDayAtMidnight = "0 0 0 * * *"
-	// EveryDayAt1AM 每天凌晨1点执行
-	EveryDayAt1AM = "0 0 1 * * *"
-	// EveryMonday 凌晨3点 周一凌晨3点执行
-	EveryMondayAt3AM = "0 0 3 * * 1"
-	// EveryDayAt6AM 每天6点执行
-	EveryDayAt6AM = "0 0 6 * * *"
-	// EveryDayAt9PM 每天21点执行
-	EveryDayAt9PM = "0 0 21 * * *"
-	// Every15Minutes 每15分钟执行
-	Every15Minutes = "0 */15 * * * *"
-	// Every30Minutes 每30分钟执行
-	Every30Minutes = "0 */30 * * * *"
 )

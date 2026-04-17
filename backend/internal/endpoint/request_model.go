@@ -13,7 +13,7 @@ func replaceRequestModel(requestBody []byte, contentType string, modelName strin
 		return requestBody, nil
 	}
 
-	var payload map[string]interface{}
+	var payload map[string]any
 	if err := json.Unmarshal(requestBody, &payload); err != nil {
 		return nil, err
 	}

@@ -11,10 +11,9 @@ import (
 	"github.com/yangshoulai/hydra/internal/service/circuit"
 )
 
-// HealthCheckService Key 健康检查服务
+// HealthCheckService 渠道密钥健康检查服务
 type HealthCheckService struct {
 	logger       *slog.Logger
-	keyRepo      *repository.KeyRepository
 	channelRepo  *repository.ChannelRepository
 	probeHandler *circuit.ProbeHandler
 }
@@ -22,68 +21,65 @@ type HealthCheckService struct {
 // NewHealthCheckService 创建健康检查服务
 func NewHealthCheckService(
 	logger *slog.Logger,
-	keyRepo *repository.KeyRepository,
 	channelRepo *repository.ChannelRepository,
 	probeHandler *circuit.ProbeHandler,
 ) *HealthCheckService {
 	return &HealthCheckService{
 		logger:       logger,
-		keyRepo:      keyRepo,
 		channelRepo:  channelRepo,
 		probeHandler: probeHandler,
 	}
 }
 
-// KeyHealthResult Key 健康检查结果
-type KeyHealthResult struct {
-	KeyID     uint   `json:"key_id"`
-	KeyRemark string `json:"key_remark"`
-	Status    string `json:"status"` // healthy, unhealthy, error
-	Message   string `json:"message"`
-	Latency   string `json:"latency"`
+// ChannelKeyHealthResult 渠道密钥健康检查结果
+type ChannelKeyHealthResult struct {
+	ChannelKeyID     uint   `json:"channel_key_id"`
+	ChannelKeyRemark string `json:"channel_key_remark"`
+	Status           string `json:"status"` // healthy, unhealthy, error
+	Message          string `json:"message"`
+	Latency          string `json:"latency"`
 }
 
 // ChannelHealthCheckResult 渠道健康检查结果
 type ChannelHealthCheckResult struct {
-	ChannelID   uint              `json:"channel_id"`
-	ChannelName string            `json:"channel_name"`
-	TotalKeys   int               `json:"total_keys"`
-	HealthyKeys int               `json:"healthy_keys"`
-	KeyResults  []KeyHealthResult `json:"key_results"`
+	ChannelID          uint                     `json:"channel_id"`
+	ChannelName        string                   `json:"channel_name"`
+	TotalChannelKeys   int                      `json:"total_channel_keys"`
+	HealthyChannelKeys int                      `json:"healthy_channel_keys"`
+	ChannelKeyResults  []ChannelKeyHealthResult `json:"channel_key_results"`
 }
 
-// CheckChannelHealth 检查指定渠道的所有 Key 健康状态
+// CheckChannelHealth 检查指定渠道的所有渠道密钥健康状态
 func (s *HealthCheckService) CheckChannelHealth(ctx context.Context, channelID uint) (*ChannelHealthCheckResult, error) {
-	// 查询渠道
 	channel, err := s.channelRepo.FindByID(ctx, channelID)
 	if err != nil {
 		s.logger.Error("查询渠道异常", slog.Uint64("channel_id", uint64(channelID)), slog.String("error", err.Error()))
 		return nil, err
 	}
-
 	if channel == nil {
 		return nil, nil
 	}
 
-	// 获取渠道的所有 Key
-	keys := channel.Keys
-	if len(keys) == 0 {
-		s.logger.Warn("渠道尚未设置密钥", slog.Uint64("channel_id", uint64(channelID)))
+	channelKeys := channel.ChannelKeys
+	if len(channelKeys) == 0 {
+		s.logger.Warn("渠道尚未设置渠道密钥", slog.Uint64("channel_id", uint64(channelID)))
 		return &ChannelHealthCheckResult{
-			ChannelID:   channel.ID,
-			ChannelName: channel.Name,
-			TotalKeys:   0,
-			HealthyKeys: 0,
-			KeyResults:  []KeyHealthResult{},
+			ChannelID:          channel.ID,
+			ChannelName:        channel.Name,
+			TotalChannelKeys:   0,
+			HealthyChannelKeys: 0,
+			ChannelKeyResults:  []ChannelKeyHealthResult{},
 		}, nil
 	}
 
-	s.logger.Info("开始检查渠道密钥状态", slog.Uint64("channel_id", uint64(channelID)), slog.String("channel_name", channel.Name), slog.Int("total_keys", len(keys)))
+	s.logger.Info("开始检查渠道密钥状态",
+		slog.Uint64("channel_id", uint64(channelID)),
+		slog.String("channel_name", channel.Name),
+		slog.Int("total_channel_keys", len(channelKeys)),
+	)
 
-	// 并发检查所有 Key
-	results := s.checkKeysParallel(ctx, keys, channel)
+	results := s.checkChannelKeysParallel(ctx, channelKeys, channel)
 
-	// 统计健康的 Key 数量
 	healthyCount := 0
 	for _, result := range results {
 		if result.Status == "healthy" {
@@ -92,79 +88,80 @@ func (s *HealthCheckService) CheckChannelHealth(ctx context.Context, channelID u
 	}
 
 	return &ChannelHealthCheckResult{
-		ChannelID:   channel.ID,
-		ChannelName: channel.Name,
-		TotalKeys:   len(keys),
-		HealthyKeys: healthyCount,
-		KeyResults:  results,
+		ChannelID:          channel.ID,
+		ChannelName:        channel.Name,
+		TotalChannelKeys:   len(channelKeys),
+		HealthyChannelKeys: healthyCount,
+		ChannelKeyResults:  results,
 	}, nil
 }
 
-// checkKeysParallel 并发检查多个 Key
-func (s *HealthCheckService) checkKeysParallel(ctx context.Context, keys []models.Key, channel *models.Channel) []KeyHealthResult {
-	results := make([]KeyHealthResult, len(keys))
+// checkChannelKeysParallel 并发检查多个渠道密钥
+func (s *HealthCheckService) checkChannelKeysParallel(ctx context.Context, channelKeys []models.ChannelKey, channel *models.Channel) []ChannelKeyHealthResult {
+	results := make([]ChannelKeyHealthResult, len(channelKeys))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	// 使用并发控制，避免过多并发请求
-	semaphore := make(chan struct{}, 10) // 最多 10 个并发
+	semaphore := make(chan struct{}, 10)
 
-	for i, key := range keys {
+	for i, channelKey := range channelKeys {
 		wg.Add(1)
-		go func(index int, k models.Key) {
+		go func(index int, k models.ChannelKey) {
 			defer wg.Done()
-
-			// 获取信号量
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			result := s.CheckSingleKey(ctx, &k, channel)
-
+			result := s.CheckSingleChannelKey(ctx, &k, channel)
 			mu.Lock()
 			results[index] = result
 			mu.Unlock()
-		}(i, key)
+		}(i, channelKey)
 	}
 
 	wg.Wait()
 	return results
 }
 
-// CheckSingleKey 检查单个 Key 的健康状态（公共方法）
-func (s *HealthCheckService) CheckSingleKey(ctx context.Context, key *models.Key, channel *models.Channel) KeyHealthResult {
-	s.logger.Debug("检查密钥状态", slog.Uint64("key_id", uint64(key.ID)), slog.Uint64("channel_id", uint64(channel.ID)))
+// CheckSingleChannelKey 检查单个渠道密钥的健康状态（公共方法）
+func (s *HealthCheckService) CheckSingleChannelKey(ctx context.Context, channelKey *models.ChannelKey, channel *models.Channel) ChannelKeyHealthResult {
+	s.logger.Debug("检查渠道密钥状态",
+		slog.Uint64("channel_key_id", uint64(channelKey.ID)),
+		slog.Uint64("channel_id", uint64(channel.ID)),
+	)
 
 	start := time.Now()
-
-	// 使用探测处理器进行健康检查
-	success, isHardFailure, err := s.probeHandler.ProbeKey(ctx, key, channel)
-
+	success, isHardFailure, err := s.probeHandler.ProbeChannelKey(ctx, channelKey, channel)
 	latency := time.Since(start)
 
-	result := KeyHealthResult{
-		KeyID:     key.ID,
-		KeyRemark: key.Remark,
-		Latency:   latency.String(),
+	result := ChannelKeyHealthResult{
+		ChannelKeyID:     channelKey.ID,
+		ChannelKeyRemark: channelKey.Remark,
+		Latency:          latency.String(),
 	}
 
 	if success {
 		result.Status = "healthy"
-		result.Message = "密钥正常"
-		s.logger.Debug("密钥状态正常", slog.Uint64("key_id", uint64(key.ID)), slog.Duration("latency", latency))
-	} else {
-		if isHardFailure {
-			result.Status = "unhealthy"
-			result.Message = "密钥异常"
-		} else {
-			result.Status = "error"
-			if err != nil {
-				result.Message = err.Error()
-			} else {
-				result.Message = "密钥异常"
-			}
-		}
-		s.logger.Warn("密钥检查异常", slog.Uint64("key_id", uint64(key.ID)), slog.String("status", result.Status), slog.String("message", result.Message))
+		result.Message = "渠道密钥正常"
+		s.logger.Debug("渠道密钥状态正常", slog.Uint64("channel_key_id", uint64(channelKey.ID)), slog.Duration("latency", latency))
+		return result
 	}
 
+	if isHardFailure {
+		result.Status = "unhealthy"
+		result.Message = "渠道密钥异常"
+	} else {
+		result.Status = "error"
+		if err != nil {
+			result.Message = err.Error()
+		} else {
+			result.Message = "渠道密钥异常"
+		}
+	}
+
+	s.logger.Warn("渠道密钥检查异常",
+		slog.Uint64("channel_key_id", uint64(channelKey.ID)),
+		slog.String("status", result.Status),
+		slog.String("message", result.Message),
+	)
 	return result
 }

@@ -1,603 +1,396 @@
 <template>
-  <div class="space-y-4">
-    <!-- 页面头部 -->
-    <n-card :bordered="false" class="page-header-card">
-      <n-space justify="space-between" align="center">
-        <n-space vertical :size="4">
-          <n-text class="page-title">厂商管理</n-text>
-          <n-text depth="3" class="page-subtitle">
-            管理系统中的所有 AI 服务厂商，支持从远程服务器同步厂商列表
-          </n-text>
-        </n-space>
-        <n-space>
-          <n-button type="info" @click="handleSync" :loading="syncing" size="large" secondary strong>
+  <div class="app-page">
+    <n-alert v-if="listError" type="error" :bordered="false">
+      <n-space align="center" justify="space-between" style="width: 100%">
+        <span>{{ listError }}</span>
+        <n-button text type="error" @click="loadProviders">重试</n-button>
+      </n-space>
+    </n-alert>
+
+    <section class="panel-card">
+      <header class="panel-card__header table-toolbar">
+        <div class="table-toolbar__title">
+          <h3 class="panel-card__title">厂商列表</h3>
+        </div>
+        <div class="table-toolbar__actions">
+          <n-button size="small" secondary :loading="syncing" @click="handleSync">同步远程厂商</n-button>
+          <n-button size="small" type="primary" @click="showCreateDialog = true">
             <template #icon>
               <n-icon>
-                <SyncOutline/>
-              </n-icon>
-            </template>
-            同步厂商
-          </n-button>
-          <n-button type="primary" @click="showCreateDialog = true" size="large" strong>
-            <template #icon>
-              <n-icon>
-                <AddOutline/>
+                <AddOutline />
               </n-icon>
             </template>
             添加厂商
           </n-button>
-        </n-space>
-      </n-space>
-    </n-card>
-
-    <!-- 厂商列表 -->
-    <n-data-table
-        :columns="columns"
-        :data="providers"
-        :pagination="pagination"
-        :bordered="true"
-        striped
-        :single-line="false"
-        :scroll-x="920"
-        :loading="loading"
-    />
-
-    <!-- 创建厂商对话框 -->
-    <n-modal
-        v-model:show="showCreateDialog"
-        preset="card"
-        title="添加厂商"
-        :style="{ width: '600px' }"
-        :mask-closable="false"
-        :closable="true"
-        @close="showCreateDialog = false"
-        @keydown.esc="showCreateDialog = false"
-        :bordered="false"
-        class="provider-dialog"
-    >
-      <n-space vertical :size="20">
-        <n-alert type="info" :bordered="false" class="info-alert">
-          <template #icon>
-            <n-icon>
-              <InformationCircleOutline/>
-            </n-icon>
-          </template>
-          创建新的 AI 服务厂商。厂商信息将用于组织和展示不同的模型提供商。
-        </n-alert>
-
-        <n-form
-            ref="createFormRef"
-            :model="createForm"
-            :rules="createRules"
-            label-placement="top"
-            size="large"
-        >
-          <n-space vertical :size="12">
-            <n-form-item label="厂商ID" path="id">
-              <n-input
-                  v-model:value="createForm.id"
-                  placeholder="请输入厂商ID，如：openai"
-                  @input="createForm.id = createForm.id.toLowerCase()"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <KeyOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                厂商的唯一标识符，自动转换为小写
-              </template>
-            </n-form-item>
-
-            <n-form-item label="厂商名称" path="name">
-              <n-input
-                  v-model:value="createForm.name"
-                  placeholder="请输入厂商名称，如：OpenAI"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <BuildOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                厂商的显示名称
-              </template>
-            </n-form-item>
-
-            <n-form-item label="图标 URL" path="icon">
-              <n-input
-                  v-model:value="createForm.icon"
-                  placeholder="请输入图标 URL（可选）"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <ImageOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                厂商的图标 URL 地址
-              </template>
-            </n-form-item>
-
-            <n-form-item label="Lobe 图标" path="lobeIcon">
-              <n-input
-                  v-model:value="createForm.lobeIcon"
-                  placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <BuildOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                使用 LobeChat 图标组件的名称
-              </template>
-            </n-form-item>
-
-            <n-form-item label="备注" path="remark">
-              <n-input
-                  v-model:value="createForm.remark"
-                  type="textarea"
-                  placeholder="请输入备注（可选）"
-                  :autosize="{ minRows: 3, maxRows: 6 }"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <TextOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-            </n-form-item>
-          </n-space>
-        </n-form>
-      </n-space>
-
-      <template #footer>
-        <n-space justify="end" :size="12">
-          <n-button @click="showCreateDialog = false" size="large">
-            取消
-          </n-button>
-          <n-button type="primary" @click="handleCreate" :loading="creating" size="large" strong>
-            <template #icon>
-              <n-icon>
-                <AddOutline/>
-              </n-icon>
-            </template>
-            确定
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
-    <!-- 编辑厂商对话框 -->
-    <n-modal
-        v-model:show="showEditDialog"
-        preset="card"
-        title="编辑厂商"
-        :style="{ width: '600px' }"
-        :mask-closable="false"
-        :closable="true"
-        @close="showEditDialog = false"
-        @keydown.esc="showEditDialog = false"
-        :bordered="false"
-        class="provider-dialog"
-    >
-      <n-space vertical :size="20">
-        <n-alert type="info" :bordered="false" class="info-alert">
-          <template #icon>
-            <n-icon>
-              <InformationCircleOutline/>
-            </n-icon>
-          </template>
-          修改厂商的配置信息。
-        </n-alert>
-
-        <n-form
-            ref="editFormRef"
-            :model="editForm"
-            :rules="editRules"
-            label-placement="top"
-            size="large"
-        >
-          <n-space vertical :size="12">
-            <n-form-item label="厂商ID">
-              <n-input
-                  :value="currentEditProvider?.id"
-                  disabled
-              >
-                <template #prefix>
-                  <n-icon>
-                    <KeyOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                厂商ID不可修改
-              </template>
-            </n-form-item>
-
-            <n-form-item label="厂商名称" path="name">
-              <n-input
-                  v-model:value="editForm.name"
-                  placeholder="请输入厂商名称"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <BuildOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                厂商的显示名称
-              </template>
-            </n-form-item>
-
-            <n-form-item label="图标 URL" path="icon">
-              <n-input
-                  v-model:value="editForm.icon"
-                  placeholder="请输入图标 URL（可选）"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <ImageOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                厂商的图标 URL 地址
-              </template>
-            </n-form-item>
-
-            <n-form-item label="Lobe 图标" path="lobeIcon">
-              <n-input
-                  v-model:value="editForm.lobeIcon"
-                  placeholder="请输入 Lobe 图标组件名（可选），如：Claude.Color"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <BuildOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-              <template #feedback>
-                使用 LobeChat 图标组件的名称
-              </template>
-            </n-form-item>
-
-            <n-form-item label="备注" path="remark">
-              <n-input
-                  v-model:value="editForm.remark"
-                  type="textarea"
-                  placeholder="请输入备注（可选）"
-                  :autosize="{ minRows: 3, maxRows: 6 }"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <TextOutline/>
-                  </n-icon>
-                </template>
-              </n-input>
-            </n-form-item>
-          </n-space>
-        </n-form>
-      </n-space>
-
-      <template #footer>
-        <n-space justify="end" :size="12">
-          <n-button @click="showEditDialog = false" size="large">
-            取消
-          </n-button>
-          <n-button type="primary" @click="handleUpdate" :loading="updating" size="large" strong>
-            <template #icon>
-              <n-icon>
-                <SaveOutline/>
-              </n-icon>
-            </template>
-            保存
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
-    <!-- 同步厂商对话框 -->
-    <n-modal
-        v-model:show="showSyncDialog"
-        preset="card"
-        title="同步远程厂商"
-        :style="{ width: '900px' }"
-        :mask-closable="false"
-        :closable="true"
-        @close="showSyncDialog = false"
-        @keydown.esc="showSyncDialog = false"
-        :bordered="false"
-        class="sync-dialog"
-    >
-      <n-space vertical :size="20">
-        <!-- 说明信息 -->
-        <n-alert type="info" :bordered="false" class="info-alert">
-          <template #icon>
-            <n-icon>
-              <InformationCircleOutline/>
-            </n-icon>
-          </template>
-          从远程服务器获取厂商列表，选择需要添加的厂商后点击"添加选中的厂商"。
-        </n-alert>
-
-        <!-- 统计信息 -->
-        <n-card size="small" :bordered="false">
-          <n-grid :cols="3" :x-gap="20" responsive="screen">
-            <n-grid-item>
-              <n-space align="center">
-                <n-icon size="20" color="#2080f0">
-                  <CloudOutline/>
-                </n-icon>
-                <n-space vertical :size="4">
-                  <n-text depth="3" style="font-size: 13px;">远程厂商总数</n-text>
-                  <n-text strong style="font-size: 20px;">{{ remoteProviders.length }}</n-text>
-                </n-space>
-              </n-space>
-            </n-grid-item>
-            <n-grid-item>
-              <n-space align="center">
-                <n-icon size="20" color="#18a058">
-                  <CheckmarkCircleOutline/>
-                </n-icon>
-                <n-space vertical :size="4">
-                  <n-text depth="3" style="font-size: 13px;">可添加</n-text>
-                  <n-text strong style="font-size: 20px; color: #18a058;">{{ availableProviders.length }}</n-text>
-                </n-space>
-              </n-space>
-            </n-grid-item>
-            <n-grid-item>
-              <n-space align="center">
-                <n-icon size="20" color="#2080f0">
-                  <CheckboxOutline/>
-                </n-icon>
-                <n-space vertical :size="4">
-                  <n-text depth="3" style="font-size: 13px;">已选中</n-text>
-                  <n-text strong style="font-size: 20px; color: #2080f0;">{{ checkedProviderIds.length }}</n-text>
-                </n-space>
-              </n-space>
-            </n-grid-item>
-          </n-grid>
-        </n-card>
-
-        <!-- 厂商列表 -->
+        </div>
+      </header>
+      <div class="panel-card__body">
         <n-data-table
-            :columns="syncColumns"
-            :data="availableProviders"
-            :pagination="syncPagination"
-            :bordered="true"
-            :loading="syncing"
-            :row-key="(row: RemoteProvider) => row.id"
-            v-model:checked-row-keys="checkedProviderIds"
-            size="small"
+          :columns="columns"
+          :data="providers"
+          :loading="loading"
+          :locale="tableLocale"
+          :pagination="pagination"
+          :single-line="false"
+          :scroll-x="960"
+        />
+      </div>
+    </section>
+
+    <n-modal v-model:show="showCreateDialog" preset="card" title="添加厂商" style="width: 520px">
+      <n-form ref="createFormRef" :model="createForm" :rules="createRules" label-placement="top" size="medium">
+        <n-form-item label="厂商 ID" path="id">
+          <n-input v-model:value="createForm.id" placeholder="例如：openai" @input="createForm.id = createForm.id.toLowerCase()" />
+        </n-form-item>
+        <n-form-item label="厂商名称" path="name">
+          <n-input v-model:value="createForm.name" placeholder="例如：OpenAI" />
+        </n-form-item>
+        <n-form-item label="图标 URL" path="icon">
+          <n-input v-model:value="createForm.icon" placeholder="可选" />
+        </n-form-item>
+        <n-form-item label="备注" path="remark">
+          <n-input v-model:value="createForm.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选备注" />
+        </n-form-item>
+      </n-form>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showCreateDialog = false">取消</n-button>
+          <n-button type="primary" :loading="creating" @click="handleCreate">确认创建</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="showEditDialog" preset="card" title="编辑厂商" style="width: 520px">
+      <n-form ref="editFormRef" :model="editForm" :rules="editRules" label-placement="top" size="medium">
+        <n-form-item label="厂商 ID">
+          <n-input :value="currentEditProvider?.id" disabled />
+        </n-form-item>
+        <n-form-item label="厂商名称" path="name">
+          <n-input v-model:value="editForm.name" placeholder="例如：OpenAI" />
+        </n-form-item>
+        <n-form-item label="图标 URL" path="icon">
+          <n-input v-model:value="editForm.icon" placeholder="可选" />
+        </n-form-item>
+        <n-form-item label="备注" path="remark">
+          <n-input v-model:value="editForm.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选备注" />
+        </n-form-item>
+      </n-form>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showEditDialog = false">取消</n-button>
+          <n-button type="primary" :loading="updating" @click="handleUpdate">保存</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="showSyncDialog"
+      preset="card"
+      title="同步远程厂商"
+      style="width: 860px"
+    >
+      <n-space vertical :size="10">
+        <n-input
+          v-model:value="syncKeyword"
+          clearable
+          placeholder="搜索厂商 ID / 名称"
+          style="max-width: 320px"
         />
 
-        <!-- 操作按钮 -->
-        <n-space justify="end" :size="12">
-          <n-button @click="showSyncDialog = false" size="large">
-            取消
-          </n-button>
-          <n-button
-              type="primary"
-              @click="handleAddSyncProviders"
-              :loading="adding"
-              :disabled="checkedProviderIds.length === 0"
-              size="large"
-              strong
-          >
-            <template #icon>
-              <n-icon>
-                <AddOutline/>
-              </n-icon>
-            </template>
-            添加选中的厂商 ({{ checkedProviderIds.length }})
+        <n-data-table
+          :columns="syncColumns"
+          :data="filteredRemoteProviders"
+          :row-key="(row: RemoteProvider) => row.id"
+          v-model:checked-row-keys="checkedProviderIds"
+          :pagination="syncPagination"
+          :locale="{ emptyText: '无匹配厂商' }"
+          :single-line="false"
+        />
+
+        <n-space justify="end">
+          <n-button @click="showSyncDialog = false">取消</n-button>
+          <n-button type="primary" :loading="adding" :disabled="selectedImportableCount === 0" @click="handleAddSyncProviders">
+            导入新增厂商 ({{ selectedImportableCount }})
           </n-button>
         </n-space>
       </n-space>
+    </n-modal>
+    <n-modal
+      v-model:show="showModelsDialog"
+      preset="card"
+      :title="modelsDialogTitle"
+      style="width: 720px"
+    >
+      <n-data-table
+        :columns="modelsColumns"
+        :data="providerModels"
+        :loading="loadingModels"
+        :pagination="false"
+        :single-line="false"
+        :locale="{ emptyText: loadingModels ? '加载中...' : '该厂商暂无模型' }"
+        :row-key="(row: Model) => row.id"
+        :max-height="520"
+      />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showModelsDialog = false">关闭</n-button>
+        </n-space>
+      </template>
     </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import {computed, h, nextTick, onMounted, reactive, ref, watch} from 'vue'
-import type {DataTableColumns, FormInst, FormRules} from 'naive-ui'
-import {NAlert, NButton, NCard, NDataTable, NForm, NFormItem, NGrid, NGridItem, NIcon, NInput, NModal, NSpace, NText} from 'naive-ui'
+import { computed, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import type { DataTableColumns, FormInst, FormRules } from 'naive-ui'
 import {
-  AddOutline,
-  BuildOutline,
-  CheckboxOutline,
-  CheckmarkCircleOutline,
-  CloudOutline,
-  CreateOutline,
-  ImageOutline,
-  InformationCircleOutline,
-  KeyOutline,
-  SaveOutline,
-  SyncOutline,
-  TextOutline,
-  TrashOutline
-} from '@vicons/ionicons5'
+  NAlert,
+  NButton,
+  NDataTable,
+  NForm,
+  NFormItem,
+  NIcon,
+  NInput,
+  NModal,
+  NSpace,
+  NTag,
+  NText,
+  NTooltip,
+} from 'naive-ui'
+import { AddOutline, CubeOutline, PencilOutline, TrashOutline } from '@vicons/ionicons5'
 import providerApi from '@/services/providerService'
-import type {CreateProviderRequest, Provider, RemoteProvider, UpdateProviderRequest} from '@/types/model'
+import { modelApi } from '@/services/modelService'
+import type { CreateProviderRequest, Model, Provider, RemoteProvider, UpdateProviderRequest } from '@/types/model'
 import ProviderIcon from '@/components/ProviderIcon.vue'
+import { getErrorMessage, toastApiError } from '@/utils/error'
 
-// 状态
 const loading = ref(false)
+const listError = ref('')
 const creating = ref(false)
 const updating = ref(false)
 const syncing = ref(false)
 const adding = ref(false)
+
 const providers = ref<Provider[]>([])
+const remoteProviders = ref<RemoteProvider[]>([])
+const checkedProviderIds = ref<string[]>([])
+const syncKeyword = ref('')
+
 const showCreateDialog = ref(false)
 const showEditDialog = ref(false)
 const showSyncDialog = ref(false)
+const showModelsDialog = ref(false)
 const currentEditProvider = ref<Provider | null>(null)
-const remoteProviders = ref<RemoteProvider[]>([])
-const checkedProviderIds = ref<string[]>([])
+const currentModelsProvider = ref<Provider | null>(null)
+const providerModels = ref<Model[]>([])
+const loadingModels = ref(false)
 
-// 表单引用
 const createFormRef = ref<FormInst | null>(null)
 const editFormRef = ref<FormInst | null>(null)
 
-// 创建表单
 const createForm = reactive<CreateProviderRequest>({
   id: '',
   name: '',
   icon: '',
-  lobeIcon: '',
-  remark: ''
+  remark: '',
 })
 
-// 编辑表单
 const editForm = reactive<UpdateProviderRequest>({
   name: '',
   icon: '',
-  lobeIcon: '',
-  remark: ''
+  remark: '',
 })
 
-// 创建表单验证规则
 const createRules: FormRules = {
-  id: {
-    required: true,
-    message: '请输入厂商ID',
-    trigger: ['blur', 'input']
-  },
-  name: {
-    required: true,
-    message: '请输入厂商名称',
-    trigger: ['blur', 'input']
-  }
+  id: { required: true, message: '请输入厂商 ID', trigger: ['blur', 'input'] },
+  name: { required: true, message: '请输入厂商名称', trigger: ['blur', 'input'] },
 }
 
-// 编辑表单验证规则
 const editRules: FormRules = {
-  name: {
-    required: true,
-    message: '请输入厂商名称',
-    trigger: ['blur', 'input']
-  }
+  name: { required: true, message: '请输入厂商名称', trigger: ['blur', 'input'] },
 }
 
+const localProviderIds = computed(() => new Set(providers.value.map((item) => item.id)))
 
-// 同步对话框分页配置
-const syncPagination = reactive({
-  page: 1,
-  pageSize: 10,
-  showSizePicker: true,
-  pageSizes: [10, 20, 50],
-  onChange: (page: number) => {
-    syncPagination.page = page
-  },
-  onUpdatePageSize: (pageSize: number) => {
-    syncPagination.pageSize = pageSize
-    syncPagination.page = 1
-  }
+const filteredRemoteProviders = computed(() => {
+  const keyword = syncKeyword.value.trim().toLowerCase()
+  const rows = remoteProviders.value.filter((item) => {
+    if (!keyword) return true
+    return item.id.toLowerCase().includes(keyword) || item.name.toLowerCase().includes(keyword)
+  })
+  return rows.sort((a, b) => {
+    const aLocal = localProviderIds.value.has(a.id)
+    const bLocal = localProviderIds.value.has(b.id)
+    if (aLocal !== bLocal) return aLocal ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
 })
 
-// 可添加的厂商（远程存在但本地不存在的）
-const availableProviders = computed(() => {
-  const localIds = new Set(providers.value.map(p => p.id))
-  return remoteProviders.value.filter(rp => !localIds.has(rp.id))
-})
+const selectedImportableCount = computed(() =>
+  checkedProviderIds.value.filter((id) => !localProviderIds.value.has(id)).length,
+)
 
-// 表格列
+const tableLocale = computed(() => ({
+  emptyText: loading.value ? '加载中...' : '暂无厂商数据',
+}))
+
 const columns: DataTableColumns<Provider> = [
   {
     title: '图标',
     key: 'icon',
     width: 80,
     align: 'center',
-    render: (row) => {
-      return h(ProviderIcon, {
-        lobeIcon: row.lobeIcon,
-        iconURL: row.icon,
-        alt: row.name,
-        size: 24
-      })
-    }
+    render: (row) => h(ProviderIcon, { iconURL: row.icon, alt: row.name, size: 24 }),
   },
   {
-    title: 'ID',
+    title: '厂商 ID',
     key: 'id',
-    width: 160,
-    align: 'left',
-    sorter: (a, b) => a.id.localeCompare(b.id)
+    width: 180,
+    sorter: (a, b) => a.id.localeCompare(b.id),
   },
   {
     title: '厂商名称',
     key: 'name',
-    width: 160,
-    render: (row) => {
-      return h(NText, {tag: 'strong'}, {default: () => row.name})
-    },
-    sorter: (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+    width: 200,
+    render: (row) => h(NText, { strong: true }, { default: () => row.name }),
+    sorter: (a, b) => a.name.localeCompare(b.name),
+  },
+  {
+    title: '模型数',
+    key: 'model_count',
+    width: 100,
+    align: 'center',
+    render: (row) => row.model_count ?? 0,
   },
   {
     title: '创建时间',
     key: 'created_at',
+    width: 180,
     align: 'center',
-    width: 200,
-    render: (row) => {
-      return new Date(row.created_at).toLocaleString('zh-CN')
-    }
+    render: (row) => new Date(row.created_at).toLocaleString('zh-CN'),
   },
   {
     title: '备注',
     key: 'remark',
-    width: 160,
-    ellipsis: {
-      tooltip: true
-    }
+    minWidth: 160,
+    ellipsis: { tooltip: true },
   },
   {
     title: '操作',
     key: 'actions',
-    width: 160,
+    width: 130,
     fixed: 'right',
     align: 'center',
-    render: (row) => {
-      return h(
-          NSpace,
-          {size: 'small', justify: 'center'},
-          {
-            default: () => [
-              h(
-                  NButton,
-                  {
-                    size: 'tiny',
-                    type: 'warning',
-                    onClick: () => handleEdit(row)
-                  },
-                  {
-                    default: () => '编辑',
-                    icon: () => h(NIcon, null, {default: () => h(CreateOutline)})
-                  }
-              ),
-              h(
-                  NButton,
-                  {
-                    size: 'tiny',
-                    type: 'error',
-                    onClick: () => handleDelete(row)
-                  },
-                  {
-                    default: () => '删除',
-                    icon: () => h(NIcon, null, {default: () => h(TrashOutline)})
-                  }
-              )
-            ]
-          }
-      )
-    }
-  }
+    render: (row) =>
+      h(NSpace, { size: 4, justify: 'center', class: 'table-action-group' }, {
+        default: () => [
+          renderActionIcon({
+            tooltip: '模型列表',
+            ariaLabel: `查看厂商 ${row.name} 的模型列表`,
+            icon: CubeOutline,
+            type: 'info',
+            onClick: () => openModelsDialog(row),
+          }),
+          renderActionIcon({
+            tooltip: '编辑',
+            ariaLabel: `编辑厂商 ${row.name}`,
+            icon: PencilOutline,
+            type: 'warning',
+            onClick: () => handleEdit(row),
+          }),
+          renderActionIcon({
+            tooltip: '删除',
+            ariaLabel: `删除厂商 ${row.name}`,
+            icon: TrashOutline,
+            type: 'error',
+            onClick: () => handleDelete(row),
+          }),
+        ],
+      }),
+  },
 ]
+
+const modelsDialogTitle = computed(() => {
+  if (!currentModelsProvider.value) return '模型列表'
+  return `模型列表 · ${currentModelsProvider.value.name}（${providerModels.value.length}）`
+})
+
+const modelsColumns: DataTableColumns<Model> = [
+  {
+    title: 'ID',
+    key: 'id',
+    width: 70,
+    align: 'right',
+  },
+  {
+    title: '模型名称',
+    key: 'name',
+    minWidth: 220,
+    render: (row) => h(NText, { code: true, style: 'font-size: 12px' }, { default: () => row.name }),
+  },
+  {
+    title: '备注',
+    key: 'remark',
+    minWidth: 160,
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: '创建时间',
+    key: 'created_at',
+    width: 170,
+    align: 'center',
+    render: (row) => new Date(row.created_at).toLocaleString('zh-CN'),
+  },
+]
+
+async function openModelsDialog(provider: Provider) {
+  currentModelsProvider.value = provider
+  providerModels.value = []
+  showModelsDialog.value = true
+  loadingModels.value = true
+  try {
+    const result = await modelApi.list({ provider_id: provider.id, page: 1, page_size: 1000 })
+    providerModels.value = result.items
+  } catch (err) {
+    toastApiError(err, '加载模型列表失败')
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+function renderActionIcon(options: {
+  tooltip: string
+  ariaLabel: string
+  icon: any
+  type?: 'default' | 'primary' | 'info' | 'warning' | 'error' | 'success'
+  onClick: () => void
+}) {
+  return h(
+    NTooltip,
+    null,
+    {
+      trigger: () =>
+        h(
+          NButton,
+          {
+            class: 'table-action-btn',
+            size: 'tiny',
+            quaternary: true,
+            type: options.type,
+            circle: true,
+            'aria-label': options.ariaLabel,
+            onClick: options.onClick,
+          },
+          {
+            icon: () => h(NIcon, null, { default: () => h(options.icon) }),
+          },
+        ),
+      default: () => options.tooltip,
+    },
+  )
+}
 
 const pagination = reactive({
   page: 1,
@@ -607,60 +400,67 @@ const pagination = reactive({
   onChange: (page: number) => {
     pagination.page = page
   },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize
+  onUpdatePageSize: (size: number) => {
+    pagination.pageSize = size
     pagination.page = 1
-  }
+  },
 })
 
-// 同步对话框表格列
 const syncColumns: DataTableColumns<RemoteProvider> = [
-  {
-    type: 'selection'
-  },
+  { type: 'selection' },
   {
     title: '图标',
     key: 'iconURL',
     width: 80,
     align: 'center',
-    render: (row) => {
-      return h(ProviderIcon, {
-        lobeIcon: row.lobeIcon,
-        iconURL: row.iconURL,
-        alt: row.name,
-        size: 20
-      })
-    }
+    render: (row) => h(ProviderIcon, { iconURL: row.iconURL, alt: row.name, size: 20 }),
   },
+  { title: '厂商 ID', key: 'id', width: 180 },
+  { title: '厂商名称', key: 'name', minWidth: 260 },
   {
-    title: 'ID',
-    key: 'id',
-    width: 200
+    title: '本地状态',
+    key: 'status',
+    width: 120,
+    render: (row) =>
+      h(
+        NTag,
+        {
+          bordered: false,
+          type: localProviderIds.value.has(row.id) ? 'info' : 'success',
+          size: 'small',
+        },
+        { default: () => (localProviderIds.value.has(row.id) ? '已存在' : '可导入') },
+      ),
   },
-  {
-    title: '厂商名称',
-    key: 'name',
-    width: 280,
-    render: (row) => {
-      return h(NText, {tag: 'strong'}, {default: () => row.name})
-    }
-  }
 ]
 
-// 加载厂商列表
+const syncPagination = reactive({
+  page: 1,
+  pageSize: 10,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50],
+  onChange: (page: number) => {
+    syncPagination.page = page
+  },
+  onUpdatePageSize: (size: number) => {
+    syncPagination.pageSize = size
+    syncPagination.page = 1
+  },
+})
+
 async function loadProviders() {
   loading.value = true
+  listError.value = ''
   try {
     providers.value = await providerApi.list()
-  } catch (error: any) {
-    console.error('Failed to load providers:', error)
-    window.$message?.error(error.response?.data?.error || '加载厂商列表失败')
+  } catch (err) {
+    listError.value = getErrorMessage(err, '加载厂商列表失败')
+    window.$message?.error(listError.value)
   } finally {
     loading.value = false
   }
 }
 
-// 创建厂商
 async function handleCreate() {
   if (!createFormRef.value) return
 
@@ -670,40 +470,32 @@ async function handleCreate() {
 
     await providerApi.create(createForm)
 
-    window.$message?.success('创建成功')
+    window.$message?.success('厂商创建成功')
     showCreateDialog.value = false
 
-    // 重置表单
     createForm.id = ''
     createForm.name = ''
     createForm.icon = ''
-    createForm.lobeIcon = ''
     createForm.remark = ''
 
     await loadProviders()
-  } catch (error: any) {
-    console.error('Failed to create provider:', error)
-    if (error.errors) {
-      // 表单验证错误
-      return
+  } catch (err) {
+    if (!(err as { errors?: unknown })?.errors) {
+      toastApiError(err, '创建失败')
     }
-    window.$message?.error(error.response?.data?.error || '创建失败')
   } finally {
     creating.value = false
   }
 }
 
-// 编辑厂商
 function handleEdit(provider: Provider) {
   currentEditProvider.value = provider
   editForm.name = provider.name
   editForm.icon = provider.icon
-  editForm.lobeIcon = provider.lobeIcon || ''
   editForm.remark = provider.remark
   showEditDialog.value = true
 }
 
-// 更新厂商
 async function handleUpdate() {
   if (!editFormRef.value || !currentEditProvider.value) return
 
@@ -718,149 +510,110 @@ async function handleUpdate() {
     currentEditProvider.value = null
 
     await loadProviders()
-  } catch (error: any) {
-    console.error('Failed to update provider:', error)
-    if (error.errors) {
-      // 表单验证错误
-      return
+  } catch (err) {
+    if (!(err as { errors?: unknown })?.errors) {
+      toastApiError(err, '更新失败')
     }
-    window.$message?.error(error.response?.data?.error || '更新失败')
   } finally {
     updating.value = false
   }
 }
 
-// 删除厂商
 async function handleDelete(provider: Provider) {
   await window.$dialog?.warning({
     title: '确认删除',
-    content: `确定要删除厂商 "${provider.name}" 吗？`,
-    positiveText: '删除',
+    content: `确定删除厂商“${provider.name}”吗？`,
+    positiveText: '确认删除',
     negativeText: '取消',
     onPositiveClick: async () => {
       try {
         await providerApi.delete(provider.id)
         window.$message?.success('删除成功')
         await loadProviders()
-      } catch (error: any) {
-        console.error('Failed to delete provider:', error)
-        window.$message?.error(error.response?.data?.error || '删除失败')
+      } catch (err) {
+        toastApiError(err, '删除失败')
       }
-    }
+    },
   })
 }
 
-// 同步远程厂商
 async function handleSync() {
   syncing.value = true
   try {
-    // 获取远程厂商数据
     const remoteData = await providerApi.syncRemoteProviders()
-
-    // 重置分页为第一页
+    remoteProviders.value = remoteData
+    checkedProviderIds.value = remoteData.filter((item) => localProviderIds.value.has(item.id)).map((item) => item.id)
+    syncKeyword.value = ''
     syncPagination.page = 1
 
-    // 重置选中状态
-    checkedProviderIds.value = []
-
-    // 设置远程厂商数据
-    remoteProviders.value = remoteData
-
-    // 等待 Vue 更新
     await nextTick()
-
-    // 显示同步对话框
     showSyncDialog.value = true
-
-    window.$message?.success(`成功获取 ${remoteData.length} 个远程厂商`)
-  } catch (error: any) {
-    console.error('Failed to sync providers:', error)
-    window.$message?.error(error.response?.data?.error || '同步远程厂商失败')
+    window.$message?.success(`已拉取远程厂商 ${remoteData.length} 条`)
+  } catch (err) {
+    toastApiError(err, '同步失败')
   } finally {
     syncing.value = false
   }
 }
 
-// 添加选中的同步厂商
 async function handleAddSyncProviders() {
-  if (checkedProviderIds.value.length === 0) {
-    window.$message?.warning('请至少选择一个厂商')
+  if (!checkedProviderIds.value.length) {
+    window.$message?.warning('请先选择要导入的厂商')
     return
   }
 
   adding.value = true
   try {
-    // 根据选中的 ID 找到对应的远程厂商数据
-    const selectedProviders = remoteProviders.value.filter((rp: RemoteProvider) =>
-        checkedProviderIds.value.includes(rp.id)
+    const selectedProviders = remoteProviders.value.filter(
+      (item) => checkedProviderIds.value.includes(item.id) && !localProviderIds.value.has(item.id),
     )
 
-    // 转换为创建请求格式
-    const createRequests: CreateProviderRequest[] = selectedProviders.map((sp: RemoteProvider) => ({
-      id: sp.id,
-      name: sp.name,
-      icon: sp.iconURL,
-      lobeIcon: sp.lobeIcon,
-      remark: sp.name
+    if (selectedProviders.length === 0) {
+      window.$message?.info('当前选中项均已存在，本次无需导入')
+      return
+    }
+
+    const payload: CreateProviderRequest[] = selectedProviders.map((item) => ({
+      id: item.id,
+      name: item.name,
+      icon: item.iconURL,
+      remark: item.name,
     }))
 
-    // 批量创建厂商
-    const result = await providerApi.batchCreate(createRequests)
-
+    const result = await providerApi.batchCreate(payload)
     if (result.created > 0) {
-      window.$message?.success(`成功添加 ${result.created} 个厂商${result.failed > 0 ? `，${result.failed} 个失败` : ''}`)
-      // 关闭对话框并刷新列表
+      window.$message?.success(`导入成功 ${result.created} 条${result.failed > 0 ? `，失败 ${result.failed} 条` : ''}`)
       showSyncDialog.value = false
-      checkedProviderIds.value = []
-      remoteProviders.value = []
-
       await loadProviders()
     } else {
-      window.$message?.error('批量创建失败')
+      window.$message?.error('没有可导入的厂商')
     }
-  } catch (error: any) {
-    console.error('Failed to add sync providers:', error)
-    window.$message?.error(error.response?.data?.error || '添加厂商失败')
+  } catch (err) {
+    toastApiError(err, '导入失败')
   } finally {
     adding.value = false
   }
 }
 
-// 初始化
-onMounted(() => {
-  loadProviders()
-})
-
-// 监听同步对话框关闭，重置状态
-watch(showSyncDialog, (newVal) => {
-  if (!newVal) {
-    // 对话框关闭时重置状态
+watch(showSyncDialog, (open) => {
+  if (!open) {
     checkedProviderIds.value = []
     remoteProviders.value = []
+    syncKeyword.value = ''
     syncPagination.page = 1
   }
+})
+
+onMounted(() => {
+  loadProviders()
 })
 </script>
 
 <style scoped>
-/* 页面头部卡片 */
-.page-header-card {
-  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  border-radius: 12px;
-  padding: 24px;
+.table-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
-
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #333;
-  line-height: 1.4;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  line-height: 1.6;
-}
-
 </style>

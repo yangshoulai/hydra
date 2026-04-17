@@ -34,8 +34,8 @@ func NewProviderHandler(
 // @Security BearerAuth
 // @Param request body admin.CreateProviderRequest true "创建请求"
 // @Success 201 {object} models.Provider
-// @Failure 400 {object} map[string]interface{}
-// @Failure 409 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 409 {object} map[string]any
 // @Router /admin/api/providers [post]
 func (h *ProviderHandler) CreateProvider(c *gin.Context) {
 	var req admin.CreateProviderRequest
@@ -85,9 +85,9 @@ func (h *ProviderHandler) CreateProvider(c *gin.Context) {
 // @Param id path string true "厂商ID"
 // @Param request body admin.UpdateProviderRequest true "更新请求"
 // @Success 200 {object} models.Provider
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 409 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
+// @Failure 409 {object} map[string]any
 // @Router /admin/api/providers/{id} [put]
 func (h *ProviderHandler) UpdateProvider(c *gin.Context) {
 	id := c.Param("id")
@@ -131,9 +131,9 @@ func (h *ProviderHandler) UpdateProvider(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path string true "厂商ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Failure 409 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 404 {object} map[string]any
+// @Failure 409 {object} map[string]any
 // @Router /admin/api/providers/{id} [delete]
 func (h *ProviderHandler) DeleteProvider(c *gin.Context) {
 	id := c.Param("id")
@@ -199,7 +199,7 @@ func (h *ProviderHandler) ListProviders(c *gin.Context) {
 // @Security BearerAuth
 // @Param id path string true "厂商ID"
 // @Success 200 {object} models.Provider
-// @Failure 404 {object} map[string]interface{}
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/providers/{id} [get]
 func (h *ProviderHandler) GetProvider(c *gin.Context) {
 	id := c.Param("id")
@@ -233,7 +233,7 @@ func (h *ProviderHandler) GetProvider(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Success 200 {array} admin.RemoteProvider
-// @Failure 500 {object} map[string]interface{}
+// @Failure 500 {object} map[string]any
 // @Router /admin/api/providers/sync [get]
 func (h *ProviderHandler) SyncRemoteProviders(c *gin.Context) {
 	providers, err := h.providerService.SyncProviders(c.Request.Context())
@@ -258,8 +258,8 @@ func (h *ProviderHandler) SyncRemoteProviders(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param request body []admin.CreateProviderRequest true "厂商列表"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
 // @Router /admin/api/providers/batch [post]
 func (h *ProviderHandler) BatchCreateProviders(c *gin.Context) {
 	var req []admin.CreateProviderRequest
@@ -273,11 +273,11 @@ func (h *ProviderHandler) BatchCreateProviders(c *gin.Context) {
 		return
 	}
 
-	createdProviders, errors := h.providerService.BatchCreateProviders(c.Request.Context(), req)
+	createdProviders, errs := h.providerService.BatchCreateProviders(c.Request.Context(), req)
 
 	c.JSON(http.StatusOK, gin.H{
 		"created": len(createdProviders),
-		"failed":  len(errors),
+		"failed":  len(errs),
 		"data":    createdProviders,
 	})
 }

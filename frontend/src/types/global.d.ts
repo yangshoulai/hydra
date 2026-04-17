@@ -1,17 +1,10 @@
-/**
- * 全局类型定义
- */
+import type { DialogApi, MessageApi, NotificationApi } from 'naive-ui'
 
 declare global {
   interface Window {
-    $message: {
-      success: (content: string) => void
-      error: (content: string) => void
-      warning: (content: string) => void
-      info: (content: string) => void
-    }
-    $dialog: any
-    $notification: any
+    $message: MessageApi
+    $dialog: DialogApi
+    $notification: NotificationApi
   }
 }
 

@@ -36,7 +36,7 @@ func NewModelHandler(
 // @Security BearerAuth
 // @Param request body admin.CreateModelRequest true "创建请求"
 // @Success 201 {object} models.Model
-// @Failure 400 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
 // @Router /admin/api/models [post]
 func (h *ModelHandler) CreateModel(c *gin.Context) {
 	var req admin.CreateModelRequest
@@ -89,8 +89,8 @@ func (h *ModelHandler) CreateModel(c *gin.Context) {
 // @Param id path int true "模型ID"
 // @Param request body admin.UpdateModelRequest true "更新请求"
 // @Success 200 {object} models.Model
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/models/{id} [put]
 func (h *ModelHandler) UpdateModel(c *gin.Context) {
 	idStr := c.Param("id")
@@ -147,8 +147,8 @@ func (h *ModelHandler) UpdateModel(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "模型ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/models/{id} [delete]
 func (h *ModelHandler) DeleteModel(c *gin.Context) {
 	idStr := c.Param("id")
@@ -202,7 +202,7 @@ func (h *ModelHandler) DeleteModel(c *gin.Context) {
 // @Param sort_by query string false "排序字段" Enums(id,name)
 // @Param sort_order query string false "排序方向" Enums(asc,desc)
 // @Success 200 {object} admin.ModelListResponse
-// @Failure 400 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
 // @Router /admin/api/models [get]
 func (h *ModelHandler) ListModels(c *gin.Context) {
 	var req admin.ModelListRequest
@@ -239,7 +239,7 @@ func (h *ModelHandler) ListModels(c *gin.Context) {
 // @Security BearerAuth
 // @Param id path int true "模型ID"
 // @Success 200 {object} models.Model
-// @Failure 404 {object} map[string]interface{}
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/models/{id} [get]
 func (h *ModelHandler) GetModel(c *gin.Context) {
 	idStr := c.Param("id")

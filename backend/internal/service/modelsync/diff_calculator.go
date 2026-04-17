@@ -1,7 +1,6 @@
 package modelsync
 
 import (
-	"log/slog"
 	"sort"
 	"strings"
 
@@ -20,8 +19,8 @@ const (
 // ModelDiff 模型差异项
 type ModelDiff struct {
 	Type           ModelDiffType              `json:"type"`
-	UnifiedModel   string                     `json:"unified_model"`
-	UpstreamModel  string                     `json:"upstream_model"`
+	Model          string                     `json:"model"`
+	ChannelModel   string                     `json:"channel_model"`
 	KeyGroups      []string                   `json:"key_groups"`
 	ExistingConfig *models.ChannelModelConfig `json:"existing_config,omitempty"` // 对于存量模型，包含现有配置
 }
@@ -37,15 +36,11 @@ type SyncDiff struct {
 }
 
 // DiffCalculator 模型差异计算器
-type DiffCalculator struct {
-	logger *slog.Logger
-}
+type DiffCalculator struct{}
 
 // NewDiffCalculator 创建差异计算器
-func NewDiffCalculator(logger *slog.Logger) *DiffCalculator {
-	return &DiffCalculator{
-		logger: logger,
-	}
+func NewDiffCalculator() *DiffCalculator {
+	return &DiffCalculator{}
 }
 
 // Calculate 计算上游模型和本地配置的差异
@@ -62,10 +57,10 @@ func (dc *DiffCalculator) Calculate(
 		upstreamSet[model] = true
 	}
 
-	// 构建本地模型映射（unified_model -> config）
+	// 构建本地模型映射（channel_model -> config）
 	localMap := make(map[string]*models.ChannelModelConfig)
 	for _, config := range localConfigs {
-		localMap[config.UpstreamModel] = config
+		localMap[config.ChannelModel] = config
 	}
 
 	diff := &SyncDiff{
@@ -82,8 +77,8 @@ func (dc *DiffCalculator) Calculate(
 			// 存量模型
 			diff.Diffs = append(diff.Diffs, ModelDiff{
 				Type:           DiffTypeExisting,
-				UnifiedModel:   localConfig.UnifiedModel,
-				UpstreamModel:  upstreamModel,
+				Model:          localConfig.Model,
+				ChannelModel:   upstreamModel,
 				KeyGroups:      keyGroups,
 				ExistingConfig: localConfig,
 			})
@@ -91,10 +86,10 @@ func (dc *DiffCalculator) Calculate(
 		} else {
 			// 新增模型
 			diff.Diffs = append(diff.Diffs, ModelDiff{
-				Type:          DiffTypeAdded,
-				UnifiedModel:  "", // 需要用户手动指定
-				UpstreamModel: upstreamModel,
-				KeyGroups:     keyGroups,
+				Type:         DiffTypeAdded,
+				Model:        "", // 需要用户手动指定
+				ChannelModel: upstreamModel,
+				KeyGroups:    keyGroups,
 			})
 			diff.AddedCount++
 		}
@@ -106,8 +101,8 @@ func (dc *DiffCalculator) Calculate(
 			// 本地有但上游没有
 			diff.Diffs = append(diff.Diffs, ModelDiff{
 				Type:           DiffTypeRemoved,
-				UnifiedModel:   localConfig.UnifiedModel,
-				UpstreamModel:  upstreamModel,
+				Model:          localConfig.Model,
+				ChannelModel:   upstreamModel,
 				KeyGroups:      resolveKeyGroups(nil, localConfig),
 				ExistingConfig: localConfig,
 			})
@@ -156,7 +151,7 @@ func normalizeKeyGroups(groups []string) []string {
 // 顺序: added -> existing -> removed，同类型按模型名排序
 func sortDiffs(diffs []ModelDiff) {
 	sort.Slice(diffs, func(i, j int) bool {
-		// 类型优先级
+		// 类型权重
 		typeOrder := map[ModelDiffType]int{
 			DiffTypeAdded:    0,
 			DiffTypeExisting: 1,
@@ -171,39 +166,6 @@ func sortDiffs(diffs []ModelDiff) {
 		}
 
 		// 同类型按上游模型名排序
-		return diffs[i].UpstreamModel < diffs[j].UpstreamModel
+		return diffs[i].ChannelModel < diffs[j].ChannelModel
 	})
-}
-
-// GetAddedModels 获取新增的模型列表
-func (sd *SyncDiff) GetAddedModels() []ModelDiff {
-	result := make([]ModelDiff, 0)
-	for _, diff := range sd.Diffs {
-		if diff.Type == DiffTypeAdded {
-			result = append(result, diff)
-		}
-	}
-	return result
-}
-
-// GetRemovedModels 获取移除的模型列表
-func (sd *SyncDiff) GetRemovedModels() []ModelDiff {
-	result := make([]ModelDiff, 0)
-	for _, diff := range sd.Diffs {
-		if diff.Type == DiffTypeRemoved {
-			result = append(result, diff)
-		}
-	}
-	return result
-}
-
-// GetExistingModels 获取存量模型列表
-func (sd *SyncDiff) GetExistingModels() []ModelDiff {
-	result := make([]ModelDiff, 0)
-	for _, diff := range sd.Diffs {
-		if diff.Type == DiffTypeExisting {
-			result = append(result, diff)
-		}
-	}
-	return result
 }

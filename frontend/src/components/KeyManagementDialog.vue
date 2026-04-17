@@ -93,9 +93,9 @@
             label-placement="top"
             size="large"
         >
-          <n-form-item label="密钥值" path="key_value">
+          <n-form-item label="密钥值" path="channel_key_value">
             <n-input
-                v-model:value="keyForm.key_value"
+                v-model:value="keyForm.channel_key_value"
                 type="textarea"
                 placeholder="每行输入一个密钥，支持批量添加多个密钥&#10;例如：&#10;sk-xxxxxxxxxxxxxxxxxxxxxxxx&#10;sk-yyyyyyyyyyyyyyyyyyyyyyyy&#10;sk-zzzzzzzzzzzzzzzzzzzzzzzz"
                 :autosize="{ minRows: 6, maxRows: 12 }"
@@ -111,9 +111,9 @@
             </template>
           </n-form-item>
 
-          <n-form-item label="密钥分组" path="key_group">
+          <n-form-item label="密钥分组" path="channel_key_group">
             <n-select
-                v-model:value="keyForm.key_group"
+                v-model:value="keyForm.channel_key_group"
                 :options="keyGroupOptions"
                 placeholder="请选择或输入分组"
                 filterable
@@ -207,6 +207,7 @@ import {
 import {channelApi} from '../services/channelService'
 import KeyHealthTable from './KeyHealthTable.vue'
 import type {ChannelHealthCheckResult} from '../types/channel'
+import {toastApiError} from '@/utils/error'
 
 interface Props {
   channelId: number
@@ -233,15 +234,15 @@ const keyHealthTableRef = ref<InstanceType<typeof KeyHealthTable> | null>(null)
 
 // Key表单
 const keyForm = reactive({
-  key_value: '',
+  channel_key_value: '',
   remark: '',
-  key_group: 'Default'
+  channel_key_group: 'Default'
 })
 
 // 计算密钥行数（用于显示添加数量）
 const keyLineCount = computed(() => {
-  if (!keyForm.key_value.trim()) return 0
-  return keyForm.key_value
+  if (!keyForm.channel_key_value.trim()) return 0
+  return keyForm.channel_key_value
       .split('\n')
       .map(line => line.trim())
       .filter(line => line.length > 0)
@@ -249,12 +250,12 @@ const keyLineCount = computed(() => {
 })
 
 const keyRules = {
-  key_value: {
+  channel_key_value: {
     required: true,
     message: '请输入密钥值',
     trigger: ['blur', 'input']
   },
-  key_group: {
+  channel_key_group: {
     required: true,
     message: '请选择密钥分组',
     trigger: ['blur', 'change']
@@ -283,7 +284,7 @@ async function handleTestKeys() {
     keyHealthTableRef.value?.setTestingAll()
 
     // 执行测试
-    const result = await channelApi.testKeys(props.channelId)
+    const result = await channelApi.testChannelKeys(props.channelId)
     healthResult.value = result
 
     // 更新测试结果
@@ -295,10 +296,9 @@ async function handleTestKeys() {
     // 通知父组件刷新
     emit('refresh')
 
-    window.$message?.success(`测活完成: 健康 ${result.healthy_keys}/${result.total_keys}`)
-  } catch (error: any) {
-    console.error('Failed to test keys:', error)
-    window.$message?.error(error.response?.data?.error || '测试Keys失败')
+    window.$message?.success(`测活完成: 健康 ${result.healthy_channel_keys}/${result.total_channel_keys}`)
+  } catch (err) {
+    toastApiError(err, '测试Keys失败')
   } finally {
     testing.value = false
   }
@@ -306,20 +306,20 @@ async function handleTestKeys() {
 
 // 添加Key（支持批量添加）
 async function handleAddKey() {
-  if (!keyForm.key_value.trim()) {
+  if (!keyForm.channel_key_value.trim()) {
     window.$message?.error('请输入密钥值')
     return
   }
 
-  const keyGroup = keyForm.key_group.trim() || 'Default'
+  const keyGroup = keyForm.channel_key_group.trim() || 'Default'
 
   // 分割多行密钥，去除空行
-  const keys = keyForm.key_value
+  const channelKeys = keyForm.channel_key_value
       .split('\n')
       .map(line => line.trim())
       .filter(line => line.length > 0)
 
-  if (keys.length === 0) {
+  if (channelKeys.length === 0) {
     window.$message?.error('请输入有效的密钥值')
     return
   }
@@ -328,9 +328,9 @@ async function handleAddKey() {
 
   try {
     // 使用批量添加接口
-    const result = await channelApi.batchAddKeys(
+    const result = await channelApi.batchAddChannelKeys(
         props.channelId,
-        keys,
+        channelKeys,
         keyForm.remark,
         keyGroup
     )
@@ -339,9 +339,9 @@ async function handleAddKey() {
     if (result.failed_count === 0) {
       window.$message?.success(`成功添加 ${result.success_count} 个密钥`)
       showAddKeyDialog.value = false
-      keyForm.key_value = ''
+      keyForm.channel_key_value = ''
       keyForm.remark = ''
-      keyForm.key_group = 'Default'
+      keyForm.channel_key_group = 'Default'
 
       // 刷新Key列表
       await keyHealthTableRef.value?.refresh()
@@ -354,9 +354,9 @@ async function handleAddKey() {
       window.$message?.warning(`添加完成：成功 ${result.success_count} 个，失败 ${result.failed_count} 个`)
       // 如果有成功的，也关闭对话框并刷新
       showAddKeyDialog.value = false
-      keyForm.key_value = ''
+      keyForm.channel_key_value = ''
       keyForm.remark = ''
-      keyForm.key_group = 'Default'
+      keyForm.channel_key_group = 'Default'
 
       // 刷新Key列表
       await keyHealthTableRef.value?.refresh()
@@ -364,9 +364,8 @@ async function handleAddKey() {
       // 通知父组件刷新
       emit('refresh')
     }
-  } catch (error: any) {
-    console.error('Failed to add keys:', error)
-    window.$message?.error(error.response?.data?.error || '添加失败')
+  } catch (err) {
+    toastApiError(err, '添加失败')
   } finally {
     adding.value = false
   }
@@ -385,9 +384,9 @@ async function loadKeyGroups() {
   try {
     const channel = await channelApi.get(props.channelId)
     const groups = new Set<string>()
-    channel.keys?.forEach((key) => {
-      if (key.key_group) {
-        groups.add(key.key_group)
+    channel.channel_keys?.forEach((channelKey) => {
+      if (channelKey.channel_key_group) {
+        groups.add(channelKey.channel_key_group)
       }
     })
     if (groups.size === 0) {

@@ -3,6 +3,7 @@ package admin
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"crypto/rand"
@@ -32,16 +33,17 @@ func NewTokensHandler(
 
 // TokenListResponse 令牌列表响应
 type TokenListResponse struct {
-	ID               uint    `json:"id"`
-	Name             string  `json:"name"`
-	Token            string  `json:"token"`         // 明文令牌（用于复制）
-	TokenPreview     string  `json:"token_preview"` // 脱敏令牌（前8位+***+后4位）
-	Status           string  `json:"status"`
-	CreatedAt        string  `json:"created_at"`
-	LastUsedAt       *string `json:"last_used_at,omitempty"`
-	ExpiresAt        *string `json:"expires_at,omitempty"` // 过期时间
-	PromptTokens     int64   `json:"prompt_tokens"`
-	CompletionTokens int64   `json:"completion_tokens"`
+	ID               uint     `json:"id"`
+	Name             string   `json:"name"`
+	Token            string   `json:"token"`         // 明文令牌（用于复制）
+	TokenPreview     string   `json:"token_preview"` // 脱敏令牌（前8位+***+后4位）
+	Status           string   `json:"status"`
+	CreatedAt        string   `json:"created_at"`
+	LastUsedAt       *string  `json:"last_used_at,omitempty"`
+	ExpiresAt        *string  `json:"expires_at,omitempty"` // 过期时间
+	PromptTokens     int64    `json:"prompt_tokens"`
+	CompletionTokens int64    `json:"completion_tokens"`
+	AllowedModels    []string `json:"allowed_models"`
 }
 
 // TokenListRequest 令牌列表请求
@@ -65,8 +67,15 @@ type TokenListData struct {
 
 // CreateTokenRequest 创建令牌请求
 type CreateTokenRequest struct {
-	Name      string `json:"name" binding:"required,max=20"`
-	ExpiresAt string `json:"expires_at,omitempty"` // 过期时间，格式：2006-01-02 15:04:05，空字符串表示永不过期
+	Name          string   `json:"name" binding:"required,max=20"`
+	ExpiresAt     string   `json:"expires_at,omitempty"` // 过期时间，格式：2006-01-02 15:04:05，空字符串表示永不过期
+	AllowedModels []string `json:"allowed_models,omitempty"`
+}
+
+// UpdateTokenModelsRequest 更新令牌模型权限
+// 空数组表示取消限制（可访问全部模型）
+type UpdateTokenModelsRequest struct {
+	AllowedModels []string `json:"allowed_models"`
 }
 
 // CreateTokenResponse 创建令牌响应
@@ -162,6 +171,7 @@ func (h *TokensHandler) GetTokens(c *gin.Context) {
 			ExpiresAt:        expiresAt,
 			PromptTokens:     token.PromptTokens,
 			CompletionTokens: token.CompletionTokens,
+			AllowedModels:    []string(token.AllowedModels),
 		})
 	}
 
@@ -236,12 +246,13 @@ func (h *TokensHandler) CreateToken(c *gin.Context) {
 
 	// 创建令牌记录（存储哈希值和明文）
 	token := &models.AccessToken{
-		Token:        accessToken,
-		TokenHash:    models.HashToken(accessToken),
-		TokenPreview: tokenPreview,
-		Status:       "active",
-		Name:         req.Name,
-		ExpiresAt:    expiresAt,
+		Token:         accessToken,
+		TokenHash:     models.HashToken(accessToken),
+		TokenPreview:  tokenPreview,
+		Status:        "active",
+		Name:          req.Name,
+		ExpiresAt:     expiresAt,
+		AllowedModels: sanitizeAllowedModels(req.AllowedModels),
 	}
 
 	if err := h.tokenRepo.Create(c.Request.Context(), token); err != nil {
@@ -369,6 +380,52 @@ func (h *TokensHandler) ToggleTokenStatus(c *gin.Context) {
 	})
 }
 
+// UpdateTokenModels 更新令牌可访问模型
+// PATCH /admin/api/tokens/:id/models
+func (h *TokensHandler) UpdateTokenModels(c *gin.Context) {
+	idStr := c.Param("id")
+	var id uint
+	if _, err := fmt.Sscanf(idStr, "%d", &id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid token ID",
+		})
+		return
+	}
+
+	var req UpdateTokenModelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+		})
+		return
+	}
+
+	token, err := h.tokenRepo.FindByID(c.Request.Context(), id)
+	if err != nil || token == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Token not found",
+		})
+		return
+	}
+
+	token.AllowedModels = sanitizeAllowedModels(req.AllowedModels)
+	if err := h.tokenRepo.Update(c.Request.Context(), token); err != nil {
+		h.logger.Error("更新令牌模型权限异常",
+			slog.Int64("token_id", int64(id)),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update token models",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "Token model permissions updated successfully",
+		"allowed_models": []string(token.AllowedModels),
+	})
+}
+
 // RegisterRoutes 注册路由
 func (h *TokensHandler) RegisterRoutes(router *gin.RouterGroup) {
 	tokens := router.Group("/tokens")
@@ -377,7 +434,34 @@ func (h *TokensHandler) RegisterRoutes(router *gin.RouterGroup) {
 		tokens.POST("", h.CreateToken)
 		tokens.DELETE("/:id", h.DeleteToken)
 		tokens.PATCH("/:id/toggle", h.ToggleTokenStatus)
+		tokens.PATCH("/:id/models", h.UpdateTokenModels)
 	}
+}
+
+func sanitizeAllowedModels(raw []string) models.AllowedModels {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(raw))
+	normalized := make([]string, 0, len(raw))
+	for _, item := range raw {
+		model := strings.TrimSpace(item)
+		if model == "" {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		normalized = append(normalized, model)
+	}
+
+	if len(normalized) == 0 {
+		return nil
+	}
+
+	return models.AllowedModels(normalized)
 }
 
 // generateAccessToken 生成随机访问令牌

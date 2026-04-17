@@ -1,26 +1,448 @@
 /* ===================================
-   Hydra API Gateway - Global Styles
-   设计系统：统一、现代、专业的管理后台
+   Hydra 管理后台设计系统（黑白版）
    =================================== */
 
-/* Tailwind CSS v4 导入 */
 @import "tailwindcss";
 
-/* Tailwind v4 主题配置 */
-@theme {
-    /* 颜色系统 */
-    --color-primary-50: #f5f7ff;
-    --color-primary-100: #ebf0ff;
-    --color-primary-200: #d6dfff;
-    --color-primary-300: #b3c3ff;
-    --color-primary-400: #8a9fff;
-    --color-primary-500: #667eea;
-    --color-primary-600: #5568d3;
-    --color-primary-700: #4653b8;
-    --color-primary-800: #3a4495;
-    --color-primary-900: #2f3775;
+:root {
+  --hydra-bg: #f5f5f5;
+  --hydra-bg-elevated: #ffffff;
+  --hydra-bg-soft: #fafafa;
+  --hydra-bg-subtle: #f8f8f8;
+  --hydra-text: #111111;
+  --hydra-text-secondary: #262626;
+  --hydra-text-tertiary: #737373;
+  --hydra-border: #e3e3e3;
+  --hydra-border-strong: #cfcfcf;
+  --hydra-primary: #111111;
+  --hydra-primary-hover: #000000;
+  --hydra-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+  --hydra-radius-lg: 14px;
+  --hydra-radius-md: 10px;
+  --hydra-radius-sm: 8px;
+}
 
-    --color-secondary-500: #7c3aed;
-    --color-secondary-600: #9333ea;
-    --color-secondary-700: #7e22ce;
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--hydra-text);
+  background: var(--hydra-bg);
+}
+
+body {
+  overflow: hidden;
+}
+
+.app-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.page-shell {
+  background: #ffffff;
+  border: 1px solid var(--hydra-border);
+  border-radius: var(--hydra-radius-md);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
+}
+
+.page-shell__header {
+  padding: 12px 16px;
+}
+
+.page-shell__title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--hydra-text);
+}
+
+.page-shell__content {
+  padding: 12px 16px 14px;
+}
+
+.panel-card {
+  background: var(--hydra-bg-elevated);
+  border: 1px solid #dbdbdb;
+  border-radius: var(--hydra-radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.panel-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e5e5;
+  background: var(--hydra-bg-subtle);
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+  background-clip: padding-box;
+}
+
+.panel-card__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--hydra-text-secondary);
+}
+
+.panel-card__body {
+  padding: 12px 14px;
+}
+
+.table-inline-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--hydra-border);
+  border-radius: 12px;
+  background: #fcfcfc;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-toolbar__filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.table-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* 固定筛选控件宽度，覆盖 naive-ui 默认的 width:100%（因注入顺序较晚需要 !important） */
+.table-filter-input {
+  width: 200px !important;
+  flex: 0 0 200px;
+}
+
+.table-filter-select {
+  width: 200px !important;
+  flex: 0 0 200px;
+}
+
+.muted {
+  color: var(--hydra-text-tertiary);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.metric-tile {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--hydra-border);
+  background: #ffffff;
+}
+
+.metric-tile__label {
+  font-size: 11px;
+  color: var(--hydra-text-tertiary);
+}
+
+.metric-tile__value {
+  margin-top: 7px;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 720;
+  color: var(--hydra-text);
+}
+
+.inline-code {
+  font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.table-action-group {
+  flex-wrap: nowrap !important;
+}
+
+.table-action-btn {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+}
+
+.table-action-btn .n-icon {
+  font-size: 14px;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cfcfcf transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cfcfcf;
+  border-radius: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Naive UI 全局细节增强 */
+.n-button {
+  border-radius: 10px;
+}
+
+.n-input,
+.n-base-selection,
+.n-input-number {
+  border-radius: 10px;
+}
+
+.n-card {
+  border-radius: 12px;
+}
+
+.n-form-item .n-form-item-label .n-form-item-label__text {
+  font-size: 12px;
+  font-weight: 580;
+  color: #404040;
+}
+
+/* 统一：移除所有表单项的 feedback 占位以防布局抖动 —— 仅用 placeholder 提示 */
+.n-form-item .n-form-item-feedback-wrapper {
+  min-height: 0 !important;
+  padding: 0 !important;
+  display: none !important;
+}
+
+/* 表单项之间的垂直间距（因为 feedback-wrapper 被隐藏，需自行补回） */
+.n-form-item {
+  margin-bottom: 18px;
+}
+
+.n-form-item:last-child {
+  margin-bottom: 0;
+}
+
+.n-form.n-form--top-form .n-form-item {
+  margin-bottom: 18px;
+}
+
+.n-form.n-form--top-form .n-form-item:last-child {
+  margin-bottom: 0;
+}
+
+/* n-grid 内的 form-item 已由 y-gap 控制间距，这里让 item 自身不再额外占空间 */
+.n-grid .n-form-item,
+.n-grid .n-form-item.n-form-item--top-labelled,
+.n-grid .n-form-item.n-form-item--left-labelled {
+  margin-bottom: 0;
+}
+
+.n-data-table {
+  font-size: 12px;
+}
+
+.n-data-table .n-data-table-th {
+  font-size: 11px;
+  font-weight: 620;
+  color: #404040;
+}
+
+.n-data-table .n-data-table-td {
+  color: #171717;
+  line-height: 1.35;
+}
+
+/* 统一的胶囊式 Tag 样式 */
+.n-tag {
+  border-radius: 999px !important;
+  font-weight: 550 !important;
+  letter-spacing: 0.2px;
+  padding: 0 10px !important;
+}
+
+.n-tag.n-tag--small {
+  --n-height: 20px !important;
+  height: 20px !important;
+  line-height: 18px !important;
+  font-size: 11px !important;
+}
+
+.n-tag:where(:not(.n-tag--bordered))[class*="n-tag--default"],
+.n-tag:where(.n-tag--default, [type="default"]):not(.n-tag--bordered) {
+  background-color: #f0f0f0 !important;
+  color: #404040 !important;
+}
+
+.n-tag.n-tag--success:not(.n-tag--bordered) {
+  background-color: #ececec !important;
+  color: #1f1f1f !important;
+}
+
+.n-tag.n-tag--warning:not(.n-tag--bordered) {
+  background-color: #efefef !important;
+  color: #2d2d2d !important;
+}
+
+.n-tag.n-tag--error:not(.n-tag--bordered) {
+  background-color: #e6e6e6 !important;
+  color: #111111 !important;
+}
+
+.n-tag.n-tag--info:not(.n-tag--bordered) {
+  background-color: #f0f0f0 !important;
+  color: #3a3a3a !important;
+}
+
+.form-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--hydra-text-tertiary);
+}
+
+.form-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+:where(
+  button,
+  [role="button"],
+  a,
+  input,
+  textarea,
+  select,
+  .n-button,
+  .n-input,
+  .n-base-selection
+):focus-visible {
+  outline: 2px solid rgba(17, 17, 17, 0.5);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1200px) {
+  .page-shell__title {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 960px) {
+  .app-page {
+    gap: 10px;
+  }
+
+  .page-shell__header {
+    padding: 10px 12px;
+  }
+
+  .page-shell__content {
+    padding: 10px 12px 12px;
+  }
+
+  .page-shell__title {
+    font-size: 16px;
+  }
+
+  .panel-card__header {
+    padding: 10px 12px;
+  }
+
+  .panel-card__body {
+    padding: 10px 12px;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-tile__value {
+    font-size: 18px;
+  }
+
+  .table-filter-input {
+    width: 100% !important;
+    min-width: 160px;
+    flex: 1 1 160px;
+  }
+
+  .table-filter-select {
+    width: 140px !important;
+    flex: 0 0 140px;
+  }
+
+  .n-data-table {
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

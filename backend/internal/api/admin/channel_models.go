@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
@@ -16,7 +17,7 @@ type ChannelModelHandler struct {
 	modelConfigRepo *repository.ChannelModelConfigRepository
 	channelRepo     *repository.ChannelRepository
 	logger          *slog.Logger
-	circuitManager  *circuit.Manager
+	circuitManager  *circuit.CircuitManager
 }
 
 // NewChannelModelHandler 创建渠道模型处理器
@@ -24,7 +25,7 @@ func NewChannelModelHandler(
 	modelConfigRepo *repository.ChannelModelConfigRepository,
 	channelRepo *repository.ChannelRepository,
 	logger *slog.Logger,
-	circuitManager *circuit.Manager,
+	circuitManager *circuit.CircuitManager,
 ) *ChannelModelHandler {
 	return &ChannelModelHandler{
 		modelConfigRepo: modelConfigRepo,
@@ -37,20 +38,24 @@ func NewChannelModelHandler(
 // CreateModelConfigRequest 创建模型配置请求
 type CreateModelConfigRequest struct {
 	ChannelID     uint     `json:"channel_id" binding:"required"`
-	UnifiedModel  string   `json:"unified_model" binding:"required,max=100"`
-	UpstreamModel string   `json:"upstream_model" binding:"required,max=100"`
+	Model         string   `json:"model" binding:"required,max=100"`
+	ChannelModel  string   `json:"channel_model" binding:"required,max=100"`
+	Weight        int      `json:"weight" binding:"omitempty,min=1,max=1000"`
 	EndpointTypes []string `json:"endpoint_types" binding:"omitempty"`
 	KeyGroups     []string `json:"key_groups" binding:"omitempty"`
+	TestPrompt    string   `json:"test_prompt" binding:"omitempty,max=4000"`
 	Remark        string   `json:"remark" binding:"omitempty,max=200"`
 }
 
 // UpdateModelConfigRequest 更新模型配置请求
 type UpdateModelConfigRequest struct {
-	UnifiedModel  string   `json:"unified_model" binding:"omitempty,max=100"`
-	UpstreamModel string   `json:"upstream_model" binding:"omitempty,max=100"`
+	Model         string   `json:"model" binding:"omitempty,max=100"`
+	ChannelModel  string   `json:"channel_model" binding:"omitempty,max=100"`
+	Weight        int      `json:"weight" binding:"omitempty,min=1,max=1000"`
 	EndpointTypes []string `json:"endpoint_types" binding:"omitempty"`
 	KeyGroups     []string `json:"key_groups" binding:"omitempty"`
-	Status        string   `json:"status" binding:"omitempty,oneof=active disabled cooling"`
+	TestPrompt    *string  `json:"test_prompt" binding:"omitempty,max=4000"`
+	Status        string   `json:"status" binding:"omitempty,oneof=active inactive"`
 	Remark        string   `json:"remark" binding:"omitempty,max=200"`
 }
 
@@ -63,7 +68,7 @@ type UpdateModelConfigRequest struct {
 // @Security BearerAuth
 // @Param request body CreateModelConfigRequest true "创建模型配置请求"
 // @Success 201 {object} models.ChannelModelConfig
-// @Failure 400 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
 // @Router /admin/api/channel-models [post]
 func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	var req CreateModelConfigRequest
@@ -100,19 +105,25 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	// 创建模型配置对象
 	endpointTypes := req.EndpointTypes
 	if len(endpointTypes) == 0 {
-		endpointTypes = []string{"openai-chat"}
+		endpointTypes = []string{endpoint.TypeOpenAIChatCompletions}
 	}
 	keyGroups := req.KeyGroups
 	if len(keyGroups) == 0 {
 		keyGroups = []string{"Default"}
 	}
+	weight := req.Weight
+	if weight <= 0 {
+		weight = channel.Weight
+	}
 
 	modelConfig := &models.ChannelModelConfig{
 		ChannelID:     req.ChannelID,
-		UnifiedModel:  req.UnifiedModel,
-		UpstreamModel: req.UpstreamModel,
+		Model:         req.Model,
+		ChannelModel:  req.ChannelModel,
+		Weight:        weight,
 		EndpointTypes: endpointTypes,
 		KeyGroups:     models.KeyGroups(keyGroups),
+		TestPrompt:    req.TestPrompt,
 		Status:        "active",
 		Remark:        req.Remark,
 	}
@@ -121,8 +132,9 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	if err := h.modelConfigRepo.Create(c.Request.Context(), modelConfig); err != nil {
 		h.logger.Error("保存模型配置异常",
 			slog.Uint64("channel_id", uint64(req.ChannelID)),
-			slog.String("upstream_model", req.UpstreamModel),
-			slog.String("unified_model", req.UnifiedModel),
+			slog.String("channel_model", req.ChannelModel),
+			slog.String("model", req.Model),
+			slog.Int("model_weight", weight),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -134,8 +146,9 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 	h.logger.Info("模型配置已保存",
 		slog.Uint64("config_id", uint64(modelConfig.ID)),
 		slog.Uint64("channel_id", uint64(req.ChannelID)),
-		slog.String("unified_model", req.UnifiedModel),
-		slog.String("upstream_model", req.UpstreamModel),
+		slog.String("model", req.Model),
+		slog.String("channel_model", req.ChannelModel),
+		slog.Int("model_weight", modelConfig.Weight),
 	)
 
 	c.JSON(http.StatusCreated, modelConfig)
@@ -151,8 +164,8 @@ func (h *ChannelModelHandler) CreateChannelModel(c *gin.Context) {
 // @Param id path int true "配置ID"
 // @Param request body UpdateModelConfigRequest true "更新模型配置请求"
 // @Success 200 {object} models.ChannelModelConfig
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/channel-models/{id} [put]
 func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 	idStr := c.Param("id")
@@ -196,11 +209,14 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 	}
 
 	// 更新字段
-	if req.UnifiedModel != "" {
-		modelConfig.UnifiedModel = req.UnifiedModel
+	if req.Model != "" {
+		modelConfig.Model = req.Model
 	}
-	if req.UpstreamModel != "" {
-		modelConfig.UpstreamModel = req.UpstreamModel
+	if req.ChannelModel != "" {
+		modelConfig.ChannelModel = req.ChannelModel
+	}
+	if req.Weight > 0 {
+		modelConfig.Weight = req.Weight
 	}
 	if len(req.EndpointTypes) > 0 {
 		modelConfig.EndpointTypes = req.EndpointTypes
@@ -208,11 +224,11 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 	if len(req.KeyGroups) > 0 {
 		modelConfig.KeyGroups = models.KeyGroups(req.KeyGroups)
 	}
+	if req.TestPrompt != nil {
+		modelConfig.TestPrompt = *req.TestPrompt
+	}
 	if req.Status != "" {
 		modelConfig.Status = req.Status
-		if req.Status != "cooling" {
-			modelConfig.CoolingAt = nil
-		}
 	}
 	if req.Remark != "" {
 		modelConfig.Remark = req.Remark
@@ -223,8 +239,9 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 		h.logger.Error("模型配置更新异常",
 			slog.Uint64("config_id", id),
 			slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
-			slog.String("upstream_model", modelConfig.UpstreamModel),
-			slog.String("unified_model", modelConfig.UnifiedModel),
+			slog.String("channel_model", modelConfig.ChannelModel),
+			slog.String("model", modelConfig.Model),
+			slog.Int("model_weight", modelConfig.Weight),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -238,8 +255,9 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 	h.logger.Info("模型配置已更新",
 		slog.Uint64("config_id", uint64(modelConfig.ID)),
 		slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
-		slog.String("upstream_model", modelConfig.UpstreamModel),
-		slog.String("unified_model", modelConfig.UnifiedModel),
+		slog.String("channel_model", modelConfig.ChannelModel),
+		slog.String("model", modelConfig.Model),
+		slog.Int("model_weight", modelConfig.Weight),
 	)
 
 	c.JSON(http.StatusOK, modelConfig)
@@ -253,9 +271,9 @@ func (h *ChannelModelHandler) UpdateChannelModel(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "配置ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/channel-models/{id} [delete]
 func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 	idStr := c.Param("id")
@@ -292,8 +310,8 @@ func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 		h.logger.Error("删除模型配置异常",
 			slog.Uint64("config_id", id),
 			slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
-			slog.String("upstream_model", modelConfig.UpstreamModel),
-			slog.String("unified_model", modelConfig.UnifiedModel),
+			slog.String("channel_model", modelConfig.ChannelModel),
+			slog.String("model", modelConfig.Model),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -307,8 +325,8 @@ func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 	h.logger.Info("模型配置已删除",
 		slog.Uint64("config_id", id),
 		slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
-		slog.String("upstream_model", modelConfig.UpstreamModel),
-		slog.String("unified_model", modelConfig.UnifiedModel),
+		slog.String("channel_model", modelConfig.ChannelModel),
+		slog.String("model", modelConfig.Model),
 	)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -325,8 +343,8 @@ func (h *ChannelModelHandler) DeleteChannelModel(c *gin.Context) {
 // @Security BearerAuth
 // @Param id path int true "配置ID"
 // @Success 200 {object} models.ChannelModelConfig
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/channel-models/{id}/toggle-status [patch]
 func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
 	idStr := c.Param("id")
@@ -360,19 +378,18 @@ func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
 
 	// 切换状态
 	if modelConfig.Status == "active" {
-		modelConfig.Status = "disabled"
-	} else if modelConfig.Status == "disabled" || modelConfig.Status == "cooling" {
+		modelConfig.Status = "inactive"
+	} else if modelConfig.Status == "inactive" {
 		modelConfig.Status = "active"
 	}
-	modelConfig.CoolingAt = nil
 
 	// 保存更新
 	if err := h.modelConfigRepo.Update(c.Request.Context(), modelConfig); err != nil {
 		h.logger.Error("更新模型状态异常",
 			slog.Uint64("config_id", id),
 			slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
-			slog.String("upstream_model", modelConfig.UpstreamModel),
-			slog.String("unified_model", modelConfig.UnifiedModel),
+			slog.String("channel_model", modelConfig.ChannelModel),
+			slog.String("model", modelConfig.Model),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -386,8 +403,8 @@ func (h *ChannelModelHandler) ToggleChannelModelStatus(c *gin.Context) {
 	h.logger.Info("模型配置状态已更新",
 		slog.Uint64("config_id", uint64(modelConfig.ID)),
 		slog.Uint64("channel_id", uint64(modelConfig.ChannelID)),
-		slog.String("upstream_model", modelConfig.UpstreamModel),
-		slog.String("unified_model", modelConfig.UnifiedModel),
+		slog.String("channel_model", modelConfig.ChannelModel),
+		slog.String("model", modelConfig.Model),
 		slog.String("new_status", modelConfig.Status),
 	)
 

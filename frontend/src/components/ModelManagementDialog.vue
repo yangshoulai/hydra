@@ -1,368 +1,293 @@
 <template>
   <n-modal
-      v-model:show="show"
-      preset="card"
-      :title="`模型管理 - ${channelName}`"
-      style="width: 1400px"
-      :mask-closable="false"
-      :closable="true"
-      @close="handleClose"
-      :bordered="false"
-      class="model-management-dialog"
+    v-model:show="show"
+    preset="card"
+    :title="`模型配置 · ${channelName}`"
+    style="width: min(1320px, calc(100vw - 48px))"
+    :mask-closable="false"
+    :closable="true"
+    @close="handleClose"
   >
     <template #header-extra>
-      <n-space class="mr-4">
-        <n-button
-            type="info"
-            @click="handleSyncModels"
-            :loading="syncing"
-            size="medium"
-            secondary
-            strong
-        >
-          <template #icon>
-            <n-icon>
-              <SyncOutline/>
-            </n-icon>
-          </template>
-          同步上游模型
-        </n-button>
-        <n-button
-            type="primary"
-            @click="showAddModelDialog = true"
-            size="medium"
-            strong
-        >
-          <template #icon>
-            <n-icon>
-              <AddOutline/>
-            </n-icon>
-          </template>
-          添加模型
-        </n-button>
+      <n-space>
+        <n-button size="small" type="info" secondary :loading="syncing" @click="handleSyncModels">同步上游模型</n-button>
+        <n-button size="small" type="primary" @click="showAddModelDialog = true">手动添加</n-button>
       </n-space>
     </template>
 
-    <n-space vertical :size="20">
-      <!-- 统计信息卡片 -->
-      <n-card size="small" :bordered="false" class="stats-card">
-        <n-grid :cols="5" :x-gap="20" responsive="screen">
-          <n-grid-item>
-            <div class="stat-item">
-              <div class="stat-icon stat-icon-success">
-                <n-icon size="24">
-                  <CheckmarkCircleOutline/>
-                </n-icon>
-              </div>
-              <div class="stat-content">
-                <div class="stat-label">本地已配置</div>
-                <div class="stat-value stat-value-success">{{ stats.localConfigured }}</div>
-              </div>
-            </div>
-          </n-grid-item>
-          <n-grid-item>
-            <div class="stat-item">
-              <div class="stat-icon stat-icon-info">
-                <n-icon size="24">
-                  <CloudOutline/>
-                </n-icon>
-              </div>
-              <div class="stat-content">
-                <div class="stat-label">上游模型总数</div>
-                <div class="stat-value stat-value-info">{{ stats.upstreamTotal }}</div>
-              </div>
-            </div>
-          </n-grid-item>
-          <n-grid-item>
-            <div class="stat-item">
-              <div class="stat-icon stat-icon-primary">
-                <n-icon size="24">
-                  <AddCircleOutline/>
-                </n-icon>
-              </div>
-              <div class="stat-content">
-                <div class="stat-label">待添加</div>
-                <div class="stat-value stat-value-primary">{{ stats.toAdd }}</div>
-              </div>
-            </div>
-          </n-grid-item>
-          <n-grid-item>
-            <div class="stat-item">
-              <div class="stat-icon stat-icon-warning">
-                <n-icon size="24">
-                  <RemoveCircleOutline/>
-                </n-icon>
-              </div>
-              <div class="stat-content">
-                <div class="stat-label">待删除</div>
-                <div class="stat-value stat-value-warning">{{ stats.toRemove }}</div>
-              </div>
-            </div>
-          </n-grid-item>
-          <n-grid-item>
-            <div class="stat-item">
-              <div class="stat-icon stat-icon-default">
-                <n-icon size="24">
-                  <CheckboxOutline/>
-                </n-icon>
-              </div>
-              <div class="stat-content">
-                <div class="stat-label">已选中</div>
-                <div class="stat-value">{{ checkedKeys.length }}</div>
-              </div>
-            </div>
-          </n-grid-item>
-        </n-grid>
-      </n-card>
+    <n-space vertical :size="12">
+      <section class="metric-grid" style="grid-template-columns: repeat(4, minmax(140px, 1fr))">
+        <div class="metric-tile">
+          <div class="metric-tile__label">本地已配置</div>
+          <div class="metric-tile__value">{{ stats.localConfigured }}</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-tile__label">上游模型总数</div>
+          <div class="metric-tile__value">{{ stats.upstreamTotal }}</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-tile__label">待新增</div>
+          <div class="metric-tile__value">{{ stats.toAdd }}</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-tile__label">待删除</div>
+          <div class="metric-tile__value">{{ stats.toRemove }}</div>
+        </div>
+      </section>
 
-      <!-- 说明信息 -->
-      <n-alert
-          v-if="!hasSynced"
-          type="info"
-          :bordered="false"
-          class="info-alert"
-      >
-        <template #icon>
-          <n-icon>
-            <InformationCircleOutline/>
-          </n-icon>
-        </template>
-        当前显示本地已配置的模型列表。点击"同步上游模型"按钮可获取渠道的最新模型列表并合并显示。
-      </n-alert>
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">模型配置列表</h3>
+          <n-text depth="3" style="font-size: 12px">已选中 {{ checkedKeys.length }} 条</n-text>
+        </header>
+        <div class="panel-card__body">
+          <n-data-table
+            :columns="columns"
+            :data="displayModels"
+            :loading="loading"
+            :row-key="(row: ModelDisplayType) => row.key"
+            v-model:checked-row-keys="checkedKeys"
+            :pagination="pagination"
+            :single-line="false"
+            :scroll-x="1120"
+          />
+        </div>
+      </section>
 
-      <n-alert
-          v-else-if="syncFailed"
-          type="warning"
-          :bordered="false"
-          class="warning-alert"
-      >
-        <template #icon>
-          <n-icon>
-            <WarningOutline/>
-          </n-icon>
-        </template>
-        无法从上游渠道获取模型列表，仅显示本地已配置的模型。
-      </n-alert>
-
-      <n-alert
-          v-else
-          type="success"
-          :bordered="false"
-          class="success-alert"
-      >
-        <template #icon>
-          <n-icon>
-            <CheckmarkCircleOutline/>
-          </n-icon>
-        </template>
-        <n-ul style="margin: 0; padding-left: 20px;">
-          <n-li>
-            <n-text strong>已配置模型</n-text>
-            ：上游和本地都存在的模型，默认选中
-          </n-li>
-          <n-li>
-            <n-text strong>待添加模型</n-text>
-            ：仅上游存在的模型，需要手动勾选
-          </n-li>
-          <n-li>
-            <n-text strong>待删除模型</n-text>
-            ：仅本地存在的模型，默认选中且禁用（将被删除）
-          </n-li>
-        </n-ul>
-        <n-text depth="3" style="margin-top: 8px; display: block">
-          修改统一模型后，点击"保存更改"按钮批量保存选中的模型配置。
-        </n-text>
-      </n-alert>
-
-      <!-- 模型列表表格 -->
-      <n-data-table
-          :columns="columns"
-          :data="displayModels"
-          :loading="loading"
-          :pagination="pagination"
-          :row-key="(row: ModelDisplayType) => row.key"
-          size="small"
-          v-model:checked-row-keys="checkedKeys"
-          :bordered="true"
-          :scroll-x="1260"
-      />
-
-      <!-- 操作按钮 -->
-      <n-space justify="end" :size="12">
-        <n-button @click="handleClose" size="large">取消</n-button>
-        <n-button
-            type="primary"
-            @click="handleSave"
-            :loading="saving"
-            size="large"
-            strong
-        >
-          <template #icon>
-            <n-icon>
-              <SaveOutline/>
-            </n-icon>
-          </template>
-          保存更改 ({{ checkedKeys.length }})
-        </n-button>
+      <n-space justify="end">
+        <n-button @click="handleClose">取消</n-button>
+        <n-button type="primary" :loading="saving" @click="handleSave">保存变更</n-button>
       </n-space>
     </n-space>
 
-    <!-- 添加模型对话框 -->
     <n-modal
-        v-model:show="showAddModelDialog"
-        preset="card"
-        title="添加模型配置"
-        style="width: 600px"
-        :bordered="false"
-        class="add-model-dialog"
+      v-model:show="showConfigDialog"
+      preset="card"
+      title="端点与测试配置"
+      style="width: 580px"
+      :closable="true"
     >
-      <n-space vertical :size="20">
-        <n-alert type="info" :bordered="false">
-          <template #icon>
-            <n-icon>
-              <InformationCircleOutline/>
-            </n-icon>
-          </template>
-          手动添加上游模型配置。请确保上游模型名称正确。
-        </n-alert>
+      <n-form label-placement="top" size="medium">
+        <n-form-item label="当前模型">
+          <n-text code>{{ activeConfigRow?.channel_model }}</n-text>
+        </n-form-item>
+        <n-form-item label="端点类型">
+          <n-select
+            v-model:value="configEditor.endpoint_types"
+            class="compact-multi-select"
+            :options="endpointTypeOptions"
+            multiple
+            size="small"
+            :max-tag-count="2"
+            placeholder="请选择端点类型"
+          />
+        </n-form-item>
+        <n-form-item label="密钥分组">
+          <n-select
+            v-model:value="configEditor.key_groups"
+            class="compact-multi-select"
+            :options="keyGroupOptions"
+            multiple
+            size="small"
+            :max-tag-count="2"
+            placeholder="请选择密钥分组"
+          />
+        </n-form-item>
+        <n-form-item label="模型测试提示词（可选）">
+          <n-input
+            v-model:value="configEditor.test_prompt"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 5 }"
+            placeholder="为空时使用系统设置中的默认测试提示词"
+          />
+        </n-form-item>
+      </n-form>
 
-        <n-form
-            ref="modelFormRef"
-            :model="modelForm"
-            :rules="modelRules"
-            label-placement="top"
-            size="large"
-        >
-          <n-form-item label="上游模型名称" path="upstream_model">
-            <n-input
-                v-model:value="modelForm.upstream_model"
-                placeholder="例如：gpt-4-turbo-preview"
-                :input-props="{autocomplete: 'off'}"
-            >
-              <template #prefix>
-                <n-icon>
-                  <CloudOutline/>
-                </n-icon>
-              </template>
-            </n-input>
-            <template #feedback>
-              上游渠道提供的原始模型名称，如 gpt-4、claude-3-opus 等
-            </template>
-          </n-form-item>
+      <template #footer>
+        <n-space justify="space-between" align="center" style="width: 100%">
+          <n-text depth="3" style="font-size: 12px">{{ activeTestDetail || '尚未进行测试' }}</n-text>
+          <n-space>
+            <n-button @click="showConfigDialog = false">关闭</n-button>
+            <n-button type="info" :loading="activeTesting" @click="handleTestActiveConfig">立即测试</n-button>
+            <n-button type="primary" @click="applyConfigEditor">应用</n-button>
+          </n-space>
+        </n-space>
+      </template>
+    </n-modal>
 
-          <n-form-item label="统一模型" path="unified_model">
-            <n-select
-                v-model:value="modelForm.unified_model"
-                :options="modelOptions"
-                placeholder="请选择统一模型"
-                :loading="loadingModels"
-                filterable
-                :input-props="{autocomplete: 'off'}"
-            >
-              <template #prefix>
-                <n-icon>
-                  <LayersOutline/>
-                </n-icon>
-              </template>
-            </n-select>
-            <template #feedback>
-              选择系统中的统一模型，用于将不同渠道的相同模型映射到统一名称
-            </template>
-          </n-form-item>
-
-          <n-form-item label="端点类型" path="endpoint_types">
-            <n-select
-                v-model:value="modelForm.endpoint_types"
-                :options="endpointTypeOptions"
-                placeholder="请选择端点类型"
-                multiple
-                :input-props="{autocomplete: 'off'}"
-            />
-            <template #feedback>
-              选择该模型支持的端点类型，可多选
-            </template>
-          </n-form-item>
-
-          <n-form-item label="密钥分组" path="key_groups">
-            <n-select
-                v-model:value="modelForm.key_groups"
-                :options="keyGroupOptions"
-                placeholder="请选择密钥分组"
-                multiple
-                :input-props="{autocomplete: 'off'}"
-            />
-            <template #feedback>
-              选择该模型可用的密钥分组
-            </template>
-          </n-form-item>
-        </n-form>
-      </n-space>
+    <n-modal
+      v-model:show="showAddModelDialog"
+      preset="card"
+      title="手动添加模型"
+      style="width: 520px"
+    >
+      <n-form ref="modelFormRef" :model="modelForm" :rules="modelRules" label-placement="top" size="medium">
+        <n-form-item label="渠道模型名称" path="channel_model">
+          <n-input v-model:value="modelForm.channel_model" placeholder="例如：gpt-4o" />
+        </n-form-item>
+        <n-form-item label="统一模型" path="model">
+          <n-select
+            v-model:value="modelForm.model"
+            :options="modelOptions"
+            :loading="loadingModels"
+            filterable
+            placeholder="请选择统一模型"
+          />
+        </n-form-item>
+        <n-form-item label="模型权重" path="weight">
+          <n-input-number v-model:value="modelForm.weight" :min="1" :max="1000" style="width: 100%" placeholder="1-1000" />
+        </n-form-item>
+        <n-form-item label="端点类型" path="endpoint_types">
+          <n-select
+            v-model:value="modelForm.endpoint_types"
+            class="compact-multi-select"
+            :options="endpointTypeOptions"
+            multiple
+            size="small"
+            :max-tag-count="2"
+            placeholder="请选择端点类型"
+          />
+        </n-form-item>
+        <n-form-item label="密钥分组" path="key_groups">
+          <n-select
+            v-model:value="modelForm.key_groups"
+            class="compact-multi-select"
+            :options="keyGroupOptions"
+            multiple
+            size="small"
+            :max-tag-count="2"
+            placeholder="请选择密钥分组"
+          />
+        </n-form-item>
+        <n-form-item label="模型测试提示词（可选）">
+          <n-input
+            v-model:value="modelForm.test_prompt"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+            placeholder="为空时使用系统默认提示词"
+          />
+        </n-form-item>
+      </n-form>
 
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showAddModelDialog = false" size="large">取消</n-button>
-          <n-button type="primary" @click="handleAddModel" size="large" strong>
-            <template #icon>
-              <n-icon>
-                <AddOutline/>
-              </n-icon>
-            </template>
-            确定添加
+          <n-button @click="showAddModelDialog = false">取消</n-button>
+          <n-button type="primary" @click="handleAddModel">确认添加</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="showQuickCreateModelDialog"
+      preset="card"
+      title="新增统一模型"
+      style="width: 520px"
+      :mask-closable="false"
+    >
+      <n-form
+        ref="quickCreateModelFormRef"
+        :model="quickCreateModelForm"
+        :rules="quickCreateModelRules"
+        label-placement="top"
+        size="medium"
+      >
+        <n-form-item label="模型名称" path="name">
+          <n-input v-model:value="quickCreateModelForm.name" placeholder="例如：gpt-5.4" />
+        </n-form-item>
+        <n-form-item label="所属厂商" path="provider_id">
+          <n-select
+            v-model:value="quickCreateModelForm.provider_id"
+            :options="providerOptions"
+            :loading="loadingProviders"
+            filterable
+            placeholder="请选择厂商"
+          />
+        </n-form-item>
+      </n-form>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showQuickCreateModelDialog = false">取消</n-button>
+          <n-button type="primary" :loading="creatingUnifiedModel" @click="handleQuickCreateModel">
+            保存模型
           </n-button>
         </n-space>
       </template>
     </n-modal>
+
+    <ImageTestDialog
+      v-model:show="showImageTestDialog"
+      :initial-prompt="imageTestInitialPrompt"
+      :loading="activeTesting"
+      @submit="handleImageTestSubmit"
+    />
+
+    <ModelTestResultDialog
+      v-model:show="showTestResultDialog"
+      :title="testResultTitle"
+      :items="testResultItems"
+    />
   </n-modal>
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck
-import {computed, h, nextTick, reactive, ref, watch} from 'vue'
+import { computed, h, nextTick, reactive, ref, watch } from 'vue'
 import {
   type DataTableColumns,
-  NAlert,
+  type FormInst,
+  type FormRules,
   NButton,
-  NCard,
   NDataTable,
   NForm,
   NFormItem,
-  NGrid,
-  NGridItem,
   NIcon,
   NInput,
-  NLi,
+  NInputNumber,
   NModal,
   NSelect,
   NSpace,
   NTag,
   NText,
-  NUl
+  NTooltip,
 } from 'naive-ui'
-import {
-  AddCircleOutline,
-  AddOutline,
-  CheckboxOutline,
-  CheckmarkCircleOutline,
-  CloudOutline,
-  InformationCircleOutline,
-  LayersOutline,
-  PlayCircleOutline,
-  RemoveCircleOutline,
-  SaveOutline,
-  SyncOutline,
-  WarningOutline
-} from '@vicons/ionicons5'
-import {channelApi} from '../services/channelService'
-import {modelApi} from '../services/modelService'
-import {endpointApi} from '../services/endpointService'
-import type {SyncResult} from '../types/channel'
-import type {Model} from '../types/model'
-import type {EndpointInfo} from '../types/endpoint'
+import { AddOutline, PlayOutline, SettingsOutline } from '@vicons/ionicons5'
+import { channelApi } from '@/services/channelService'
+import { modelApi } from '@/services/modelService'
+import { endpointApi } from '@/services/endpointService'
+import providerApi from '@/services/providerService'
+import ModelTestResultDialog from '@/components/ModelTestResultDialog.vue'
+import ImageTestDialog from '@/components/ImageTestDialog.vue'
+import type {
+  Channel,
+  ChannelModelConfig,
+  ModelConfigItem,
+  ModelConfigUpdateItem,
+  SyncResult,
+} from '@/types/channel'
+import type { ModelTestResultItem } from '@/types/modelTest'
+import type { Model, Provider } from '@/types/model'
+import type { EndpointInfo } from '@/types/endpoint'
+import { createModelTestResultItem, formatTestResultSummary } from '@/utils/modelTest'
+import { getErrorMessage, toastApiError } from '@/utils/error'
 
 interface Props {
   channelId: number
   channelName: string
   modelValue: boolean
+}
+
+interface ModelDisplayType {
+  key: string
+  channel_model: string
+  model: string
+  weight: number
+  endpoint_types: string[]
+  key_groups: string[]
+  test_prompt: string
+  status: 'configured' | 'to_add' | 'to_remove'
+  disabled: boolean
+  channel_status: 'active' | 'inactive' | 'unconfigured'
+  config_id?: number
 }
 
 const props = defineProps<Props>()
@@ -373,1020 +298,1005 @@ const emit = defineEmits<{
 
 const show = computed({
   get: () => props.modelValue,
-  set: (value: boolean) => emit('update:modelValue', value)
+  set: (value: boolean) => emit('update:modelValue', value),
 })
 
-// State
 const loading = ref(false)
 const syncing = ref(false)
-const syncRequestId = ref(0)
 const saving = ref(false)
-const syncFailed = ref(false)
 const hasSynced = ref(false)
-const showAddModelDialog = ref(false)
+const syncFailed = ref(false)
 const syncResult = ref<SyncResult | null>(null)
-const localConfigs = ref<any[]>([])
+
+const showAddModelDialog = ref(false)
+const showQuickCreateModelDialog = ref(false)
+const showConfigDialog = ref(false)
+const activeConfigKey = ref<string>('')
+const quickCreateTargetKey = ref('')
+
+const localConfigs = ref<ChannelModelConfig[]>([])
 const unifiedModels = ref<Model[]>([])
+const providers = ref<Provider[]>([])
 const endpoints = ref<EndpointInfo[]>([])
 const loadingModels = ref(false)
-const testStatus = ref<Record<string, Record<string, 'idle' | 'testing' | 'success' | 'error'>>>({})
+const loadingProviders = ref(false)
+const creatingUnifiedModel = ref(false)
 
-// 选中的行
 const checkedKeys = ref<string[]>([])
 
-// 编辑状态：key -> unified_model
-const editMap = ref<Record<string, string>>({})
-
-// 端点类型编辑状态：key -> endpoint_types
+const modelEditMap = ref<Record<string, string>>({})
+const weightEditMap = ref<Record<string, number>>({})
 const endpointTypesEditMap = ref<Record<string, string[]>>({})
-
-// 密钥分组编辑状态：key -> key_groups
 const keyGroupsEditMap = ref<Record<string, string[]>>({})
+const testPromptEditMap = ref<Record<string, string>>({})
 
-const keyGroupOptions = ref<{ label: string; value: string }[]>([
-  {label: 'Default', value: 'Default'}
-])
+const testStatus = ref<Record<string, Record<string, 'idle' | 'testing' | 'success' | 'error'>>>({})
+const testDetailMap = ref<Record<string, string>>({})
 
-// 表单
+const channelWeight = ref(100)
+const keyGroupOptions = ref<Array<{ label: string; value: string }>>([{ label: 'Default', value: 'Default' }])
+
+const modelFormRef = ref<FormInst | null>(null)
+const quickCreateModelFormRef = ref<FormInst | null>(null)
 const modelForm = reactive({
-  upstream_model: '',
-  unified_model: '',
-  endpoint_types: ['openai-chat'],
-  key_groups: ['Default']
+  channel_model: '',
+  model: '',
+  weight: 100,
+  endpoint_types: ['OpenAIChatCompletions'],
+  key_groups: ['Default'],
+  test_prompt: '',
 })
-const modelRules = {
-  upstream_model: {
-    required: true,
-    message: '请输入上游模型名称',
-    trigger: ['blur', 'input']
-  },
-  unified_model: {
-    required: true,
-    message: '请选择统一模型',
-    trigger: ['blur', 'change']
-  },
-  endpoint_types: {
-    required: true,
-    type: 'array',
-    message: '请选择至少一个端点类型',
-    trigger: ['blur', 'change']
-  },
-  key_groups: {
-    required: true,
-    type: 'array',
-    message: '请选择至少一个密钥分组',
-    trigger: ['blur', 'change']
-  }
+
+const quickCreateModelForm = reactive({
+  name: '',
+  provider_id: null as string | null,
+})
+
+const modelRules: FormRules = {
+  channel_model: { required: true, message: '请输入渠道模型名称', trigger: ['blur', 'input'] },
+  model: { required: true, message: '请选择统一模型', trigger: ['blur', 'change'] },
+  weight: { type: 'number', required: true, message: '请输入权重', trigger: ['blur', 'change'] },
+  endpoint_types: { type: 'array', required: true, message: '请选择至少一个端点类型', trigger: ['change'] },
+  key_groups: { type: 'array', required: true, message: '请选择至少一个密钥分组', trigger: ['change'] },
 }
 
-// 加载端点列表
-async function loadEndpoints() {
-  try {
-    endpoints.value = await endpointApi.list()
-  } catch (error: any) {
-    console.error('Failed to load endpoints:', error)
-    window.$message?.error('加载端点列表失败')
-  }
+const quickCreateModelRules: FormRules = {
+  name: { required: true, message: '请输入模型名称', trigger: ['blur', 'input'] },
+  provider_id: { required: true, type: 'string', message: '请选择厂商', trigger: ['blur', 'change'] },
 }
 
-// 端点类型选项
-const endpointTypeOptions = computed(() => {
-  return endpoints.value.map(ep => ({
-    label: `${ep.name}`,
-    value: ep.type
-  }))
+const configEditor = reactive({
+  endpoint_types: [] as string[],
+  key_groups: [] as string[],
+  test_prompt: '',
 })
 
-// 统一模型下拉选项
-const modelOptions = computed(() => {
-  return unifiedModels.value.map(model => ({
-    label: model.provider
-        ? `${model.name} (${model.provider.name})`
-        : model.name,
-    value: model.name
-  }))
+const showImageTestDialog = ref(false)
+const showTestResultDialog = ref(false)
+const pendingImageTestRow = ref<ModelDisplayType | null>(null)
+const imageTestInitialPrompt = ref('')
+const testResultTitle = ref('模型测试结果')
+const testResultItems = ref<ModelTestResultItem[]>([])
+
+const activeConfigRow = computed(() => displayModels.value.find((item) => item.key === activeConfigKey.value))
+const activeTestDetail = computed(() => testDetailMap.value[activeConfigKey.value] || '')
+const activeTesting = computed(() => {
+  const row = activeConfigRow.value
+  if (!row) return false
+  const statusMap = testStatus.value[activeConfigKey.value]
+  if (!statusMap) return false
+  const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types || []
+  return endpointTypes.some((type) => statusMap[type] === 'testing')
 })
 
-// 统计信息
+const endpointTypeOptions = computed(() => endpoints.value.map((item) => ({ label: item.name, value: item.type })))
+const providerOptions = computed(() =>
+  providers.value.map((provider) => ({
+    label: provider.name,
+    value: provider.id,
+  })),
+)
+const modelOptions = computed(() =>
+  unifiedModels.value.map((model) => ({
+    label: model.provider ? `${model.name} (${model.provider.name})` : model.name,
+    value: model.name,
+  })),
+)
+const localModelNameSet = computed(() => new Set(unifiedModels.value.map((item) => normalizeModelName(item.name))))
 const stats = computed(() => {
-  if (!hasSynced.value || syncFailed.value) {
+  if (!hasSynced.value || syncFailed.value || !syncResult.value?.diff) {
     return {
       localConfigured: localConfigs.value.length,
       upstreamTotal: 0,
       toAdd: 0,
-      toRemove: 0
+      toRemove: 0,
     }
   }
 
-  const diff = syncResult.value?.diff
   return {
-    localConfigured: diff?.existing_count || 0,
-    upstreamTotal: diff?.total_upstream_models || 0,
-    toAdd: diff?.added_count || 0,
-    toRemove: diff?.removed_count || 0
+    localConfigured: syncResult.value.diff.existing_count,
+    upstreamTotal: syncResult.value.diff.total_upstream_models,
+    toAdd: syncResult.value.diff.added_count,
+    toRemove: syncResult.value.diff.removed_count,
   }
 })
 
-// 模型显示类型
-interface ModelDisplayType {
-  key: string
-  upstream_model: string
-  unified_model: string
-  endpoint_types: string[]
-  key_groups: string[]
-  status: 'configured' | 'to_add' | 'to_remove'
-  disabled: boolean
-  channel_status: 'active' | 'disabled' | 'non_exist' | 'unconfigured'
-}
-
-// 显示的模型列表
 const displayModels = computed<ModelDisplayType[]>(() => {
   if (!hasSynced.value || syncFailed.value || !syncResult.value) {
-    // 仅显示本地配置
-    return localConfigs.value.map(config => ({
-      key: config.upstream_model,
-      upstream_model: config.upstream_model,
-      unified_model: config.unified_model,
-      endpoint_types: config.endpoint_types || ['openai-chat'],
-      key_groups: config.key_groups || ['Default'],
-      status: 'configured' as const,
-      disabled: false,
-      channel_status: config.status || 'unconfigured'
-    }))
+    return localConfigs.value.map((config) => {
+      const endpointTypes = endpointTypesEditMap.value[config.channel_model] || config.endpoint_types || ['OpenAIChatCompletions']
+
+      return {
+        key: config.channel_model,
+        channel_model: config.channel_model,
+        model: modelEditMap.value[config.channel_model] || config.model,
+        weight: weightEditMap.value[config.channel_model] || config.weight || channelWeight.value,
+        endpoint_types: endpointTypes,
+        key_groups: keyGroupsEditMap.value[config.channel_model] || config.key_groups || ['Default'],
+        test_prompt: testPromptEditMap.value[config.channel_model] ?? config.test_prompt ?? '',
+        status: 'configured',
+        disabled: false,
+        channel_status: config.status || 'unconfigured',
+        config_id: config.id,
+      }
+    })
   }
 
-  // 有同步结果，合并显示
-  const models: ModelDisplayType[] = []
-  const diff = syncResult.value.diff
+  const rows: ModelDisplayType[] = []
 
-  // ❌ 不要在计算属性中调用 initEditMap()，会导致无限循环
-  // initEditMap() 应该在数据变化时主动调用
+  syncResult.value.diff.diffs.forEach((item) => {
+    const model = modelEditMap.value[item.channel_model] || item.existing_config?.model || item.channel_model
+    const weight =
+      weightEditMap.value[item.channel_model] || item.existing_config?.weight || channelWeight.value
+    const endpointTypes =
+      endpointTypesEditMap.value[item.channel_model] ||
+      item.existing_config?.endpoint_types ||
+      ['OpenAIChatCompletions']
+    const keyGroups =
+      keyGroupsEditMap.value[item.channel_model] ||
+      item.key_groups ||
+      item.existing_config?.key_groups ||
+      ['Default']
+    const testPrompt = testPromptEditMap.value[item.channel_model] ?? item.existing_config?.test_prompt ?? ''
 
-  // 安全检查：防止 diff 为 null
-  if (!diff || !diff.diffs) {
-    console.warn('[displayModels] diff or diff.diffs is null/undefined')
-    return []
-  }
+    const status: ModelDisplayType['status'] =
+      item.type === 'existing' ? 'configured' : item.type === 'added' ? 'to_add' : 'to_remove'
 
-  diff.diffs.forEach((d) => {
-    const unifiedModel = editMap.value[d.upstream_model] || d.upstream_model
-    let status: 'configured' | 'to_add' | 'to_remove'
-    let disabled = false
-    let endpointTypes = ['openai-chat']
-    let keyGroups = ['Default']
-    let channelStatus: 'active' | 'disabled' | 'non_exist' | 'unconfigured' | 'cooling' = 'unconfigured'
-
-    if (d.type === 'existing') {
-      status = 'configured'
-      disabled = false
-      endpointTypes = d.existing_config?.endpoint_types || ['openai-chat']
-      keyGroups = d.key_groups || d.existing_config?.key_groups || ['Default']
-      channelStatus = d.existing_config?.status || 'unconfigured'
-    } else if (d.type === 'added') {
-      status = 'to_add'
-      disabled = false
-      endpointTypes = ['openai-chat']
-      keyGroups = d.key_groups || ['Default']
-      channelStatus = 'unconfigured'
-    } else {
-      status = 'to_remove'
-      disabled = true // 待删除的模型默认选中且禁用
-      endpointTypes = d.existing_config?.endpoint_types || ['openai-chat']
-      keyGroups = d.existing_config?.key_groups || ['Default']
-      channelStatus = d.existing_config?.status || 'unconfigured'
-    }
-
-    models.push({
-      key: d.upstream_model,
-      upstream_model: d.upstream_model,
-      unified_model: unifiedModel,
+    rows.push({
+      key: item.channel_model,
+      channel_model: item.channel_model,
+      model,
+      weight,
       endpoint_types: endpointTypes,
       key_groups: keyGroups,
+      test_prompt: testPrompt,
       status,
-      disabled,
-      channel_status: channelStatus
+      disabled: status === 'to_remove',
+      channel_status: item.existing_config?.status || 'unconfigured',
+      config_id: item.existing_config?.id,
     })
   })
 
-  // 排序：已配置 > 待删除 > 待添加，同类型按上游模型名称排序
-  const statusOrder = {configured: 1, to_remove: 2, to_add: 3}
-  models.sort((a, b) => {
-    const statusDiff = statusOrder[a.status] - statusOrder[b.status]
-    if (statusDiff !== 0) return statusDiff
-    return a.upstream_model.localeCompare(b.upstream_model)
+  const statusOrder = { configured: 1, to_remove: 2, to_add: 3 }
+  rows.sort((a, b) => {
+    const diff = statusOrder[a.status] - statusOrder[b.status]
+    if (diff !== 0) return diff
+    return a.channel_model.localeCompare(b.channel_model)
   })
 
-  return models
+  return rows
 })
 
-// 分页
 const pagination = reactive({
   page: 1,
-  pageSize: 10,
+  pageSize: 12,
   showSizePicker: true,
-  pageSizes: [10, 20, 50, 100],
+  pageSizes: [12, 24, 50],
   onChange: (page: number) => {
     pagination.page = page
   },
-  onUpdatePageSize: (pageSize: number) => {
-    pagination.pageSize = pageSize
+  onUpdatePageSize: (size: number) => {
+    pagination.pageSize = size
     pagination.page = 1
-  }
+  },
 })
 
-// 表格列定义
 const columns: DataTableColumns<ModelDisplayType> = [
   {
-    type: 'selection'
+    type: 'selection',
+    width: 46,
+    disabled: (row) => row.disabled,
   },
   {
-    title: '上游模型',
-    key: 'upstream_model',
-    width: 200,
-    render(row) {
-      return h(NText, {code: true}, {default: () => row.upstream_model})
-    }
+    title: '渠道模型',
+    key: 'channel_model',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: (row) =>
+      h(
+        NSpace,
+        { size: 4, align: 'center', wrap: false },
+        {
+          default: () => [
+            h(
+              NText,
+              { code: true, style: 'max-width: 198px; display: inline-block;' },
+              { default: () => row.channel_model },
+            ),
+            hasSynced.value && !hasLocalModel(row.channel_model)
+              ? h(
+                NTooltip,
+                null,
+                {
+                  trigger: () =>
+                    h(
+                      NButton,
+                      {
+                        class: 'table-action-btn',
+                        size: 'tiny',
+                        quaternary: true,
+                        circle: true,
+                        type: 'info',
+                        'aria-label': `新增统一模型 ${row.channel_model}`,
+                        onClick: () => openQuickCreateModelDialog(row),
+                      },
+                      { icon: () => h(NIcon, null, { default: () => h(AddOutline) }) },
+                    ),
+                  default: () => '新增统一模型',
+                },
+              )
+              : null,
+          ],
+        },
+      ),
   },
   {
     title: '统一模型',
-    key: 'unified_model',
+    key: 'model',
     width: 240,
-    render(row) {
-      const value = editMap.value[row.key] || row.unified_model
-      return h(NSelect, {
-        value: value,
+    render: (row) =>
+      h(NSelect, {
+        value: modelEditMap.value[row.key] || row.model,
         options: modelOptions.value,
-        placeholder: '请选择统一模型',
-        loading: loadingModels.value,
+        size: 'small',
         filterable: true,
-        size: 'small',
-        onUpdateValue: (val: string) => {
-          editMap.value[row.key] = val
-        }
-      })
-    }
+        placeholder: '选择统一模型',
+        style: { width: '100%' },
+        onUpdateValue: (value: string) => {
+          modelEditMap.value[row.key] = value
+        },
+      }),
   },
   {
-    title: '端点类型',
-    key: 'endpoint_types',
-    width: 120,
-    render(row) {
-      const value = endpointTypesEditMap.value[row.key] || row.endpoint_types
-      return h(NSelect, {
-        value: value,
-        options: endpointTypeOptions.value,
-        placeholder: '请选择端点类型',
-        multiple: true,
+    title: '权重',
+    key: 'weight',
+    width: 126,
+    render: (row) =>
+      h(NInputNumber, {
+        value: weightEditMap.value[row.key] || row.weight,
         size: 'small',
-        onUpdateValue: (val: string[]) => {
-          endpointTypesEditMap.value[row.key] = val
-        }
-      })
-    }
+        min: 1,
+        max: 1000,
+        style: { width: '108px' },
+        onUpdateValue: (value: number | null) => {
+          weightEditMap.value[row.key] = value && value > 0 ? value : row.weight
+        },
+      }),
   },
   {
-    title: '密钥分组',
-    key: 'key_groups',
-    width: 160,
-    render(row) {
-      const value = keyGroupsEditMap.value[row.key] || row.key_groups
-      return h(NSelect, {
-        value: value,
-        options: keyGroupOptions.value,
-        placeholder: '请选择密钥分组',
-        multiple: true,
-        size: 'small',
-        onUpdateValue: (val: string[]) => {
-          keyGroupsEditMap.value[row.key] = val
-        }
-      })
-    }
-  },
-  {
-    title: '状态',
+    title: '配置状态',
     key: 'status',
-    width: 80,
+    width: 100,
     align: 'center',
-    render(row) {
-      const statusConfig = {
-        configured: {type: 'success' as const, text: '已配置'},
-        to_add: {type: 'info' as const, text: '待添加'},
-        to_remove: {type: 'warning' as const, text: '待删除'}
+    render: (row) => {
+      const map = {
+        configured: { type: 'success' as const, text: '已配置' },
+        to_add: { type: 'info' as const, text: '待新增' },
+        to_remove: { type: 'warning' as const, text: '待删除' },
       }
-      const config = statusConfig[row.status]
-      return h(NTag, {type: config.type, size: 'small'}, {default: () => config.text})
-    }
+      return h(NTag, { size: 'small', type: map[row.status].type, bordered: false }, { default: () => map[row.status].text })
+    },
   },
   {
-    title: '渠道状态',
-    key: 'channel_status',
-    width: 80,
-    align: 'center',
-    render(row) {
-      const statusConfig = {
-        active: {type: 'success' as const, text: '正常'},
-        disabled: {type: 'warning' as const, text: '禁用'},
-        non_exist: {type: 'error' as const, text: '失效'},
-        cooling: {type: 'warning' as const, text: '冷却中'},
-        unconfigured: {type: 'default' as const, text: '未配置'}
-      }
-      const config = statusConfig[row.channel_status] || statusConfig.unconfigured
-      return h(NTag, {type: config.type, size: 'small'}, {default: () => config.text})
-    }
-  },
-  {
-    title: '测试状态',
-    key: 'test_status',
+    title: '端点 / 分组',
+    key: 'config',
     width: 160,
-    fixed: 'right',
-    align: 'left',
-    render(row) {
-      const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
-      const statusMap = {
-        idle: {type: 'default' as const, text: '未测试'},
-        testing: {type: 'info' as const, text: '测试中'},
-        success: {type: 'success' as const, text: '成功'},
-        error: {type: 'error' as const, text: '失败'}
-      }
-
-      return h(NSpace, {size: 4, vertical: true}, {
-        default: () => endpointTypes.map((type: string) => {
-          const status = testStatus.value[row.key]?.[type] || 'idle'
-          const config = statusMap[status]
-          const typeLabelMap: Record<string, string> = {
-            'openai-chat': 'OpenAI Chat',
-            'openai-response': 'OpenAI Responses',
-            'openai-image': 'OpenAI Images Generations',
-            'openai-image-edit': 'OpenAI Images Edits',
-            anthropic: 'Anthropic Messages',
-            gemini: 'Google Gemini'
-          }
-          const typeLabel = typeLabelMap[type] || type
-          return h(NTag, {type: config.type, size: 'small'}, {default: () => `${typeLabel}: ${config.text}`})
-        })
-      })
-    }
+    align: 'center',
+    render: (row) => {
+      const endpointCount = (endpointTypesEditMap.value[row.key] || row.endpoint_types).length
+      const keyGroupCount = (keyGroupsEditMap.value[row.key] || row.key_groups).length
+      return h(
+        NSpace,
+        { size: 4, justify: 'center', align: 'center', class: 'table-action-group', wrap: false },
+        {
+          default: () => [
+            h(
+              NText,
+              { depth: 3, style: 'font-size: 11px; white-space: nowrap' },
+              { default: () => `${endpointCount}/${keyGroupCount}` },
+            ),
+            renderActionIcon({
+              tooltip: '编辑端点/分组/测试提示词',
+              ariaLabel: `编辑模型 ${row.channel_model} 的端点、分组和测试提示词`,
+              icon: SettingsOutline,
+              type: 'info',
+              onClick: () => openConfigDialog(row),
+            }),
+          ],
+        },
+      )
+    },
   },
   {
     title: '操作',
     key: 'actions',
-    width: 120,
+    width: 66,
     align: 'center',
-    fixed: 'right',
-    render(row) {
-      const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
-      const isAnyTesting = endpointTypes.some((type: string) => testStatus.value[row.key]?.[type] === 'testing')
-
-      return h(NButton, {
-        size: 'tiny',
+    render: (row) =>
+      renderActionIcon({
+        tooltip: '测试当前配置',
+        ariaLabel: `测试模型 ${row.channel_model} 的当前配置`,
+        icon: PlayOutline,
         type: 'info',
-        loading: isAnyTesting,
-        onClick: () => handleTest(row)
-      }, {
-        icon: () => h(NIcon, null, {default: () => h(PlayCircleOutline)}),
-        default: () => '测试'
-      })
-    }
-  }
+        loading: isRowTesting(row.key),
+        onClick: () => handleTest(row),
+      }),
+  },
 ]
 
-// 初始化编辑状态和选中状态
-function initEditMap() {
-  editMap.value = {}
+function renderActionIcon(options: {
+  tooltip: string
+  ariaLabel: string
+  icon: any
+  type?: 'default' | 'primary' | 'info' | 'warning' | 'error' | 'success'
+  loading?: boolean
+  onClick: () => void
+}) {
+  return h(
+    NTooltip,
+    null,
+    {
+      trigger: () =>
+        h(
+          NButton,
+          {
+            class: 'table-action-btn',
+            size: 'tiny',
+            quaternary: true,
+            type: options.type,
+            circle: true,
+            loading: options.loading,
+            'aria-label': options.ariaLabel,
+            onClick: options.onClick,
+          },
+          {
+            icon: () => h(NIcon, null, { default: () => h(options.icon) }),
+          },
+        ),
+      default: () => options.tooltip,
+    },
+  )
+}
+
+function isRowTesting(key: string): boolean {
+  const rowMap = testStatus.value[key]
+  if (!rowMap) return false
+  const row = displayModels.value.find((item) => item.key === key)
+  const endpointTypes = row
+    ? (endpointTypesEditMap.value[key] || row.endpoint_types || [])
+    : Object.keys(rowMap)
+  return endpointTypes.some((type) => rowMap[type] === 'testing')
+}
+
+function initEditState() {
+  modelEditMap.value = {}
+  weightEditMap.value = {}
   endpointTypesEditMap.value = {}
   keyGroupsEditMap.value = {}
+  testPromptEditMap.value = {}
+  testStatus.value = {}
+  testDetailMap.value = {}
+
   const defaultChecked: string[] = []
 
   if (hasSynced.value && !syncFailed.value && syncResult.value) {
-    // 有同步结果
-    syncResult.value.diff.diffs.forEach((d) => {
-      if (d.type === 'existing' && d.existing_config) {
-        editMap.value[d.upstream_model] = d.existing_config.unified_model
-        endpointTypesEditMap.value[d.upstream_model] = d.existing_config.endpoint_types || ['openai-chat']
-        keyGroupsEditMap.value[d.upstream_model] = d.key_groups || d.existing_config.key_groups || ['Default']
-        defaultChecked.push(d.upstream_model)
-      } else if (d.type === 'added') {
-        editMap.value[d.upstream_model] = d.upstream_model
-        endpointTypesEditMap.value[d.upstream_model] = ['openai-chat']
-        keyGroupsEditMap.value[d.upstream_model] = d.key_groups || ['Default']
-        // 新增的模型默认不选中
-      } else if (d.type === 'removed') {
-        editMap.value[d.upstream_model] = d.existing_config?.unified_model || d.upstream_model
-        endpointTypesEditMap.value[d.upstream_model] = d.existing_config?.endpoint_types || ['openai-chat']
-        keyGroupsEditMap.value[d.upstream_model] = d.existing_config?.key_groups || ['Default']
-        // 删除的模型默认选中
-        defaultChecked.push(d.upstream_model)
+    syncResult.value.diff.diffs.forEach((item) => {
+      if (item.type === 'existing' && item.existing_config) {
+        modelEditMap.value[item.channel_model] = item.existing_config.model
+        weightEditMap.value[item.channel_model] = item.existing_config.weight || channelWeight.value
+        const endpointTypes = item.existing_config.endpoint_types || ['OpenAIChatCompletions']
+        endpointTypesEditMap.value[item.channel_model] = endpointTypes
+        keyGroupsEditMap.value[item.channel_model] =
+          item.key_groups || item.existing_config.key_groups || ['Default']
+        testPromptEditMap.value[item.channel_model] = item.existing_config.test_prompt || ''
+        defaultChecked.push(item.channel_model)
+      } else if (item.type === 'added') {
+        modelEditMap.value[item.channel_model] = item.channel_model
+        weightEditMap.value[item.channel_model] = channelWeight.value
+        const endpointTypes = ['OpenAIChatCompletions']
+        endpointTypesEditMap.value[item.channel_model] = endpointTypes
+        keyGroupsEditMap.value[item.channel_model] = item.key_groups || ['Default']
+        testPromptEditMap.value[item.channel_model] = ''
+      } else if (item.type === 'removed') {
+        modelEditMap.value[item.channel_model] = item.existing_config?.model || item.channel_model
+        weightEditMap.value[item.channel_model] = item.existing_config?.weight || channelWeight.value
+        const endpointTypes = item.existing_config?.endpoint_types || ['OpenAIChatCompletions']
+        endpointTypesEditMap.value[item.channel_model] = endpointTypes
+        keyGroupsEditMap.value[item.channel_model] = item.existing_config?.key_groups || ['Default']
+        testPromptEditMap.value[item.channel_model] = item.existing_config?.test_prompt || ''
+        defaultChecked.push(item.channel_model)
       }
     })
   } else {
-    // 仅本地配置
-    localConfigs.value.forEach(config => {
-      editMap.value[config.upstream_model] = config.unified_model
-      endpointTypesEditMap.value[config.upstream_model] = config.endpoint_types || ['openai-chat']
-      keyGroupsEditMap.value[config.upstream_model] = config.key_groups || ['Default']
-      defaultChecked.push(config.upstream_model)
+    localConfigs.value.forEach((config) => {
+      modelEditMap.value[config.channel_model] = config.model
+      weightEditMap.value[config.channel_model] = config.weight || channelWeight.value
+      const endpointTypes = config.endpoint_types || ['OpenAIChatCompletions']
+      endpointTypesEditMap.value[config.channel_model] = endpointTypes
+      keyGroupsEditMap.value[config.channel_model] = config.key_groups || ['Default']
+      testPromptEditMap.value[config.channel_model] = config.test_prompt || ''
+      defaultChecked.push(config.channel_model)
     })
   }
 
   checkedKeys.value = defaultChecked
 }
 
-// 加载本地配置
 async function loadLocalConfigs() {
+  if (!props.channelId) return
+
   loading.value = true
   try {
-    const channel = await channelApi.get(props.channelId)
+    const channel: Channel = await channelApi.get(props.channelId)
+    channelWeight.value = channel.weight || 100
+    modelForm.weight = channelWeight.value
     localConfigs.value = channel.model_configs || []
+
     const groups = new Set<string>()
-    channel.keys?.forEach((key) => {
-      if (key.key_group) {
-        groups.add(key.key_group)
-      }
+    channel.channel_keys?.forEach((item) => {
+      if (item.channel_key_group) groups.add(item.channel_key_group)
     })
-    if (groups.size === 0) {
-      groups.add('Default')
-    }
-    keyGroupOptions.value = Array.from(groups).sort().map((group) => ({
-      label: group,
-      value: group
-    }))
-  } catch (error: any) {
-    console.error('Failed to load local configs:', error)
-    window.$message?.error('加载本地配置失败')
+    if (!groups.size) groups.add('Default')
+
+    keyGroupOptions.value = Array.from(groups)
+      .sort((a, b) => a.localeCompare(b))
+      .map((group) => ({ label: group, value: group }))
   } finally {
     loading.value = false
   }
 }
 
-// 加载统一模型列表
 async function loadUnifiedModels() {
   loadingModels.value = true
   try {
-    const result = await modelApi.list({page: 1, page_size: 1000})
+    const result = await modelApi.list({ page: 1, page_size: 1000 })
     unifiedModels.value = result.items
-  } catch (error: any) {
-    console.error('Failed to load unified models:', error)
-    window.$message?.error('加载统一模型列表失败')
+  } catch {
+    window.$message?.error('加载统一模型失败')
   } finally {
     loadingModels.value = false
   }
 }
 
-// 同步上游模型
-async function handleSyncModels() {
-  const currentRequestId = syncRequestId.value + 1
-  syncRequestId.value = currentRequestId
-  const currentChannelId = props.channelId
-  syncing.value = true
-  syncFailed.value = false
+async function loadProviders() {
+  loadingProviders.value = true
+  try {
+    providers.value = await providerApi.list()
+  } catch {
+    window.$message?.error('加载厂商列表失败')
+  } finally {
+    loadingProviders.value = false
+  }
+}
+
+function normalizeModelName(name: string): string {
+  return (name || '').trim().toLowerCase()
+}
+
+function hasLocalModel(channelModel: string): boolean {
+  return localModelNameSet.value.has(normalizeModelName(channelModel))
+}
+
+function openQuickCreateModelDialog(row: ModelDisplayType) {
+  quickCreateTargetKey.value = row.key
+  quickCreateModelForm.name = row.channel_model
+  quickCreateModelForm.provider_id = null
+  showQuickCreateModelDialog.value = true
+}
+
+async function handleQuickCreateModel() {
+  if (!quickCreateModelFormRef.value) return
 
   try {
-    const result = await channelApi.syncModels(currentChannelId)
+    await quickCreateModelFormRef.value.validate()
+  } catch {
+    return
+  }
 
-    if (
-        currentRequestId !== syncRequestId.value ||
-        !props.modelValue ||
-        props.channelId !== currentChannelId
-    ) {
-      return
+  const name = quickCreateModelForm.name.trim()
+  if (!name) {
+    window.$message?.warning('请输入模型名称')
+    return
+  }
+
+  if (hasLocalModel(name)) {
+    window.$message?.warning(`模型 ${name} 已存在`)
+    showQuickCreateModelDialog.value = false
+    return
+  }
+
+  creatingUnifiedModel.value = true
+  try {
+    const created = await modelApi.create({
+      name,
+      provider_id: quickCreateModelForm.provider_id,
+    })
+    await loadUnifiedModels()
+    if (quickCreateTargetKey.value) {
+      modelEditMap.value[quickCreateTargetKey.value] = created.name
     }
+    showQuickCreateModelDialog.value = false
+    window.$message?.success(`统一模型 ${created.name} 创建成功`)
+  } catch (err) {
+    toastApiError(err, '创建统一模型失败')
+  } finally {
+    creatingUnifiedModel.value = false
+  }
+}
 
+async function loadEndpoints() {
+  try {
+    endpoints.value = await endpointApi.list()
+  } catch {
+    window.$message?.error('加载端点类型失败')
+  }
+}
+
+async function handleSyncModels() {
+  if (!props.channelId) return
+
+  syncing.value = true
+  syncFailed.value = false
+  try {
+    const result = await channelApi.syncModels(props.channelId)
     syncResult.value = result
     hasSynced.value = true
-
-    // 清空之前的编辑状态，重新初始化
-    editMap.value = {}
-
-    // 用 try-catch 包裹初始化逻辑，防止错误导致 loading 无法重置
-    try {
-      initEditMap()
-    } catch (initError) {
-      console.error('[ModelManagementDialog] Init edit map failed:', initError)
-      // 初始化失败不影响同步成功状态
-    }
-
-    window.$message?.success('同步成功')
-  } catch (error: any) {
-    console.error('[ModelManagementDialog] Sync failed:', error)
-    if (
-        currentRequestId !== syncRequestId.value ||
-        !props.modelValue ||
-        props.channelId !== currentChannelId
-    ) {
-      return
-    }
+    initEditState()
+    window.$message?.success('同步完成')
+  } catch (err) {
     syncFailed.value = true
     hasSynced.value = true
     syncResult.value = null
-    window.$message?.error(error.response?.data?.error || '同步失败，仅显示本地配置')
+    toastApiError(err, '同步失败，已回退本地模式')
   } finally {
-    // 确保无论发生什么都要重置 loading 状态
-    if (currentRequestId === syncRequestId.value) {
-      syncing.value = false
+    syncing.value = false
+  }
+}
+
+async function handleAddModel() {
+  if (!modelFormRef.value) return
+
+  try {
+    await modelFormRef.value.validate()
+
+    await channelApi.createModelConfig(
+      props.channelId,
+      modelForm.model,
+      modelForm.channel_model,
+      modelForm.weight,
+      modelForm.endpoint_types,
+      modelForm.key_groups,
+      modelForm.test_prompt,
+    )
+
+    window.$message?.success('模型配置已添加')
+    showAddModelDialog.value = false
+
+    modelForm.channel_model = ''
+    modelForm.model = ''
+    modelForm.weight = channelWeight.value
+    modelForm.endpoint_types = ['OpenAIChatCompletions']
+    modelForm.key_groups = ['Default']
+    modelForm.test_prompt = ''
+
+    hasSynced.value = false
+    syncFailed.value = false
+    syncResult.value = null
+
+    await loadLocalConfigs()
+    initEditState()
+    emit('refresh')
+  } catch (err) {
+    if (!(err as { errors?: unknown })?.errors) {
+      toastApiError(err, '添加模型失败')
     }
   }
 }
 
-// 添加模型配置
-async function handleAddModel() {
+function openConfigDialog(row: ModelDisplayType) {
+  activeConfigKey.value = row.key
+  configEditor.endpoint_types = [...(endpointTypesEditMap.value[row.key] || row.endpoint_types)]
+  configEditor.key_groups = [...(keyGroupsEditMap.value[row.key] || row.key_groups)]
+  configEditor.test_prompt = testPromptEditMap.value[row.key] ?? row.test_prompt ?? ''
+  showConfigDialog.value = true
+}
+
+function applyConfigEditor() {
+  if (!activeConfigKey.value) return
+
+  if (!configEditor.endpoint_types.length) {
+    window.$message?.warning('请至少选择一个端点类型')
+    return
+  }
+  if (!configEditor.key_groups.length) {
+    window.$message?.warning('请至少选择一个密钥分组')
+    return
+  }
+
+  const endpointTypes = [...configEditor.endpoint_types]
+  endpointTypesEditMap.value[activeConfigKey.value] = endpointTypes
+  keyGroupsEditMap.value[activeConfigKey.value] = [...configEditor.key_groups]
+  testPromptEditMap.value[activeConfigKey.value] = configEditor.test_prompt?.trim() || ''
+  showConfigDialog.value = false
+}
+
+async function handleTestActiveConfig() {
+  const row = activeConfigRow.value
+  if (!row) return
+
+  if (!configEditor.endpoint_types.length) {
+    window.$message?.warning('请至少选择一个端点类型')
+    return
+  }
+  if (!configEditor.key_groups.length) {
+    window.$message?.warning('请至少选择一个密钥分组')
+    return
+  }
+
+  endpointTypesEditMap.value[row.key] = [...configEditor.endpoint_types]
+  keyGroupsEditMap.value[row.key] = [...configEditor.key_groups]
+  testPromptEditMap.value[row.key] = configEditor.test_prompt?.trim() || ''
+
+  await handleTest(row)
+}
+
+async function handleTest(row: ModelDisplayType) {
+  const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
+  if (endpointTypes.includes('OpenAIImagesEdits')) {
+    pendingImageTestRow.value = row
+    imageTestInitialPrompt.value =
+      testPromptEditMap.value[row.key] ||
+      row.test_prompt ||
+      '请将图片中的背景替换为星空，并保持主体不变'
+    showImageTestDialog.value = true
+    return
+  }
+  await executeModelTest(row)
+}
+
+async function handleImageTestSubmit(payload: { prompt: string; imageData: string }) {
+  const row = pendingImageTestRow.value
+  if (!row) return
+  showImageTestDialog.value = false
+  await executeModelTest(row, {
+    prompt: payload.prompt,
+    imageData: payload.imageData,
+  })
+  pendingImageTestRow.value = null
+}
+
+async function executeModelTest(
+  row: ModelDisplayType,
+  options?: {
+    prompt?: string
+    imageData?: string
+  },
+) {
+  const key = row.key
+  const endpointTypes = endpointTypesEditMap.value[key] || row.endpoint_types
+  const keyGroups = keyGroupsEditMap.value[key] || row.key_groups
+  const model = modelEditMap.value[key] || row.model
+  const modelTestPrompt = (testPromptEditMap.value[key] ?? row.test_prompt ?? '').trim()
+
+  if (!endpointTypes.length) {
+    window.$message?.warning('请先配置端点类型')
+    return
+  }
+  if (!keyGroups.length) {
+    window.$message?.warning('请先配置密钥分组')
+    return
+  }
+
+  const initialStatus: Record<string, 'idle' | 'testing' | 'success' | 'error'> = {}
+  endpointTypes.forEach((type) => {
+    initialStatus[type] = 'testing'
+  })
+  testStatus.value[key] = initialStatus
+  const rowStatus = testStatus.value[key]!
+
+  const summary: string[] = []
+  let resultItems: ModelTestResultItem[] = []
+
   try {
-    await channelApi.createModelConfig(
-        props.channelId,
-        modelForm.unified_model,
-        modelForm.upstream_model,
-        modelForm.endpoint_types,
-        modelForm.key_groups
+    resultItems = await Promise.all(
+      endpointTypes.map(async (endpointType, index) => {
+        try {
+          const testPrompt = endpointType === 'OpenAIImagesEdits'
+            ? (options?.prompt || modelTestPrompt)
+            : modelTestPrompt
+          const imageData = endpointType === 'OpenAIImagesEdits' ? (options?.imageData || '') : ''
+
+          const result = await channelApi.testModel(
+            props.channelId,
+            row.channel_model,
+            model,
+            endpointType,
+            keyGroups,
+            {
+              testPrompt,
+              imageData,
+            },
+          )
+          rowStatus[endpointType] = result.success ? 'success' : 'error'
+          summary.push(`${endpointType}: ${formatTestResultSummary(result)}`)
+          return createModelTestResultItem({
+            id: `${key}:${endpointType}:${index}`,
+            channelName: props.channelName,
+            modelName: model,
+            channelModel: row.channel_model,
+            endpointType,
+            result,
+          })
+        } catch (err) {
+          rowStatus[endpointType] = 'error'
+          const errorMessage = getErrorMessage(err, '测试失败')
+          summary.push(`${endpointType}: ${errorMessage}`)
+          return createModelTestResultItem({
+            id: `${key}:${endpointType}:${index}`,
+            channelName: props.channelName,
+            modelName: model,
+            channelModel: row.channel_model,
+            endpointType,
+            errorMessage,
+          })
+        }
+      }),
     )
-    window.$message?.success('添加成功')
-    showAddModelDialog.value = false
-    modelForm.upstream_model = ''
-    modelForm.unified_model = ''
-    modelForm.endpoint_types = ['openai-chat']
-    modelForm.key_groups = ['Default']
-    await loadLocalConfigs()
-    initEditMap()
-    emit('refresh')
-  } catch (error: any) {
-    console.error('Failed to add model config:', error)
-    window.$message?.error(error.response?.data?.error || '添加失败')
+  } finally {
+    endpointTypes.forEach((type) => {
+      if (rowStatus[type] === 'testing') {
+        rowStatus[type] = 'error'
+      }
+    })
+  }
+
+  const allPass = endpointTypes.every((type) => rowStatus[type] === 'success')
+  testDetailMap.value[key] = summary.join('；')
+  testResultTitle.value = `模型测试结果 · ${props.channelName} / ${row.channel_model}`
+  testResultItems.value = resultItems
+  showTestResultDialog.value = true
+
+  if (!allPass && !resultItems.length) {
+    window.$message?.error('测试失败')
   }
 }
 
-// 保存更改
 async function handleSave() {
   saving.value = true
-
   try {
-    if (!hasSynced.value || syncFailed.value) {
-      // 没有同步或同步失败，只处理本地配置的修改
-      const updatePromises: Promise<any>[] = []
+    if (!hasSynced.value || syncFailed.value || !syncResult.value) {
+      const updatePromises: Promise<unknown>[] = []
       const deletePromises: Promise<void>[] = []
 
-      // 遍历本地配置
       for (const config of localConfigs.value) {
-        const isChecked = checkedKeys.value.includes(config.upstream_model)
-        const currentUnifiedModel = editMap.value[config.upstream_model]
-        const currentEndpointTypes = endpointTypesEditMap.value[config.upstream_model]
-        const currentKeyGroups = keyGroupsEditMap.value[config.upstream_model] || config.key_groups || ['Default']
+        const key = config.channel_model
+        const checked = checkedKeys.value.includes(key)
+        const model = modelEditMap.value[key] || config.model
+        const weight = weightEditMap.value[key] || config.weight || channelWeight.value
+        const endpointTypes = endpointTypesEditMap.value[key] || config.endpoint_types || ['OpenAIChatCompletions']
+        const keyGroups = keyGroupsEditMap.value[key] || config.key_groups || ['Default']
+        const testPrompt = (testPromptEditMap.value[key] ?? config.test_prompt ?? '').trim()
 
-        if (isChecked) {
-          // 验证端点类型
-          if (!currentEndpointTypes || currentEndpointTypes.length === 0) {
-            window.$message?.error(`模型 "${config.upstream_model}" 必须选择至少一个端点类型`)
-            saving.value = false
-            return
-          }
-          if (!currentKeyGroups || currentKeyGroups.length === 0) {
-            window.$message?.error(`模型 "${config.upstream_model}" 必须选择至少一个密钥分组`)
-            saving.value = false
-            return
-          }
-        }
-
-        if (!isChecked) {
-          // 取消选中，删除配置
+        if (!checked) {
           deletePromises.push(channelApi.deleteModelConfig(config.id))
-        } else if (currentUnifiedModel && currentUnifiedModel !== config.unified_model) {
-          // 选中且统一模型有修改，更新配置
-          updatePromises.push(
-              channelApi.updateModelConfig(config.id, {
-                unified_model: currentUnifiedModel,
-                endpoint_types: currentEndpointTypes,
-                key_groups: currentKeyGroups
-              })
-          )
-        } else if (
-            currentEndpointTypes && JSON.stringify(currentEndpointTypes) !== JSON.stringify(config.endpoint_types)
-        ) {
-          // 选中且端点类型有修改，更新配置
-          updatePromises.push(
-              channelApi.updateModelConfig(config.id, {
-                endpoint_types: currentEndpointTypes,
-                key_groups: currentKeyGroups
-              })
-          )
-        } else if (
-            currentKeyGroups && JSON.stringify(currentKeyGroups) !== JSON.stringify(config.key_groups || ['Default'])
-        ) {
-          updatePromises.push(
-              channelApi.updateModelConfig(config.id, {
-                key_groups: currentKeyGroups
-              })
-          )
+          continue
+        }
+
+        if (!endpointTypes.length || !keyGroups.length) {
+          window.$message?.error(`模型 ${key} 必须配置端点与密钥分组`)
+          saving.value = false
+          return
+        }
+
+        const updatePayload: Partial<ChannelModelConfig> = {}
+        if (model !== config.model) updatePayload.model = model
+        if (weight !== (config.weight || channelWeight.value)) updatePayload.weight = weight
+        if (JSON.stringify(endpointTypes) !== JSON.stringify(config.endpoint_types || ['OpenAIChatCompletions'])) {
+          updatePayload.endpoint_types = endpointTypes
+        }
+        if (JSON.stringify(keyGroups) !== JSON.stringify(config.key_groups || ['Default'])) {
+          updatePayload.key_groups = keyGroups
+        }
+        if (testPrompt !== (config.test_prompt || '')) {
+          updatePayload.test_prompt = testPrompt
+        }
+
+        if (Object.keys(updatePayload).length > 0) {
+          updatePromises.push(channelApi.updateModelConfig(config.id, updatePayload))
         }
       }
 
-      // 执行所有删除和更新操作
       await Promise.all([...deletePromises, ...updatePromises])
-
-      if (deletePromises.length > 0 || updatePromises.length > 0) {
-        window.$message?.success('保存成功')
-        emit('refresh')
-      }
     } else {
-      // 有同步结果，使用同步保存逻辑
-      // 验证：检查所有选中的模型是否都选择了统一模型和端点类型
-      for (const key of checkedKeys.value) {
-        const unifiedModel = editMap.value[key]
-        const endpointTypes = endpointTypesEditMap.value[key]
-        const keyGroups = keyGroupsEditMap.value[key]
-
-        if (!unifiedModel) {
-          window.$message?.error(`请为上游模型 ${key} 选择统一模型`)
-          saving.value = false
-          return
-        }
-
-        if (!endpointTypes || endpointTypes.length === 0) {
-          window.$message?.error(`请为上游模型 ${key} 选择至少一个端点类型`)
-          saving.value = false
-          return
-        }
-
-        if (!keyGroups || keyGroups.length === 0) {
-          window.$message?.error(`请为上游模型 ${key} 选择至少一个密钥分组`)
-          saving.value = false
-          return
-        }
-      }
-
-      // 准备数据
-      const addModels: any[] = []
-      const updateModels: any[] = []
+      const addModels: ModelConfigItem[] = []
+      const updateModels: ModelConfigUpdateItem[] = []
       const deleteModelIDs: number[] = []
 
-      syncResult.value!.diff.diffs.forEach((d) => {
-        const isChecked = checkedKeys.value.includes(d.upstream_model)
-        const currentUnifiedModel = editMap.value[d.upstream_model]
-        const currentEndpointTypes = endpointTypesEditMap.value[d.upstream_model]
-        const currentKeyGroups = keyGroupsEditMap.value[d.upstream_model] || d.key_groups || ['Default']
-        const existingUnifiedModel = d.existing_config?.unified_model
-        const existingEndpointTypes = d.existing_config?.endpoint_types
-        const existingKeyGroups = d.existing_config?.key_groups || ['Default']
+      syncResult.value.diff.diffs.forEach((item) => {
+        const key = item.channel_model
+        const checked = checkedKeys.value.includes(key)
 
-        if (d.type === 'existing') {
-          // 已配置的模型
-          if (isChecked) {
-            // 选中了，检查是否需要更新
-            if (
-                currentUnifiedModel !== existingUnifiedModel
-                || JSON.stringify(currentEndpointTypes) !== JSON.stringify(existingEndpointTypes)
-                || JSON.stringify(currentKeyGroups) !== JSON.stringify(existingKeyGroups)
-            ) {
-              updateModels.push({
-                id: d.existing_config!.id,
-                unified_model: currentUnifiedModel,
-                upstream_model: d.upstream_model,
-                endpoint_types: currentEndpointTypes,
-                key_groups: currentKeyGroups
-              })
-            }
-          } else {
-            // 没选中，删除
-            deleteModelIDs.push(d.existing_config!.id)
+        const model = modelEditMap.value[key] || item.existing_config?.model || item.channel_model
+        const weight = weightEditMap.value[key] || item.existing_config?.weight || channelWeight.value
+        const endpointTypes = endpointTypesEditMap.value[key] || item.existing_config?.endpoint_types || ['OpenAIChatCompletions']
+        const keyGroups = keyGroupsEditMap.value[key] || item.key_groups || item.existing_config?.key_groups || ['Default']
+        const testPrompt = (testPromptEditMap.value[key] ?? item.existing_config?.test_prompt ?? '').trim()
+
+        if (item.type === 'existing') {
+          if (!item.existing_config) return
+
+          if (!checked) {
+            deleteModelIDs.push(item.existing_config.id)
+            return
           }
-        } else if (d.type === 'added') {
-          // 新增模型
-          if (isChecked) {
-            addModels.push({
-              unified_model: currentUnifiedModel,
-              upstream_model: d.upstream_model,
-              endpoint_types: currentEndpointTypes,
-              key_groups: currentKeyGroups
+
+          const changed =
+            model !== item.existing_config.model ||
+            weight !== (item.existing_config.weight || channelWeight.value) ||
+            JSON.stringify(endpointTypes) !== JSON.stringify(item.existing_config.endpoint_types || ['OpenAIChatCompletions']) ||
+            JSON.stringify(keyGroups) !== JSON.stringify(item.existing_config.key_groups || ['Default']) ||
+            testPrompt !== (item.existing_config.test_prompt || '')
+
+          if (changed) {
+            updateModels.push({
+              id: item.existing_config.id,
+              model,
+              channel_model: item.channel_model,
+              weight,
+              endpoint_types: endpointTypes,
+              key_groups: keyGroups,
+              test_prompt: testPrompt,
             })
           }
-        } else if (d.type === 'removed') {
-          // 删除模型（默认选中且禁用）
-          if (isChecked && d.existing_config) {
-            deleteModelIDs.push(d.existing_config.id)
-          }
+          return
+        }
+
+        if (item.type === 'added') {
+          if (!checked) return
+
+          addModels.push({
+            model,
+            channel_model: item.channel_model,
+            weight,
+            endpoint_types: endpointTypes,
+            key_groups: keyGroups,
+            test_prompt: testPrompt,
+          })
+          return
+        }
+
+        if (item.type === 'removed' && checked && item.existing_config) {
+          deleteModelIDs.push(item.existing_config.id)
         }
       })
 
-      // 调用 API
-      await channelApi.applySync(
-          props.channelId,
-          {
-            add_models: addModels,
-            update_models: updateModels,
-            delete_model_ids: deleteModelIDs
-          }
-      )
-
-      window.$message?.success('保存成功')
-      emit('refresh')
+      await channelApi.applySync(props.channelId, {
+        add_models: addModels,
+        update_models: updateModels,
+        delete_model_ids: deleteModelIDs,
+      })
     }
 
+    window.$message?.success('模型配置已保存')
+    emit('refresh')
     handleClose()
-  } catch (error: any) {
-    console.error('Failed to save:', error)
-    window.$message?.error(error.response?.data?.error || '保存失败')
+  } catch (err) {
+    toastApiError(err, '保存失败')
   } finally {
     saving.value = false
   }
 }
 
-// 测试模型
-async function handleTest(row: ModelDisplayType) {
-  // 获取当前选择的端点类型
-  const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
-  const keyGroups = keyGroupsEditMap.value[row.key] || row.key_groups
-
-  // 验证是否选择了端点类型
-  if (!endpointTypes || endpointTypes.length === 0) {
-    window.$message?.error('请先选择至少一个端点类型')
-    return
-  }
-  if (!keyGroups || keyGroups.length === 0) {
-    window.$message?.error('请先选择至少一个密钥分组')
-    return
-  }
-
-  // 获取当前选择的统一模型
-  const unifiedModel = editMap.value[row.key] || row.unified_model
-
-  // 初始化测试状态
-  if (!testStatus.value[row.key]) {
-    testStatus.value[row.key] = {}
-  }
-
-  // 为所有端点类型设置测试中状态
-  endpointTypes.forEach((type: string) => {
-    testStatus.value[row.key][type] = 'testing'
-  })
-
-  // 测试所有端点类型
-  const testPromises = endpointTypes.map(async (endpointType: string) => {
-    try {
-      const result = await channelApi.testModel(
-          props.channelId,
-          row.upstream_model,
-          unifiedModel,
-          endpointType,
-          keyGroups
-      )
-
-      if (result.success) {
-        testStatus.value[row.key][endpointType] = 'success'
-      } else {
-        testStatus.value[row.key][endpointType] = 'error'
-        window.$message?.error(`${endpointType}: ${result.message}`)
-      }
-    } catch (error: any) {
-      console.error(`Failed to test model with ${endpointType}:`, error)
-      testStatus.value[row.key][endpointType] = 'error'
-      window.$message?.error(`${endpointType}: ${error.response?.data?.error || '测试失败'}`)
-    }
-  })
-
-  await Promise.all(testPromises)
-
-  // 检查是否所有测试都成功
-  const allSuccess = endpointTypes.every((type: string) => testStatus.value[row.key][type] === 'success')
-  if (allSuccess) {
-    window.$message?.success(`模型 "${row.upstream_model}" 所有端点类型测试成功`)
-  }
-}
-
-// 关闭对话框
 function handleClose() {
-  emit('update:modelValue', false)
+  showTestResultDialog.value = false
+  testResultItems.value = []
+  showQuickCreateModelDialog.value = false
+  quickCreateTargetKey.value = ''
+  show.value = false
 }
 
-// 监听对话框打开
-watch(() => props.modelValue, async (newVal) => {
-  if (!newVal) {
-    syncRequestId.value += 1
-    syncing.value = false
-    return
-  }
-  if (props.channelId > 0) {
-    // 重置状态
-    syncRequestId.value += 1
-    syncing.value = false
-    syncResult.value = null
-    syncFailed.value = false
+watch(
+  () => props.modelValue,
+  async (open) => {
+    if (!open || props.channelId <= 0) return
+
     hasSynced.value = false
-    editMap.value = {}
-    endpointTypesEditMap.value = {}
-    keyGroupsEditMap.value = {}
-    checkedKeys.value = []
-    localConfigs.value = []
-    unifiedModels.value = []
-    endpoints.value = []
-    testStatus.value = {}
+    syncFailed.value = false
+    syncResult.value = null
 
-    // 重置分页为第一页
-    pagination.page = 1
-
-    try {
-      // 先加载数据
-      await Promise.all([
-        loadLocalConfigs(),
-        loadUnifiedModels(),
-        loadEndpoints()
-      ])
-      // 数据加载完成后再初始化编辑状态和选中状态
-      initEditMap()
-      // 等待 Vue 更新视图
-      await nextTick()
-
-    } catch (error) {
-      console.error('[ModelManagementDialog] Error loading data:', error)
-    }
-  }
-})
+    await Promise.all([loadLocalConfigs(), loadUnifiedModels(), loadProviders(), loadEndpoints()])
+    initEditState()
+    modelForm.test_prompt = ''
+    await nextTick()
+  },
+)
 </script>
 
 <style scoped>
-/* 对话框样式 */
-.model-management-dialog {
-  --primary-color: #18a058;
-  --primary-color-hover: #36ad6a;
-  --info-color: #2080f0;
-  --warning-color: #f0a020;
-  --success-color: #18a058;
-  --error-color: #d03050;
+:deep(.n-data-table td) {
+  vertical-align: middle;
 }
 
-/* 统计卡片样式 */
-.stats-card {
-  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+:deep(.n-data-table .n-data-table-th),
+:deep(.n-data-table .n-data-table-td) {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
 }
 
-.stat-item {
+:deep(.compact-multi-select .n-base-selection) {
+  min-height: 34px;
+}
+
+:deep(.compact-multi-select .n-base-selection-label) {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 8px 0;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
 }
 
-.stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+:deep(.compact-multi-select .n-base-selection-tags) {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  align-content: center;
+  gap: 6px 4px;
 }
 
-.stat-icon-success {
-  background: linear-gradient(135deg, #e8f7ef 0%, #d4f1e4 100%);
-  color: var(--success-color);
+:deep(.compact-multi-select .n-base-selection-tag-wrapper) {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px 0 0 !important;
 }
 
-.stat-icon-info {
-  background: linear-gradient(135deg, #e8f4ff 0%, #d4e9ff 100%);
-  color: var(--info-color);
+:deep(.compact-multi-select .n-base-selection-input-tag) {
+  margin-bottom: 0 !important;
+  height: 22px !important;
+  line-height: 22px !important;
 }
 
-.stat-icon-primary {
-  background: linear-gradient(135deg, #e8f0ff 0%, #d4e0ff 100%);
-  color: var(--primary-color);
+:deep(.compact-multi-select .n-base-selection-tag-wrapper .n-tag.n-tag--small) {
+  font-size: 12px !important;
+  height: 22px !important;
+  line-height: 22px !important;
+  padding: 0 8px !important;
+  display: inline-flex;
+  align-items: center;
 }
 
-.stat-icon-warning {
-  background: linear-gradient(135deg, #fff7e8 0%, #ffedd4 100%);
-  color: var(--warning-color);
+:deep(.compact-multi-select .n-base-selection-tag-wrapper .n-tag .n-tag__content) {
+  display: inline-flex;
+  align-items: center;
 }
 
-.stat-icon-default {
-  background: linear-gradient(135deg, #f5f5f6 0%, #e8e8e9 100%);
-  color: #666;
+.image-test-upload {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.stat-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1;
-  color: #333;
-}
-
-.stat-value-success {
-  color: var(--success-color);
-}
-
-.stat-value-info {
-  color: var(--info-color);
-}
-
-.stat-value-primary {
-  color: var(--primary-color);
-}
-
-.stat-value-warning {
-  color: var(--warning-color);
-}
-
-/* 提示信息样式 */
-.info-alert {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-left: 4px solid var(--info-color);
-}
-
-.warning-alert {
-  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-  border-left: 4px solid var(--warning-color);
-}
-
-.success-alert {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-left: 4px solid var(--success-color);
-}
-
-
-/* 添加模型对话框样式 */
-.add-model-dialog {
-  --n-border-radius: 12px;
-}
-
-.add-model-dialog :deep(.n-card__content) {
-  padding: 24px;
-}
-
-.add-model-dialog :deep(.n-input),
-.add-model-dialog :deep(.n-base-selection) {
-  border-radius: 8px;
-  transition: all 0.3s;
-}
-
-.add-model-dialog :deep(.n-input:focus),
-.add-model-dialog :deep(.n-base-selection:focus) {
-  box-shadow: 0 0 0 2px rgba(24, 160, 88, 0.1);
-}
-
-.add-model-dialog :deep(.n-form-item-label) {
-  font-weight: 600;
-  color: #333;
-  font-size: 14px;
-  padding-bottom: 8px;
-}
-
-.add-model-dialog :deep(.n-form-item-feedback) {
+.image-test-upload__input {
+  width: 100%;
   font-size: 12px;
-  color: #999;
-  margin-top: 4px;
-}
-
-/* 按钮样式优化 */
-.model-management-dialog :deep(.n-button) {
-  transition: all 0.3s;
-}
-
-.model-management-dialog :deep(.n-button:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.model-management-dialog :deep(.n-button--primary) {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
-  border: none;
-}
-
-.model-management-dialog :deep(.n-button--primary:hover) {
-  background: linear-gradient(135deg, var(--primary-color-hover) 0%, #40c478 100%);
-}
-
-/* 加载动画 */
-.model-management-dialog :deep(.n-spin) {
-  color: var(--primary-color);
-}
-
-/* 响应式调整 */
-@media (max-width: 1440px) {
-  .model-management-dialog {
-    width: 1200px !important;
-  }
-}
-
-@media (max-width: 1200px) {
-  .model-management-dialog {
-    width: 95vw !important;
-  }
-
-  .stats-card :deep(.n-grid-item) {
-    min-width: 50%;
-  }
-}
-
-/* 标签样式优化 */
-.model-management-dialog :deep(.n-tag) {
-  border-radius: 6px;
-  font-weight: 500;
-  padding: 4px 12px;
+  color: #262626;
 }
 </style>

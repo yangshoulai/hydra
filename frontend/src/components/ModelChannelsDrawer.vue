@@ -1,49 +1,41 @@
 <template>
-  <n-drawer v-model:show="visible" :width="1000" placement="right" class="model-channels-drawer">
+  <n-drawer v-model:show="visible" :width="960" placement="right" class="model-channels-drawer">
     <n-drawer-content :title="title" closable>
       <template v-if="!loading">
-        <n-space vertical :size="16">
-          <n-alert v-if="groupedChannels.length === 0" type="info" :bordered="false">
-            <template #icon>
-              <n-icon>
-                <InformationCircleOutline/>
-              </n-icon>
-            </template>
-            该模型暂未关联任何渠道
-          </n-alert>
+        <n-space vertical :size="12">
+          <n-empty v-if="groupedChannels.length === 0" description="该模型暂未关联任何渠道" />
 
-          <n-card
-              v-for="group in groupedChannels"
-              :key="group.channel_id"
-              size="small"
-              :bordered="true"
+          <section
+            v-for="group in groupedChannels"
+            :key="group.channel_id"
+            class="panel-card"
           >
-            <template #header>
-              <n-space align="center" justify="space-between">
-                <n-space align="center">
-                  <n-text strong>{{ group.channel_name }}</n-text>
-                  <n-tag :type="group.channel_status === 'active' ? 'success' : 'warning'" size="small" :bordered="false">
-                    {{ group.channel_status === 'active' ? '启用' : '禁用' }}
-                  </n-tag>
-                  <n-text depth="3" style="font-size: 12px;">ID: {{ group.channel_id }}</n-text>
-                </n-space>
-                <n-tag size="small" :bordered="true" type="info">
-                  {{ group.models.length }} 个模型
+            <header class="panel-card__header">
+              <div class="channel-group__title">
+                <span class="channel-group__name">{{ group.channel_name }}</span>
+                <n-tag
+                  :type="group.channel_status === 'active' ? 'success' : 'default'"
+                  size="small"
+                  :bordered="false"
+                >
+                  {{ group.channel_status === 'active' ? '启用' : '停用' }}
                 </n-tag>
-              </n-space>
-            </template>
+                <span class="muted">ID: {{ group.channel_id }}</span>
+              </div>
+              <span class="muted">共 {{ group.models.length }} 个模型</span>
+            </header>
 
-            <n-data-table
+            <div class="panel-card__body">
+              <n-data-table
                 :columns="createColumns(group.channel_id)"
                 :data="group.models"
-                :bordered="true"
                 :single-line="false"
-                size="small"
                 :pagination="false"
-                :scroll-x="800"
+                :scroll-x="680"
                 :row-key="(row) => row.config_id"
-            />
-          </n-card>
+              />
+            </div>
+          </section>
         </n-space>
       </template>
 
@@ -51,56 +43,63 @@
         <n-spin size="medium"/>
       </n-space>
     </n-drawer-content>
+
+    <ModelTestResultDialog
+      v-model:show="showTestResultDialog"
+      :title="testResultTitle"
+      :items="testResultItems"
+    />
   </n-drawer>
 </template>
 
 <script setup lang="ts">
-import {computed, h, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {computed, h, ref, watch} from 'vue'
 import {
   type DataTableColumns,
-  NAlert,
   NButton,
-  NCard,
   NDataTable,
   NDrawer,
   NDrawerContent,
+  NEmpty,
   NIcon,
   NPopconfirm,
   NSpace,
   NSpin,
   NTag,
-  NText,
+  NTooltip,
   useMessage
 } from 'naive-ui'
-import {CheckmarkCircleOutline, CloseCircleOutline, InformationCircleOutline, PlayCircleOutline} from '@vicons/ionicons5'
+import {CheckmarkCircleOutline, CloseCircleOutline, PlayCircleOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
+import ModelTestResultDialog from './ModelTestResultDialog.vue'
 import EndpointTags from './EndpointTags.vue'
+import type {ModelTestResultItem} from '../types/modelTest'
+import {createModelTestResultItem} from '../utils/modelTest'
+import {getErrorMessage, toastApiError} from '@/utils/error'
 
 interface ModelConfig {
   id: number
   config_id: number
   config_status: string
-  cooling_at?: string
-  upstream_model: string
+  channel_model: string
   endpoint_types: string[]
-  status: 'disabled' | 'active' | 'cooling' | 'non_exist'
+  status: 'active' | 'inactive'
 }
 
 interface ChannelInfo {
   config_id: number
-  config_status: 'disabled' | 'active' | 'cooling' | 'non_exist'
-  cooling_at?: string
+  config_status: 'active' | 'inactive'
   channel_id: number
   channel_name: string
-  channel_status: string
-  upstream_model: string
+  channel_status: 'active' | 'inactive'
+  channel_model: string
   endpoint_types: string[]
 }
 
 interface ChannelGroup {
   channel_id: number
   channel_name: string
-  channel_status: string
+  channel_status: 'active' | 'inactive'
   models: ModelConfig[]
 }
 
@@ -122,8 +121,9 @@ const loading = ref(false)
 const channels = ref<ChannelInfo[]>([])
 const groupedChannels = ref<ChannelGroup[]>([])
 const testingConfigs = ref<Set<number>>(new Set())
-const currentTime = ref(Date.now())
-const coolingTimer = ref<number | null>(null)
+const showTestResultDialog = ref(false)
+const testResultTitle = ref('模型测试结果')
+const testResultItems = ref<ModelTestResultItem[]>([])
 
 const visible = computed({
   get: () => props.show,
@@ -131,7 +131,7 @@ const visible = computed({
 })
 
 const title = computed(() => {
-  return `模型渠道列表 - ${props.modelName}`
+  return `关联渠道 · ${props.modelName}`
 })
 
 function groupChannelsByChannel() {
@@ -143,8 +143,7 @@ function groupChannelsByChannel() {
       id: channel.config_id,
       config_id: channel.config_id,
       config_status: channel.config_status,
-      cooling_at: channel.cooling_at,
-      upstream_model: channel.upstream_model,
+      channel_model: channel.channel_model,
       endpoint_types: channel.endpoint_types,
       status: channel.config_status
     }
@@ -164,24 +163,6 @@ function groupChannelsByChannel() {
   groupedChannels.value = Array.from(groupMap.values())
 }
 
-function formatCoolingElapsed(coolingAt?: string): string {
-  if (!coolingAt) return '-'
-  const t = new Date(coolingAt).getTime()
-  if (Number.isNaN(t)) return '-'
-  const diff = currentTime.value - t
-  if (diff < 0) return '-'
-
-  const seconds = Math.floor(diff / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  const remainingSeconds = seconds % 60
-
-  if (hours > 0) return `${hours}小时${remainingMinutes}分`
-  if (minutes > 0) return `${minutes}分${remainingSeconds}秒`
-  return `${remainingSeconds}秒`
-}
-
 async function loadChannels() {
   if (!props.modelId) return
 
@@ -190,9 +171,8 @@ async function loadChannels() {
     const channelsData = await channelApi.getChannelsByModel(props.modelId)
     channels.value = channelsData
     groupChannelsByChannel()
-  } catch (error: any) {
-    console.error('Failed to load channels:', error)
-    message.error('加载渠道列表失败')
+  } catch (err) {
+    toastApiError(err, '加载渠道列表失败')
   } finally {
     loading.value = false
   }
@@ -200,14 +180,12 @@ async function loadChannels() {
 
 async function handleToggleStatus(row: ModelConfig) {
   try {
-    const nextStatus = row.status === 'active' ? 'disabled' : 'active'
+    const nextStatus: 'active' | 'inactive' = row.status === 'active' ? 'inactive' : 'active'
     await channelApi.updateModelConfig(row.config_id, {status: nextStatus})
-    message.success(`已${nextStatus === 'active' ? '启用' : '禁用'}该模型配置`)
+    message.success(`已${nextStatus === 'active' ? '启用' : '停用'}该模型配置`)
     row.status = nextStatus
-    row.cooling_at = undefined
-  } catch (error: any) {
-    console.error('Failed to toggle status:', error)
-    message.error('切换状态失败')
+  } catch (err) {
+    toastApiError(err, '切换状态失败')
   }
 }
 
@@ -216,28 +194,36 @@ async function handleTest(row: ModelConfig, channelId: number) {
   testingConfigs.value.add(configId)
 
   try {
-    // 对每个端点类型进行测试
-    const testPromises = row.endpoint_types.map(async (endpointType) => {
+    const channelName = groupedChannels.value.find((group) => group.channel_id === channelId)?.channel_name
+    const resultItems = await Promise.all(row.endpoint_types.map(async (endpointType, index) => {
       try {
-        const result = await channelApi.testModel(channelId, row.upstream_model, props.modelName, endpointType)
-        return {endpointType, success: result.success}
-      } catch (error) {
-        return {endpointType, success: false, error}
+        const result = await channelApi.testModel(channelId, row.channel_model, props.modelName, endpointType)
+        return createModelTestResultItem({
+          id: `${configId}:${endpointType}:${index}`,
+          channelName,
+          modelName: props.modelName,
+          channelModel: row.channel_model,
+          endpointType,
+          result,
+        })
+      } catch (err) {
+        const errorMessage = getErrorMessage(err, '测试请求失败')
+        return createModelTestResultItem({
+          id: `${configId}:${endpointType}:${index}`,
+          channelName,
+          modelName: props.modelName,
+          channelModel: row.channel_model,
+          endpointType,
+          errorMessage,
+        })
       }
-    })
+    }))
 
-    const results = await Promise.all(testPromises)
-    const allSuccess = results.every(r => r.success)
-    const failedEndpoints = results.filter(r => !r.success).map(r => r.endpointType)
-
-    if (allSuccess) {
-      message.success('所有端点类型测试通过')
-    } else {
-      message.error(`以下端点类型测试失败: ${failedEndpoints.join(', ')}`)
-    }
-  } catch (error: any) {
-    console.error('Failed to test model:', error)
-    message.error('测试失败')
+    testResultTitle.value = `模型测试结果 · ${channelName || props.modelName} / ${row.channel_model}`
+    testResultItems.value = resultItems
+    showTestResultDialog.value = true
+  } catch (err) {
+    toastApiError(err, '测试失败')
   } finally {
     testingConfigs.value.delete(configId)
   }
@@ -246,20 +232,11 @@ async function handleTest(row: ModelConfig, channelId: number) {
 watch(() => props.show, (newVal) => {
   if (newVal) {
     loadChannels()
+    return
   }
-})
 
-onMounted(() => {
-  coolingTimer.value = window.setInterval(() => {
-    currentTime.value = Date.now()
-  }, 1000)
-})
-
-onBeforeUnmount(() => {
-  if (coolingTimer.value !== null) {
-    clearInterval(coolingTimer.value)
-    coolingTimer.value = null
-  }
+  showTestResultDialog.value = false
+  testResultItems.value = []
 })
 
 function createColumns(channelId: number): DataTableColumns<ModelConfig> {
@@ -267,17 +244,19 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
     {
       title: '配置 ID',
       key: 'config_id',
-      width: 80
+      width: 90,
+      align: 'right',
     },
     {
-      title: '上游模型',
-      key: 'upstream_model',
-      width: 200
+      title: '渠道模型',
+      key: 'channel_model',
+      minWidth: 200,
+      ellipsis: {tooltip: true},
     },
     {
       title: '端点类型',
       key: 'endpoint_types',
-      width: 160,
+      minWidth: 200,
       render: (row: ModelConfig) => {
         return h(EndpointTags, {types: row.endpoint_types})
       }
@@ -285,112 +264,89 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
     {
       title: '状态',
       key: 'status',
-      width: 80,
+      width: 84,
       align: 'center',
       render: (row: ModelConfig) => {
-        const statusConfig = {
-          active: {type: 'success' as const, text: '启用'},
-          cooling: {type: 'warning' as const, text: '冷却中'},
-          disabled: {type: 'default' as const, text: '禁用'},
-          non_exist: {type: 'error' as const, text: '失效'}
-        }
-        const config = statusConfig[row.status] || statusConfig.disabled
+        const type = row.status === 'active' ? 'success' : 'default'
+        const text = row.status === 'active' ? '启用' : '停用'
         return h(
-            NTag,
-            {
-              type: config.type,
-              size: 'small',
-              bordered: false
-            },
-            {default: () => config.text}
+          NTag,
+          {type, size: 'small', bordered: false},
+          {default: () => text}
         )
-      }
-    },
-    {
-      title: '已冷却',
-      key: 'cooling_time',
-      width: 120,
-      align: 'center',
-      render: (row: ModelConfig) => {
-        if (row.status !== 'cooling') {
-          return h(NText, {depth: 3}, {default: () => '-'})
-        }
-        return h(NText, {}, {default: () => formatCoolingElapsed(row.cooling_at)})
       }
     },
     {
       title: '操作',
       key: 'actions',
-      width: 160,
+      width: 110,
+      fixed: 'right',
       align: 'center',
       render: (row: ModelConfig) => {
         const isTesting = testingConfigs.value.has(row.config_id)
 
-        return h(NSpace, {size: 8, justify: 'center'}, {
-          default: () => row.status === 'non_exist' ? [] : [
-            // 测试按钮
+        return h(NSpace, {size: 4, justify: 'center', class: 'table-action-group'}, {
+          default: () => [
             h(
-                NButton,
-                {
-                  size: 'tiny',
-                  type: 'info',
-                  secondary: true,
-                  loading: isTesting,
-                  onClick: () => handleTest(row, channelId)
-                },
-                {
-                  default: () => '测试',
-                  icon: () => h(NIcon, null, {default: () => h(PlayCircleOutline)})
-                }
-            ),
-            // 启用/禁用按钮
-            row.status === 'cooling'
-                ? h(
-                    NPopconfirm,
+              NTooltip,
+              null,
+              {
+                trigger: () =>
+                  h(
+                    NButton,
                     {
-                      onPositiveClick: () => handleToggleStatus(row)
+                      class: 'table-action-btn',
+                      size: 'tiny',
+                      type: 'info',
+                      quaternary: true,
+                      circle: true,
+                      loading: isTesting,
+                      'aria-label': `测试配置 ${row.config_id}`,
+                      onClick: () => handleTest(row, channelId)
                     },
                     {
-                      default: () => '确定要启用该模型配置吗？（将清除冷却状态）',
-                      trigger: () => h(
-                          NButton,
-                          {
-                            size: 'tiny',
-                            type: 'success',
-                            secondary: true
-                          },
-                          {
-                            default: () => '启用',
-                            icon: () => h(NIcon, null, {default: () => h(CheckmarkCircleOutline)})
-                          }
-                      )
+                      icon: () => h(NIcon, null, {default: () => h(PlayCircleOutline)})
                     }
-                )
-                : h(
-                    NPopconfirm,
+                  ),
+                default: () => '测试'
+              }
+            ),
+            h(
+              NPopconfirm,
+              {
+                onPositiveClick: () => handleToggleStatus(row)
+              },
+              {
+                default: () => `确定要${row.status === 'active' ? '停用' : '启用'}该模型配置吗？`,
+                trigger: () =>
+                  h(
+                    NTooltip,
+                    null,
                     {
-                      onPositiveClick: () => handleToggleStatus(row)
-                    },
-                    {
-                      default: () => `确定要${row.status === 'active' ? '禁用' : '启用'}该模型配置吗？（将清除冷却状态）`,
-                      trigger: () => h(
+                      trigger: () =>
+                        h(
                           NButton,
                           {
+                            class: 'table-action-btn',
                             size: 'tiny',
                             type: row.status === 'active' ? 'warning' : 'success',
-                            secondary: true
+                            quaternary: true,
+                            circle: true,
+                            'aria-label': `${row.status === 'active' ? '停用' : '启用'}配置 ${row.config_id}`
                           },
                           {
-                            default: () => row.status === 'active' ? '禁用' : '启用',
                             icon: () => h(NIcon, null, {
                               default: () => row.status === 'active'
-                                  ? h(CloseCircleOutline)
-                                  : h(CheckmarkCircleOutline)
+                                ? h(CloseCircleOutline)
+                                : h(CheckmarkCircleOutline)
                             })
                           }
-                      )
+                        ),
+                      default: () => row.status === 'active' ? '停用' : '启用'
                     }
-                )
+                  )
+              }
+            )
           ]
         })
       }
@@ -400,44 +356,21 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
 </script>
 
 <style scoped>
-.model-channels-drawer :deep(.n-drawer-content) {
-  padding: 0;
+.channel-group__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-.model-channels-drawer :deep(.n-drawer-header__main) {
-  padding: 20px 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.model-channels-drawer :deep(.n-card) {
-  margin-bottom: 0;
-}
-
-.model-channels-drawer :deep(.n-card__header) {
-  padding: 12px 16px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #f8fafc;
-}
-
-.model-channels-drawer :deep(.n-card__content) {
-  padding: 0;
-}
-
-:deep(.n-data-table) {
+.channel-group__name {
   font-size: 13px;
+  font-weight: 650;
+  color: var(--hydra-text);
 }
 
-:deep(.n-data-table-th) {
-  background: #f1f5f9;
-  font-weight: 600;
-  color: #475569;
-}
-
-:deep(.n-data-table-td) {
-  padding: 8px 16px;
-}
-
-:deep(.n-data-table-tr:hover) {
-  background: #f8fafc;
+.muted {
+  font-size: 12px;
+  color: var(--hydra-text-tertiary);
 }
 </style>

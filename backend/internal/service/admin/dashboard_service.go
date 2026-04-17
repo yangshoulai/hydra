@@ -3,41 +3,40 @@ package admin
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/circuit"
+	metricsService "github.com/yangshoulai/hydra/internal/service/metrics"
 )
 
 // DashboardService 仪表盘服务
 type DashboardService struct {
-	logger                *slog.Logger
-	qpsAggregator         *QPSAggregator
-	successRateCalculator *SuccessRateCalculator
-	modelStatsAggregator  *ModelStatsAggregator
-	requestLogRepo        *repository.RequestLogRepository
-	channelRepo           *repository.ChannelRepository
-	keyRepo               *repository.KeyRepository
-	circuitManager        *circuit.Manager
+	logger         *slog.Logger
+	channelRepo    *repository.ChannelRepository
+	channelKeyRepo *repository.ChannelKeyRepository
+	modelRepo      *repository.ModelRepository
+	circuitManager *circuit.CircuitManager
+	runtimeMetrics *metricsService.RuntimeMetrics
 }
 
 // NewDashboardService 创建仪表盘服务
 func NewDashboardService(
 	logger *slog.Logger,
-	requestLogRepo *repository.RequestLogRepository,
 	channelRepo *repository.ChannelRepository,
-	keyRepo *repository.KeyRepository,
-	circuitManager *circuit.Manager,
+	channelKeyRepo *repository.ChannelKeyRepository,
+	modelRepo *repository.ModelRepository,
+	circuitManager *circuit.CircuitManager,
+	runtimeMetrics *metricsService.RuntimeMetrics,
 ) *DashboardService {
 	return &DashboardService{
-		logger:                logger,
-		qpsAggregator:         NewQPSAggregator(logger, requestLogRepo),
-		successRateCalculator: NewSuccessRateCalculator(logger, requestLogRepo),
-		modelStatsAggregator:  NewModelStatsAggregator(logger, requestLogRepo),
-		requestLogRepo:        requestLogRepo,
-		channelRepo:           channelRepo,
-		keyRepo:               keyRepo,
-		circuitManager:        circuitManager,
+		logger:         logger,
+		channelRepo:    channelRepo,
+		channelKeyRepo: channelKeyRepo,
+		modelRepo:      modelRepo,
+		circuitManager: circuitManager,
+		runtimeMetrics: runtimeMetrics,
 	}
 }
 
@@ -58,22 +57,8 @@ type DashboardMetrics struct {
 
 // GetMetrics 获取仪表盘指标
 func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, error) {
-	qps, err := s.qpsAggregator.GetCurrentQPS(ctx)
-	if err != nil {
-		s.logger.Error("获取当前 QPS 异常", slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	startTime := s.getLast24HoursStartTime()
-	endTime := s.getCurrentTime()
-
-	successRateStats, err := s.successRateCalculator.CalculateSuccessRateByTimeRange(ctx, startTime, endTime)
-	if err != nil {
-		s.logger.Error("计算成功率异常", slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	modelStats, err := s.modelStatsAggregator.GetModelStatsByTimeRange(ctx, startTime, endTime)
+	snapshot := s.snapshotNow()
+	modelStats, err := s.buildModelStats(ctx, snapshot)
 	if err != nil {
 		s.logger.Error("获取模型统计数据异常", slog.String("error", err.Error()))
 		return nil, err
@@ -91,47 +76,42 @@ func (s *DashboardService) GetMetrics(ctx context.Context) (*DashboardMetrics, e
 		return nil, err
 	}
 
-	qpsTrend, err := s.qpsAggregator.AggregateLastHour(ctx)
+	channelStats, err := s.buildChannelHealthMetrics(ctx, snapshot)
 	if err != nil {
-		s.logger.Error("获取 QPS", slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	channelStats, err := s.GetChannelHealthMetrics(ctx)
-	if err != nil {
-		s.logger.Error("failed to get channel stats", slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	tokenUsage, err := s.requestLogRepo.SumTokenUsageByTimeRange(ctx, startTime, endTime)
-	if err != nil {
-		s.logger.Error("failed to get token usage", slog.String("error", err.Error()))
+		s.logger.Error("获取渠道健康指标异常", slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	return &DashboardMetrics{
-		CurrentQPS:            qps,
-		SuccessRate:           successRateStats.SuccessRate,
-		TotalRequests:         successRateStats.TotalRequests,
+		CurrentQPS:            snapshot.CurrentQPS,
+		SuccessRate:           snapshot.SuccessRate,
+		TotalRequests:         snapshot.TotalRequests,
 		ActiveModels:          modelStats.ActiveModels,
 		ActiveChannels:        len(activeChannels),
 		TotalChannels:         len(allChannels),
-		TotalPromptTokens:     tokenUsage.PromptTokens,
-		TotalCompletionTokens: tokenUsage.CompletionTokens,
+		TotalPromptTokens:     snapshot.TotalPromptTokens,
+		TotalCompletionTokens: snapshot.TotalCompletionTokens,
 		ModelStats:            modelStats,
-		QPSTrend:              qpsTrend,
+		QPSTrend:              toQPSDataPoints(snapshot.QPSTrend),
 		ChannelHealthList:     channelStats,
 	}, nil
 }
 
 // GetQPSMetrics 获取 QPS 指标
-func (s *DashboardService) GetQPSMetrics(ctx context.Context) ([]QPSDataPoint, error) {
-	return s.qpsAggregator.AggregateLastHour(ctx)
+func (s *DashboardService) GetQPSMetrics(_ context.Context) ([]QPSDataPoint, error) {
+	snapshot := s.snapshotNow()
+	return toQPSDataPoints(snapshot.QPSTrend), nil
 }
 
 // GetSuccessRateMetrics 获取成功率指标
-func (s *DashboardService) GetSuccessRateMetrics(ctx context.Context) (*SuccessRateStats, error) {
-	return s.successRateCalculator.CalculateSuccessRateByTimeRange(ctx, s.getLast24HoursStartTime(), s.getCurrentTime())
+func (s *DashboardService) GetSuccessRateMetrics(_ context.Context) (*SuccessRateStats, error) {
+	snapshot := s.snapshotNow()
+	return &SuccessRateStats{
+		TotalRequests:   snapshot.TotalRequests,
+		SuccessRequests: snapshot.SuccessRequests,
+		FailedRequests:  snapshot.FailedRequests,
+		SuccessRate:     snapshot.SuccessRate,
+	}, nil
 }
 
 // ChannelHealthMetrics 渠道健康指标
@@ -148,43 +128,28 @@ type ChannelHealthMetrics struct {
 	HealthyKeys      int     `json:"healthy_keys"`
 	TotalKeys        int     `json:"total_keys"`
 	HealthPercentage float64 `json:"health_percentage"`
-	Priority         int     `json:"priority"`
 	Weight           int     `json:"weight"`
 }
 
 // GetChannelHealthMetrics 获取渠道健康指标
 func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]ChannelHealthMetrics, error) {
+	return s.buildChannelHealthMetrics(ctx, s.snapshotNow())
+}
+
+// GetCircuitStatus 获取熔断状态快照
+func (s *DashboardService) GetCircuitStatus(_ context.Context) ([]circuit.BreakerSnapshot, error) {
+	return s.circuitManager.SnapshotBreakers(), nil
+}
+
+func (s *DashboardService) buildChannelHealthMetrics(ctx context.Context, snapshot metricsService.Snapshot) ([]ChannelHealthMetrics, error) {
 	channels, err := s.channelRepo.FindActive(ctx)
 	if err != nil {
-		s.logger.Error("failed to get channels", slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	startTime := s.getLast24HoursStartTime()
-	endTime := s.getCurrentTime()
-
-	channelStatsMap, err := s.successRateCalculator.CalculateSuccessRateByChannel(ctx,
-		startTime, endTime)
-	if err != nil {
-		s.logger.Error("failed to calculate channel success rate", slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	tokenUsageMap, err := s.requestLogRepo.SumTokenUsageByChannel(ctx, startTime, endTime)
-	if err != nil {
-		s.logger.Error("failed to get channel token usage", slog.String("error", err.Error()))
 		return nil, err
 	}
 
 	metrics := make([]ChannelHealthMetrics, 0, len(channels))
 	for _, channel := range channels {
-		stats := channelStatsMap[channel.ID]
-		if stats == nil {
-			stats = &SuccessRateStats{}
-		}
-
-		// 获取渠道的所有密钥
-		keys, err := s.keyRepo.FindByChannelID(ctx, channel.ID)
+		keys, err := s.channelKeyRepo.FindByChannelID(ctx, channel.ID)
 		if err != nil {
 			s.logger.Error("failed to get keys for channel",
 				slog.Uint64("channel_id", uint64(channel.ID)),
@@ -192,7 +157,6 @@ func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]Chann
 			continue
 		}
 
-		// 统计健康密钥数（active 状态）
 		healthyKeys := 0
 		for _, key := range keys {
 			if key.Status == "active" {
@@ -200,31 +164,35 @@ func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]Chann
 			}
 		}
 
-		// 计算健康度百分比
 		healthPercentage := 0.0
 		if len(keys) > 0 {
 			healthPercentage = float64(healthyKeys) / float64(len(keys)) * 100
 		}
 
-		tokenUsage := tokenUsageMap[channel.ID]
-		if tokenUsage == nil {
-			tokenUsage = &repository.TokenUsageSummary{}
+		channelStat := snapshot.ChannelStats[channel.ID]
+		successRate := 0.0
+		if channelStat.TotalRequests > 0 {
+			successRate = float64(channelStat.SuccessRequests) / float64(channelStat.TotalRequests) * 100
+		}
+
+		channelName := channel.Name
+		if channelStat.ChannelName != "" {
+			channelName = channelStat.ChannelName
 		}
 
 		metrics = append(metrics, ChannelHealthMetrics{
 			ChannelID:        channel.ID,
-			ChannelName:      channel.Name,
+			ChannelName:      channelName,
 			Status:           channel.Status,
-			TotalRequests:    stats.TotalRequests,
-			SuccessRequests:  stats.SuccessRequests,
-			FailedRequests:   stats.FailedRequests,
-			SuccessRate:      stats.SuccessRate,
-			PromptTokens:     tokenUsage.PromptTokens,
-			CompletionTokens: tokenUsage.CompletionTokens,
+			TotalRequests:    channelStat.TotalRequests,
+			SuccessRequests:  channelStat.SuccessRequests,
+			FailedRequests:   channelStat.FailedRequests,
+			SuccessRate:      successRate,
+			PromptTokens:     channelStat.PromptTokens,
+			CompletionTokens: channelStat.CompletionTokens,
 			HealthyKeys:      healthyKeys,
 			TotalKeys:        len(keys),
 			HealthPercentage: healthPercentage,
-			Priority:         channel.Priority,
 			Weight:           channel.Weight,
 		})
 	}
@@ -232,11 +200,62 @@ func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) ([]Chann
 	return metrics, nil
 }
 
-func (s *DashboardService) getLast24HoursStartTime() time.Time {
-	now := time.Now().UTC()
-	return now.Add(-24 * time.Hour)
+func (s *DashboardService) buildModelStats(ctx context.Context, snapshot metricsService.Snapshot) (*ModelStats, error) {
+	stats := &ModelStats{
+		ActiveModels:    0,
+		TotalRequests:   snapshot.TotalRequests,
+		SuccessRequests: snapshot.SuccessRequests,
+		FailedRequests:  snapshot.FailedRequests,
+		ModelList:       make([]ModelDetailInfo, 0),
+	}
+
+	activeModels, err := s.modelRepo.ListWithActiveChannelConfigs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stats.ActiveModels = len(activeModels)
+
+	agg := make(map[string]ModelDetailInfo)
+	for _, modelStat := range snapshot.ModelStats {
+		agg[modelStat.ModelName] = ModelDetailInfo{
+			ModelName:       modelStat.ModelName,
+			TotalRequests:   modelStat.TotalRequests,
+			SuccessRequests: modelStat.SuccessRequests,
+			FailedRequests:  modelStat.FailedRequests,
+		}
+	}
+
+	for _, model := range activeModels {
+		if _, exists := agg[model.Name]; !exists {
+			agg[model.Name] = ModelDetailInfo{ModelName: model.Name}
+		}
+	}
+
+	for _, item := range agg {
+		if item.TotalRequests > 0 {
+			item.SuccessRate = float64(item.SuccessRequests) / float64(item.TotalRequests) * 100
+		}
+		stats.ModelList = append(stats.ModelList, item)
+	}
+
+	sort.Slice(stats.ModelList, func(i, j int) bool {
+		if stats.ModelList[i].TotalRequests == stats.ModelList[j].TotalRequests {
+			return stats.ModelList[i].ModelName < stats.ModelList[j].ModelName
+		}
+		return stats.ModelList[i].TotalRequests > stats.ModelList[j].TotalRequests
+	})
+
+	return stats, nil
 }
 
-func (s *DashboardService) getCurrentTime() time.Time {
-	return time.Now().UTC()
+func (s *DashboardService) snapshotNow() metricsService.Snapshot {
+	return s.runtimeMetrics.Snapshot(time.Now())
+}
+
+func toQPSDataPoints(points []metricsService.QPSPoint) []QPSDataPoint {
+	result := make([]QPSDataPoint, 0, len(points))
+	for _, point := range points {
+		result = append(result, QPSDataPoint{Timestamp: point.Timestamp, QPS: point.QPS})
+	}
+	return result
 }

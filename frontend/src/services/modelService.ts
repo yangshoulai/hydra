@@ -16,8 +16,15 @@ export const modelApi = {
    * 获取模型列表（分页，支持过滤和排序）
    */
   async list(params?: ModelListParams): Promise<ModelListResponse> {
-    const response = await apiClient.get<ModelListResponse>('/admin/api/models', { params })
-    return response.data
+    const response = await apiClient.get<Partial<ModelListResponse>>('/admin/api/models', { params })
+    const data = response.data ?? {}
+
+    return {
+      total: typeof data.total === 'number' ? data.total : 0,
+      page: typeof data.page === 'number' ? data.page : (params?.page ?? 1),
+      page_size: typeof data.page_size === 'number' ? data.page_size : (params?.page_size ?? 20),
+      items: Array.isArray(data.items) ? data.items : [],
+    }
   },
 
   /**
@@ -25,7 +32,7 @@ export const modelApi = {
    */
   async listAll(): Promise<Model[]> {
     const response = await apiClient.get<Model[]>('/admin/api/models')
-    return response.data
+    return Array.isArray(response.data) ? response.data : []
   },
 
   /**

@@ -25,22 +25,22 @@ func RegisterRoutes(
 	dashboardService := services.DashboardService
 	modelService := services.ModelService
 	providerService := services.ProviderService
-	settingService := services.Setting
+	settingService := services.SettingService
 	circuitManager := services.CircuitManager
 
 	// 创建 handlers
 	authHandler := NewAuthHandler(authService, logger)
-	channelHandler := NewChannelHandler(repos.Channel, repos.ModelConfig, repos.Key, db, logger, circuitManager)
-	keyHandler := NewKeyHandler(repos.Key, repos.Channel, healthCheckService, circuitManager, logger)
-	modelConfigHandler := NewChannelModelHandler(repos.ModelConfig, repos.Channel, logger, circuitManager)
-	modelSyncHandler := NewModelSyncHandler(syncService, repos.ModelConfig, db, logger)
+	channelHandler := NewChannelHandler(repos.ChannelRepo, repos.ModelConfigRepo, repos.ChannelKeyRepo, db, logger, circuitManager)
+	channelKeyHandler := NewChannelKeyHandler(repos.ChannelKeyRepo, repos.ChannelRepo, healthCheckService, circuitManager, logger)
+	modelConfigHandler := NewChannelModelHandler(repos.ModelConfigRepo, repos.ChannelRepo, logger, circuitManager)
+	modelSyncHandler := NewModelSyncHandler(syncService, repos.ModelConfigRepo, settingService, db, logger)
 	dashboardHandler := NewDashboardHandler(dashboardService)
-	settingsHandler := NewSettingsHandler(logger, repos.SystemSetting, settingService)
-	tokensHandler := NewTokensHandler(logger, repos.AccessToken)
+	settingsHandler := NewSettingsHandler(logger, repos.SystemSettingRepo, settingService)
+	tokensHandler := NewTokensHandler(logger, repos.AccessTokenRepo)
 	modelHandler := NewModelHandler(modelService, logger)
 	providerHandler := NewProviderHandler(providerService, logger)
 	endpointHandler := NewEndpointHandler()
-	logHandler := NewLogHandler(logger, repos.RequestLog)
+	requestLogHandler := NewRequestLogHandler(repos.RequestLogRepo, logger)
 
 	// 注册路由
 	adminAPI := router.Group("/admin/api")
@@ -54,7 +54,7 @@ func RegisterRoutes(
 
 		// 需要认证的路由
 		protected := adminAPI.Group("")
-		protected.Use(middleware.JWTAuth(jwtService))
+		protected.Use(middleware.NewAdminAuthMiddleware(jwtService).Handle())
 		{
 			// 认证相关（需要 JWT）
 			protectedAuth := protected.Group("/auth")
@@ -66,7 +66,7 @@ func RegisterRoutes(
 			protected.GET("/endpoints", endpointHandler.GetEndpoints)
 
 			channelHandler.RegisterRoutes(protected)
-			keyHandler.RegisterRoutes(protected)
+			channelKeyHandler.RegisterRoutes(protected)
 			modelConfigHandler.RegisterRoutes(protected)
 			modelSyncHandler.RegisterRoutes(protected)
 			dashboardHandler.RegisterRoutes(protected)
@@ -74,7 +74,7 @@ func RegisterRoutes(
 			tokensHandler.RegisterRoutes(protected)
 			modelHandler.RegisterRoutes(protected)
 			providerHandler.RegisterRoutes(protected)
-			logHandler.RegisterRoutes(protected)
+			requestLogHandler.RegisterRoutes(protected)
 		}
 	}
 	logger.Info("管理后台路由注册成功", slog.String("prefix", "/admin/api"))

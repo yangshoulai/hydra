@@ -6,43 +6,36 @@ export interface Channel {
   id: number
   name: string
   base_url: string
-  priority: number
   weight: number
-  status: 'active' | 'disabled'
-  sync_enabled: boolean
-  last_sync_time?: string
+  status: 'active' | 'inactive'
   description: string
   model_count?: number  // 已配置的模型数量
   model_stats?: ModelStatusCount // 模型状态统计
-  key_stats?: KeyStats  // 密钥统计
+  key_stats?: ChannelKeyStats  // 密钥统计
   created_at: string
   updated_at: string
-  keys?: Key[]
+  channel_keys?: ChannelKey[]
   model_configs?: ChannelModelConfig[]
 }
 
-export interface KeyStats {
-  active: number    // 健康的密钥数量
-  cooling: number   // 冷却中的密钥数量
-  disabled: number  // 禁用的密钥数量
+export interface ChannelKeyStats {
+  active: number
+  inactive: number
 }
 
 export interface ModelStatusCount {
   active: number
-  cooling: number
-  disabled: number
-  non_exist: number
+  inactive: number
 }
 
-export interface Key {
+export interface ChannelKey {
   id: number
   channel_id: number
-  key_value: string
-  key_preview?: string  // 脱敏的key（前6位+**********+后4位）
-  status: 'active' | 'cooling' | 'disabled'
-  key_group: string
+  channel_key_value: string
+  channel_key_preview?: string  // 脱敏的 key（前6位+**********+后4位）
+  status: 'active' | 'inactive'
+  channel_key_group: string
   remark: string
-  cooling_at?: string
   created_at: string
   updated_at: string
 }
@@ -50,13 +43,14 @@ export interface Key {
 export interface ChannelModelConfig {
   id: number
   channel_id: number
-  unified_model: string
-  upstream_model: string
-  status: 'active' | 'cooling' | 'disabled' | 'non_exist'
+  model: string
+  channel_model: string
+  weight: number
+  status: 'active' | 'inactive'
   endpoint_types?: string[]
   key_groups?: string[]
+  test_prompt?: string
   remark: string
-  cooling_at?: string
   created_at: string
   updated_at: string
 }
@@ -64,21 +58,17 @@ export interface ChannelModelConfig {
 export interface CreateChannelRequest {
   name: string
   base_url: string
-  priority?: number
   weight?: number
-  status?: 'active' | 'disabled'
+  status?: 'active' | 'inactive'
   description?: string
-  sync_enabled?: boolean
 }
 
 export interface UpdateChannelRequest {
   name?: string
   base_url?: string
-  priority?: number
   weight?: number
-  status?: 'active' | 'disabled'
+  status?: 'active' | 'inactive'
   description?: string
-  sync_enabled?: boolean
 }
 
 export interface ChannelListResponse {
@@ -93,35 +83,33 @@ export interface ChannelListParams {
   page_size?: number
   name?: string
   base_url?: string
-  status?: 'active' | 'disabled' | null
-  sort_by?: 'id' | 'name' | 'priority' | 'weight' | 'status'
+  status?: 'active' | 'inactive' | null
+  sort_by?: 'id' | 'name' | 'weight' | 'status'
   sort_order?: 'asc' | 'desc'
 }
 
-export interface CreateKeyRequest {
+export interface CreateChannelKeyRequest {
   channel_id: number
-  key_value: string
-  key_group: string
+  channel_key_value: string
+  channel_key_group: string
   remark?: string
 }
 
-export interface ResetKeyRequest {
-  status?: 'active' | 'cooling' | 'disabled'
+export interface ResetChannelKeyRequest {
+  status?: 'active' | 'inactive'
 }
 
-export interface KeyHealthResult {
-  key_id: number
-  key_remark: string
-  key_value?: string
-  key_preview?: string
+export interface ChannelKeyHealthResult {
+  channel_key_id: number
+  channel_key_remark: string
   status: 'healthy' | 'unhealthy' | 'error'
   message: string
   latency: string
 }
 
-export interface SingleKeyHealthResult {
-  key_id: number
-  key_remark: string
+export interface SingleChannelKeyHealthResult {
+  channel_key_id: number
+  channel_key_remark: string
   status: 'healthy' | 'unhealthy' | 'error'
   message: string
   latency: string
@@ -130,16 +118,16 @@ export interface SingleKeyHealthResult {
 export interface ChannelHealthCheckResult {
   channel_id: number
   channel_name: string
-  total_keys: number
-  healthy_keys: number
-  key_results: KeyHealthResult[]
+  total_channel_keys: number
+  healthy_channel_keys: number
+  channel_key_results: ChannelKeyHealthResult[]
 }
 
 // 模型同步相关类型
 export interface ModelDiffType {
   type: 'added' | 'removed' | 'existing'
-  unified_model: string
-  upstream_model: string
+  model: string
+  channel_model: string
   key_groups?: string[]
   existing_config?: ChannelModelConfig
 }
@@ -165,19 +153,23 @@ export interface SyncResult {
 
 // 应用同步相关类型
 export interface ModelConfigItem {
-  unified_model: string
-  upstream_model: string
+  model: string
+  channel_model: string
+  weight?: number
   endpoint_types?: string[]
   key_groups?: string[]
+  test_prompt?: string
   remark?: string
 }
 
 export interface ModelConfigUpdateItem {
   id: number
-  unified_model: string
-  upstream_model: string
+  model: string
+  channel_model: string
+  weight?: number
   endpoint_types?: string[]
   key_groups?: string[]
+  test_prompt?: string
   remark?: string
 }
 
@@ -193,4 +185,21 @@ export interface ApplySyncResponse {
   added_count: number
   updated_count: number
   deleted_count: number
+}
+
+export interface TestModeResult {
+  tested: boolean
+  success: boolean
+  message: string
+  latency?: string
+}
+
+export interface TestModelResponse {
+  success: boolean
+  message: string
+  channel_model: string
+  model: string
+  latency?: string
+  non_stream: TestModeResult
+  stream: TestModeResult
 }

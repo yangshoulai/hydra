@@ -71,8 +71,8 @@ func ToInfo(ep Endpoint) EndpointInfo {
 }
 
 // ValidateJSONResponse 通用的 JSON 响应验证辅助函数
-func ValidateJSONResponse(body []byte) (map[string]interface{}, error) {
-	var result map[string]interface{}
+func ValidateJSONResponse(body []byte) (map[string]any, error) {
+	var result map[string]any
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func IsSuccessStatusCode(statusCode int) bool {
 
 // GetModelFromJSONBody 从 JSON 请求体中提取 model 字段（通用辅助函数）
 func GetModelFromJSONBody(body []byte) (string, error) {
-	var reqData map[string]interface{}
+	var reqData map[string]any
 	if err := json.Unmarshal(body, &reqData); err != nil {
 		return "", err
 	}

@@ -22,27 +22,13 @@ func NewProviderRepository(db *gorm.DB) *ProviderRepository {
 
 // Create 创建厂商
 func (r *ProviderRepository) Create(ctx context.Context, provider *models.Provider) error {
-	err := r.db.WithContext(ctx).Create(provider).Error
-	return err
+	return r.db.WithContext(ctx).Create(provider).Error
 }
 
 // FindByID 根据 ID 查询厂商
 func (r *ProviderRepository) FindByID(ctx context.Context, id string) (*models.Provider, error) {
 	var provider models.Provider
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&provider).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &provider, nil
-}
-
-// FindByName 根据名称查询厂商
-func (r *ProviderRepository) FindByName(ctx context.Context, name string) (*models.Provider, error) {
-	var provider models.Provider
-	err := r.db.WithContext(ctx).Where("name = ?", name).First(&provider).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -90,4 +76,31 @@ func (r *ProviderRepository) IsUsedByModels(ctx context.Context, providerID stri
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// CountModelsByProviders 批量统计一组厂商各自关联的模型数量
+// 返回 map[providerID]count。
+func (r *ProviderRepository) CountModelsByProviders(ctx context.Context, providerIDs []string) (map[string]int64, error) {
+	result := make(map[string]int64, len(providerIDs))
+	if len(providerIDs) == 0 {
+		return result, nil
+	}
+	type row struct {
+		ProviderID string
+		Count      int64
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Table("models").
+		Select("provider_id, COUNT(*) AS count").
+		Where("provider_id IN ?", providerIDs).
+		Group("provider_id").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		result[r.ProviderID] = r.Count
+	}
+	return result, nil
 }

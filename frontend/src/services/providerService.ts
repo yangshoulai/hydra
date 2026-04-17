@@ -9,8 +9,8 @@ import type {
 export const providerApi = {
   // 获取厂商列表
   async list(): Promise<Provider[]> {
-    const response = await apiClient.get<Provider[]>('/admin/api/providers')
-    return response.data
+    const response = await apiClient.get<Provider[] | null>('/admin/api/providers')
+    return Array.isArray(response.data) ? response.data : []
   },
 
   // 获取单个厂商
@@ -38,8 +38,8 @@ export const providerApi = {
 
   // 同步远程厂商数据（调用后端接口）
   async syncRemoteProviders(): Promise<RemoteProvider[]> {
-    const response = await apiClient.get<RemoteProvider[]>('/admin/api/providers/sync')
-    return response.data
+    const response = await apiClient.get<RemoteProvider[] | null>('/admin/api/providers/sync')
+    return Array.isArray(response.data) ? response.data : []
   },
 
   // 批量创建厂商

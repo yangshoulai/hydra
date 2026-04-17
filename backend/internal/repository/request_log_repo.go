@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
@@ -18,285 +20,191 @@ func NewRequestLogRepository(db *gorm.DB) *RequestLogRepository {
 	return &RequestLogRepository{db: db}
 }
 
-// GetDB 获取数据库连接
-func (r *RequestLogRepository) GetDB() *gorm.DB {
-	return r.db
+// RequestLogFilter 请求日志查询条件
+type RequestLogFilter struct {
+	Page     int
+	PageSize int
+
+	StartedAt *time.Time
+	EndAt     *time.Time
+
+	Model         string
+	ChannelID     uint
+	AccessTokenID uint
+	EndpointType  string
+	// Status: "success" / "failed" / ""(全部)
+	Status    string
+	HasRetry  *bool
+	TraceID   string // 前缀匹配
+	SortBy    string // created_at / duration_ms
+	SortOrder string // asc / desc
 }
 
-// CreateMain 创建主日志记录
-func (r *RequestLogRepository) CreateMain(ctx context.Context, log *models.RequestLogMain) error {
-	return r.db.WithContext(ctx).Create(log).Error
+// RequestLogFull 请求日志详情聚合
+type RequestLogFull struct {
+	Log      *models.RequestLog          `json:"log"`
+	Detail   *models.RequestLogDetail    `json:"detail"`
+	Attempts []*models.RequestLogAttempt `json:"attempts"`
 }
 
-// CreateDetail 创建明细日志记录
-func (r *RequestLogRepository) CreateDetail(ctx context.Context, detail *models.RequestLogDetail) error {
-	return r.db.WithContext(ctx).Create(detail).Error
-}
-
-// UpdateMainTokenUsageByTraceID 更新主日志的 token 使用量
-func (r *RequestLogRepository) UpdateMainTokenUsageByTraceID(ctx context.Context, traceID string, promptTokens, completionTokens int64) error {
-	return r.db.WithContext(ctx).
-		Model(&models.RequestLogMain{}).
-		Where("trace_id = ?", traceID).
-		Updates(map[string]interface{}{
-			"prompt_tokens":     promptTokens,
-			"completion_tokens": completionTokens,
-		}).Error
-}
-
-// UpdateDetailTokenUsageByTraceIDAndRetryIndex 更新明细日志的 token 使用量
-func (r *RequestLogRepository) UpdateDetailTokenUsageByTraceIDAndRetryIndex(
+// CreateWithTx 在单一事务内写入主表 + 详情 + 尝试明细
+// detail 与 attempts 为 nil 时跳过写入，支持调试模式开关语义。
+func (r *RequestLogRepository) CreateWithTx(
 	ctx context.Context,
-	traceID string,
-	retryIndex int,
-	promptTokens, completionTokens int64,
+	log *models.RequestLog,
+	detail *models.RequestLogDetail,
+	attempts []*models.RequestLogAttempt,
 ) error {
-	return r.db.WithContext(ctx).Exec(`
-		UPDATE request_logs_detail
-		SET prompt_tokens = ?, completion_tokens = ?
-		WHERE main_log_id = (
-			SELECT id FROM request_logs_main WHERE trace_id = ? LIMIT 1
-		) AND retry_index = ?
-	`, promptTokens, completionTokens, traceID, retryIndex).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(log).Error; err != nil {
+			return err
+		}
+		if detail != nil {
+			if err := tx.Create(detail).Error; err != nil {
+				return err
+			}
+		}
+		if len(attempts) > 0 {
+			if err := tx.Create(&attempts).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
-// FindMainByTraceID 根据 TraceID 查询主日志记录
-func (r *RequestLogRepository) FindMainByTraceID(ctx context.Context, traceID string) (*models.RequestLogMain, error) {
-	var log models.RequestLogMain
-	err := r.db.WithContext(ctx).
-		Preload("Details").
-		Where("trace_id = ?", traceID).
-		First(&log).Error
-	if err != nil {
-		return nil, err
+// List 分页查询请求日志主表
+func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilter) ([]*models.RequestLog, int64, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
 	}
-	return &log, nil
-}
+	pageSize := filter.PageSize
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 500 {
+		pageSize = 500
+	}
 
-// FindDetailsByMainLogID 根据主日志 ID 查询明细记录
-func (r *RequestLogRepository) FindDetailsByMainLogID(ctx context.Context, mainLogID uint) ([]models.RequestLogDetail, error) {
-	var details []models.RequestLogDetail
-	err := r.db.WithContext(ctx).
-		Where("main_log_id = ?", mainLogID).
-		Order("retry_index ASC").
-		Find(&details).Error
-	if err != nil {
-		return nil, err
-	}
-	return details, nil
-}
+	q := r.db.WithContext(ctx).Model(&models.RequestLog{})
 
-// ListMainFilter 主日志分页查询过滤器
-type ListMainFilter struct {
-	StartTime      *time.Time
-	EndTime        *time.Time
-	TraceID        string
-	AccessToken    string
-	StatusCode     *int
-	IsSuccess      *bool
-	EndpointType   string
-	RequestedModel string
-	UnifiedModel   string
-	ChannelID      *int64
-	Offset         int
-	Limit          int
-}
-
-// ListMain 分页查询主日志记录
-func (r *RequestLogRepository) ListMain(ctx context.Context, filter *ListMainFilter) ([]*models.RequestLogMain, int64, error) {
-	var logs []*models.RequestLogMain
-	var total int64
-
-	query := r.db.WithContext(ctx).Model(&models.RequestLogMain{})
-
-	// 应用筛选条件
-	if filter.StartTime != nil {
-		query = query.Where("start_time >= ?", filter.StartTime)
+	if filter.StartedAt != nil {
+		q = q.Where("created_at >= ?", *filter.StartedAt)
 	}
-	if filter.EndTime != nil {
-		query = query.Where("end_time <= ?", filter.EndTime)
+	if filter.EndAt != nil {
+		q = q.Where("created_at < ?", *filter.EndAt)
 	}
-	if filter.TraceID != "" {
-		query = query.Where("trace_id = ?", filter.TraceID)
+	if filter.Model != "" {
+		q = q.Where("model = ?", filter.Model)
 	}
-	if filter.AccessToken != "" {
-		query = query.Where("access_token = ?", filter.AccessToken)
+	if filter.ChannelID != 0 {
+		q = q.Where("final_channel_id = ?", filter.ChannelID)
 	}
-	if filter.StatusCode != nil {
-		// 状态码过滤以明细表为准（任一明细命中即可）
-		query = query.Where("id IN (SELECT main_log_id FROM request_logs_detail WHERE status_code = ?)", *filter.StatusCode)
-	}
-	if filter.IsSuccess != nil {
-		query = query.Where("is_success = ?", *filter.IsSuccess)
+	if filter.AccessTokenID != 0 {
+		q = q.Where("access_token_id = ?", filter.AccessTokenID)
 	}
 	if filter.EndpointType != "" {
-		query = query.Where("endpoint_type = ?", filter.EndpointType)
+		q = q.Where("endpoint_type = ?", filter.EndpointType)
 	}
-	if filter.RequestedModel != "" {
-		query = query.Where("requested_model = ?", filter.RequestedModel)
+	switch strings.ToLower(filter.Status) {
+	case "success":
+		q = q.Where("success = ?", true)
+	case "failed":
+		q = q.Where("success = ?", false)
 	}
-	if filter.UnifiedModel != "" {
-		query = query.Where("unified_model = ?", filter.UnifiedModel)
+	if filter.HasRetry != nil {
+		if *filter.HasRetry {
+			q = q.Where("retry_count > 0")
+		} else {
+			q = q.Where("retry_count = 0")
+		}
 	}
-	if filter.ChannelID != nil {
-		// 从从表 request_log_detail 的渠道 channel_id 过滤
-		query = query.Where("id IN (SELECT main_log_id FROM request_logs_detail WHERE channel_id = ?)", *filter.ChannelID)
+	if filter.TraceID != "" {
+		q = q.Where("trace_id LIKE ?", filter.TraceID+"%")
 	}
 
-	// 查询总数
-	if err := query.Count(&total).Error; err != nil {
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// 分页查询
-	db := query.Order("start_time DESC")
-	if filter.Limit > 0 {
-		db = db.Offset(filter.Offset).Limit(filter.Limit)
-	}
-	err := db.Find(&logs).Error
-
-	return logs, total, err
-}
-
-// GetByTimeRange 根据时间范围获取主日志记录
-func (r *RequestLogRepository) GetByTimeRange(ctx context.Context, startTime, endTime time.Time) ([]*models.RequestLogMain, error) {
-	var logs []*models.RequestLogMain
-	err := r.db.WithContext(ctx).
-		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
-		Order("start_time ASC").
-		Find(&logs).Error
-	return logs, err
-}
-
-// GetByChannelIDAndTimeRange 根据渠道 ID 和时间范围获取主日志记录
-func (r *RequestLogRepository) GetByChannelIDAndTimeRange(ctx context.Context, channelID uint, startTime, endTime time.Time) ([]*models.RequestLogMain, error) {
-	var logs []*models.RequestLogMain
-	err := r.db.WithContext(ctx).
-		Where("last_channel_id = ? AND start_time >= ? AND start_time <= ?", channelID, startTime, endTime).
-		Order("start_time ASC").
-		Find(&logs).Error
-	return logs, err
-}
-
-// DeleteMainBefore 删除指定时间之前的主日志记录
-func (r *RequestLogRepository) DeleteMainBefore(ctx context.Context, before time.Time) (int64, error) {
-	result := r.db.WithContext(ctx).
-		Where("created_at < ?", before).
-		Delete(&models.RequestLogMain{})
-	return result.RowsAffected, result.Error
-}
-
-// DeleteDetailsBefore 删除指定时间之前的明细日志记录
-func (r *RequestLogRepository) DeleteDetailsBefore(ctx context.Context, before time.Time) (int64, error) {
-	result := r.db.WithContext(ctx).
-		Where("created_at < ?", before).
-		Delete(&models.RequestLogDetail{})
-	return result.RowsAffected, result.Error
-}
-
-// DeleteDetailsByMainBefore 删除主表在指定时间之前的明细日志记录
-func (r *RequestLogRepository) DeleteDetailsByMainBefore(ctx context.Context, before time.Time) (int64, error) {
-	result := r.db.WithContext(ctx).Exec(`
-		DELETE FROM request_logs_detail
-		WHERE main_log_id IN (
-			SELECT id FROM request_logs_main WHERE created_at < ?
-		)
-	`, before)
-	return result.RowsAffected, result.Error
-}
-
-// GetStatistics 获取统计数据
-type RequestLogStatistics struct {
-	TotalRequests   int64   `json:"total_requests"`
-	SuccessRequests int64   `json:"success_requests"`
-	FailedRequests  int64   `json:"failed_requests"`
-	SuccessRate     float64 `json:"success_rate"`
-	AvgDuration     float64 `json:"avg_duration_ms"`
-}
-
-func (r *RequestLogRepository) GetStatistics(ctx context.Context, startTime, endTime time.Time) (*RequestLogStatistics, error) {
-	var stats RequestLogStatistics
-
-	// 总请求数
-	if err := r.db.WithContext(ctx).Model(&models.RequestLogMain{}).
-		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
-		Count(&stats.TotalRequests).Error; err != nil {
-		return nil, err
-	}
-
-	// 成功请求数
-	if err := r.db.WithContext(ctx).Model(&models.RequestLogMain{}).
-		Where("start_time >= ? AND start_time <= ? AND is_success = ?", startTime, endTime, true).
-		Count(&stats.SuccessRequests).Error; err != nil {
-		return nil, err
-	}
-
-	stats.FailedRequests = stats.TotalRequests - stats.SuccessRequests
-
-	// 计算成功率
-	if stats.TotalRequests > 0 {
-		stats.SuccessRate = float64(stats.SuccessRequests) / float64(stats.TotalRequests) * 100
-	}
-
-	// 平均响应时间
-	var avgDuration float64
-	if err := r.db.WithContext(ctx).Model(&models.RequestLogMain{}).
-		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
-		Select("AVG(duration)").
-		Scan(&avgDuration).Error; err != nil {
-		return nil, err
-	}
-	stats.AvgDuration = avgDuration
-
-	return &stats, nil
-}
-
-// TokenUsageSummary token 使用量统计
-type TokenUsageSummary struct {
-	PromptTokens     int64 `json:"prompt_tokens"`
-	CompletionTokens int64 `json:"completion_tokens"`
-}
-
-// SumTokenUsageByTimeRange 统计时间范围内的 token 使用量
-func (r *RequestLogRepository) SumTokenUsageByTimeRange(ctx context.Context, startTime, endTime time.Time) (*TokenUsageSummary, error) {
-	var result TokenUsageSummary
-	err := r.db.WithContext(ctx).
-		Model(&models.RequestLogMain{}).
-		Select("COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, COALESCE(SUM(completion_tokens), 0) AS completion_tokens").
-		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
-		Scan(&result).Error
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// SumTokenUsageByChannel 统计时间范围内各渠道的 token 使用量
-func (r *RequestLogRepository) SumTokenUsageByChannel(ctx context.Context, startTime, endTime time.Time) (map[uint]*TokenUsageSummary, error) {
-	type channelTokenUsage struct {
-		ChannelID        uint  `gorm:"column:channel_id"`
-		PromptTokens     int64 `gorm:"column:prompt_tokens"`
-		CompletionTokens int64 `gorm:"column:completion_tokens"`
-	}
-
-	var rows []channelTokenUsage
-	err := r.db.WithContext(ctx).
-		Model(&models.RequestLogMain{}).
-		Select("last_channel_id AS channel_id, COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, COALESCE(SUM(completion_tokens), 0) AS completion_tokens").
-		Where("last_channel_id IS NOT NULL").
-		Where("start_time >= ? AND start_time <= ?", startTime, endTime).
-		Group("last_channel_id").
-		Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-
-	result := make(map[uint]*TokenUsageSummary, len(rows))
-	for _, row := range rows {
-		result[row.ChannelID] = &TokenUsageSummary{
-			PromptTokens:     row.PromptTokens,
-			CompletionTokens: row.CompletionTokens,
+	orderBy := "created_at DESC"
+	if filter.SortBy != "" {
+		col := "created_at"
+		switch strings.ToLower(filter.SortBy) {
+		case "duration_ms":
+			col = "duration_ms"
+		case "created_at":
+			col = "created_at"
 		}
+		direction := "DESC"
+		if strings.ToLower(filter.SortOrder) == "asc" {
+			direction = "ASC"
+		}
+		orderBy = col + " " + direction
 	}
-	return result, nil
+
+	var items []*models.RequestLog
+	if err := q.Order(orderBy).
+		Limit(pageSize).
+		Offset((page - 1) * pageSize).
+		Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return items, total, nil
+}
+
+// GetFull 按 trace_id 获取完整日志（主 + 详情 + 尝试明细）
+// 主记录不存在时返回 (nil, gorm.ErrRecordNotFound) 由调用方决定是否转 404。
+func (r *RequestLogRepository) GetFull(ctx context.Context, traceID string) (*RequestLogFull, error) {
+	var log models.RequestLog
+	if err := r.db.WithContext(ctx).Where("trace_id = ?", traceID).First(&log).Error; err != nil {
+		return nil, err
+	}
+
+	full := &RequestLogFull{Log: &log}
+
+	var detail models.RequestLogDetail
+	if err := r.db.WithContext(ctx).Where("trace_id = ?", traceID).First(&detail).Error; err == nil {
+		full.Detail = &detail
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	var attempts []*models.RequestLogAttempt
+	if err := r.db.WithContext(ctx).
+		Where("trace_id = ?", traceID).
+		Order("attempt_num ASC").
+		Find(&attempts).Error; err != nil {
+		return nil, err
+	}
+	full.Attempts = attempts
+
+	return full, nil
+}
+
+// DeleteOlderThan 删除 created_at 早于指定时间的所有日志（包含三张表）
+// 返回删除的主记录条数。
+func (r *RequestLogRepository) DeleteOlderThan(ctx context.Context, before time.Time) (int64, error) {
+	var deleted int64
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("created_at < ?", before).Delete(&models.RequestLogAttempt{})
+		if res.Error != nil {
+			return res.Error
+		}
+		res = tx.Where("created_at < ?", before).Delete(&models.RequestLogDetail{})
+		if res.Error != nil {
+			return res.Error
+		}
+		res = tx.Where("created_at < ?", before).Delete(&models.RequestLog{})
+		if res.Error != nil {
+			return res.Error
+		}
+		deleted = res.RowsAffected
+		return nil
+	})
+	return deleted, err
 }

@@ -1,65 +1,52 @@
 package middleware
 
 import (
-	"log/slog"
 	"net/http"
+	"strings"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	adminService "github.com/yangshoulai/hydra/internal/service/admin"
 )
 
-const (
-	// SessionKeyUserID 会话中存储的用户ID键名
-	SessionKeyUserID = "user_id"
-	// SessionKeyUsername 会话中存储的用户名键名
-	SessionKeyUsername = "username"
-)
+// AdminAuthMiddleware 管理端认证中间件
+type AdminAuthMiddleware struct {
+	jwtService *adminService.JWTService
+}
 
-// AdminAuth 管理后台会话认证中间件
-func AdminAuth(logger *slog.Logger) gin.HandlerFunc {
+// NewAdminAuthMiddleware 创建管理端认证中间件
+func NewAdminAuthMiddleware(jwtService *adminService.JWTService) *AdminAuthMiddleware {
+	return &AdminAuthMiddleware{
+		jwtService: jwtService,
+	}
+}
+
+// Handle 执行管理端 JWT 认证
+func (m *AdminAuthMiddleware) Handle() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		session := sessions.Default(c)
-
-		// 获取会话中的用户信息
-		userID := session.Get(SessionKeyUserID)
-		if userID == nil {
-			traceID := GetTraceID(c)
-			logger.Warn("未授权的管理后台访问尝试",
-				slog.String("trace_id", traceID),
-				slog.String("path", c.Request.URL.Path),
-			)
-
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Authentication required",
-			})
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
 			c.Abort()
 			return
 		}
 
-		// 将用户信息存储到上下文
-		c.Set("admin_user_id", userID)
-		if username := session.Get(SessionKeyUsername); username != nil {
-			c.Set("admin_username", username)
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
+			c.Abort()
+			return
 		}
 
-		c.Next()
-	}
-}
-
-// OptionalAdminAuth 可选的管理员认证(登录后有额外权限,未登录也可访问)
-func OptionalAdminAuth() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		session := sessions.Default(c)
-
-		// 尝试获取会话中的用户信息
-		userID := session.Get(SessionKeyUserID)
-		if userID != nil {
-			c.Set("admin_user_id", userID)
-			if username := session.Get(SessionKeyUsername); username != nil {
-				c.Set("admin_username", username)
-			}
+		token := parts[1]
+		claims, err := m.jwtService.ValidateToken(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			c.Abort()
+			return
 		}
 
+		c.Set("user_id", claims.UserID)
+		c.Set("username", claims.Username)
 		c.Next()
 	}
 }

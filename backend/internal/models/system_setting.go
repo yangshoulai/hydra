@@ -12,7 +12,6 @@ type SystemSetting struct {
 	Key       string    `gorm:"type:varchar(100);not null;uniqueIndex" json:"key"`
 	Value     string    `gorm:"type:text;not null" json:"value"`
 	ValueType string    `gorm:"type:varchar(20);not null;default:'string'" json:"value_type"` // string, int, bool, json
-	Category  string    `gorm:"type:varchar(50);not null;index" json:"category"`              // circuit_breaker, logging, proxy, etc.
 	Remark    string    `gorm:"type:varchar(200)" json:"remark"`
 }
 
@@ -23,13 +22,28 @@ func (SystemSetting) TableName() string {
 
 // 预定义的系统设置 Key
 const (
+	// Server
+	SettingServerPort           = "server_port"
+	SettingServerReadTimeout    = "server_read_timeout"
+	SettingServerWriteTimeout   = "server_write_timeout"
+	SettingServerMaxHeaderBytes = "server_max_header_bytes"
+
+	// Logging
+	SettingLogAddSource                   = "log_add_source"
+	SettingLogFileEnabled                 = "log_file_enabled"
+	SettingLogFileMaxSize                 = "log_file_max_size"
+	SettingLogFileMaxBackups              = "log_file_max_backups"
+	SettingLogFileMaxAge                  = "log_file_max_age"
+	SettingLogFileCompress                = "log_file_compress"
 	SettingCircuitBreakerFailureThreshold = "circuit_breaker_failure_threshold"
 	SettingCircuitBreakerCoolingDuration  = "circuit_breaker_cooling_duration"
 	SettingLogRetentionDays               = "log_retention_days"
 	SettingLogDebugEnabled                = "log_debug_enabled"
 	SettingProxyRequestTimeout            = "proxy_request_timeout"
-	SettingProxyMaxConcurrent             = "proxy_max_concurrent"
+	SettingProxyNetworkURL                = "proxy_network_url"
 	SettingProxyMaxRetry                  = "proxy_max_retry"
+	SettingSnifferEnabled                 = "sniffer_enabled"
+	SettingSnifferStreamPacketCount       = "sniffer_stream_packet_count"
 	SettingSnifferPlainTextErrorRules     = "sniffer_plain_text_error_rules"
-	SettingChannelGlobalSyncEnabled       = "channel_global_sync_enabled"
+	SettingModelTestPrompt                = "model_test_prompt"
 )

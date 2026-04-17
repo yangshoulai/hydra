@@ -2,58 +2,46 @@ package admin
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
-	"gorm.io/gorm"
 )
 
 var (
 	// ErrInvalidCredentials 无效的凭证
 	ErrInvalidCredentials = errors.New("invalid username or password")
-	// ErrUserDisabled 用户已禁用
-	ErrUserDisabled = errors.New("user is disabled")
+	// ErrInvalidOldPassword 原密码错误
+	ErrInvalidOldPassword = errors.New("invalid old password")
 )
 
 // AuthService 认证服务
 type AuthService struct {
-	db              *gorm.DB
-	logger          *slog.Logger
-	adminUserRepo   *repository.AdminUserRepository
-	accessTokenRepo *repository.AccessTokenRepository
-	jwtService      *JWTService
+	logger        *slog.Logger
+	adminUserRepo *repository.AdminUserRepository
+	jwtService    *JWTService
 }
 
 // NewAuthService 创建认证服务
 func NewAuthService(
-	db *gorm.DB,
 	logger *slog.Logger,
 	adminUserRepo *repository.AdminUserRepository,
-	accessTokenRepo *repository.AccessTokenRepository,
 	jwtService *JWTService,
 ) *AuthService {
-	if jwtService == nil {
-		jwtService = NewJWTService()
-	}
 	return &AuthService{
-		db:              db,
-		logger:          logger,
-		adminUserRepo:   adminUserRepo,
-		accessTokenRepo: accessTokenRepo,
-		jwtService:      jwtService,
+		logger:        logger,
+		adminUserRepo: adminUserRepo,
+		jwtService:    jwtService,
 	}
 }
 
 // LoginRequest 登录请求
 type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Username   string `json:"username" binding:"required"`
+	Password   string `json:"password" binding:"required"`
+	RememberMe bool   `json:"remember_me"`
 }
 
 // LoginResponse 登录响应
@@ -67,7 +55,6 @@ type LoginResponse struct {
 type AdminUserDetail struct {
 	ID          uint       `json:"id"`
 	Username    string     `json:"username"`
-	Status      string     `json:"status"`
 	LastLoginAt *time.Time `json:"last_login_at"`
 	CreatedAt   time.Time  `json:"created_at"`
 }
@@ -77,24 +64,14 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 	// 查询用户
 	user, err := s.adminUserRepo.FindByUsername(ctx, req.Username)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			s.logger.Warn("尝试登录不存在的用户", slog.String("username", req.Username))
-			return nil, ErrInvalidCredentials
-		}
 		s.logger.Error("未找到用户", slog.String("username", req.Username), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 
-	// 防御性检查：确保 user 不为 nil
+	// 仓储未命中用户
 	if user == nil {
 		s.logger.Warn("用户查询返回空结果", slog.String("username", req.Username))
 		return nil, ErrInvalidCredentials
-	}
-
-	// 检查用户状态
-	if !user.IsActive() {
-		s.logger.Warn("用户被禁用", slog.String("username", req.Username), slog.String("status", user.Status))
-		return nil, ErrUserDisabled
 	}
 
 	// 验证密码
@@ -110,7 +87,7 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username)
+	refreshToken, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username, req.RememberMe)
 	if err != nil {
 		s.logger.Error("生成刷新令牌失败", slog.Uint64("user_id", uint64(user.ID)), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
@@ -132,50 +109,10 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 		User: &AdminUserDetail{
 			ID:          user.ID,
 			Username:    user.Username,
-			Status:      user.Status,
 			LastLoginAt: user.LastLoginAt,
 			CreatedAt:   user.CreatedAt,
 		},
 	}, nil
-}
-
-// generateAccessToken 生成随机访问令牌
-func (s *AuthService) generateAccessToken(ctx context.Context) (string, error) {
-	// 生成 32 字节随机数据
-	randomBytes := make([]byte, 32)
-	if _, err := rand.Read(randomBytes); err != nil {
-		return "", fmt.Errorf("failed to generate random bytes: %w", err)
-	}
-
-	// Base64 编码
-	token := base64.URLEncoding.EncodeToString(randomBytes)
-
-	// 计算哈希
-	tokenHash := models.HashToken(token)
-
-	// 生成脱敏预览
-	tokenPreview := models.MaskToken(token)
-
-	// 创建令牌记录
-	accessToken := &models.AccessToken{
-		TokenHash:    tokenHash,
-		TokenPreview: tokenPreview,
-		Status:       "active",
-		Name:         "Admin login token",
-	}
-
-	if err := s.accessTokenRepo.Create(ctx, accessToken); err != nil {
-		s.logger.Error("failed to create access token record",
-			slog.String("error", err.Error()),
-		)
-		return "", fmt.Errorf("failed to create token record: %w", err)
-	}
-
-	s.logger.Debug("密钥已生成",
-		slog.Uint64("token_id", uint64(accessToken.ID)),
-	)
-
-	return token, nil
 }
 
 // ChangePasswordRequest 修改密码请求
@@ -196,7 +133,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uint, req *Chan
 		return fmt.Errorf("failed to find user: %w", err)
 	}
 
-	// 防御性检查：确保 user 不为 nil
+	// 仓储未命中用户
 	if user == nil {
 		s.logger.Error("用户查询返回空结果",
 			slog.Uint64("user_id", uint64(userID)),
@@ -209,7 +146,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uint, req *Chan
 		s.logger.Warn("invalid old password",
 			slog.Uint64("user_id", uint64(userID)),
 		)
-		return errors.New("invalid old password")
+		return ErrInvalidOldPassword
 	}
 
 	// 设置新密码
@@ -270,16 +207,10 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *RefreshTokenRequest
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 
-	// 防御性检查：确保 user 不为 nil
+	// 仓储未命中用户
 	if user == nil {
 		s.logger.Warn("用户不存在", slog.Uint64("user_id", uint64(claims.UserID)))
 		return nil, errors.New("user not found")
-	}
-
-	// 检查用户状态
-	if !user.IsActive() {
-		s.logger.Warn("用户被禁用", slog.Uint64("user_id", uint64(claims.UserID)))
-		return nil, ErrUserDisabled
 	}
 
 	// 生成新的访问令牌和刷新令牌
@@ -289,7 +220,21 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *RefreshTokenRequest
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	newRefreshToken, err := s.jwtService.GenerateRefreshToken(user.ID, user.Username)
+	remainingTTL := RefreshTokenDefaultTTL
+	if claims.ExpiresAt != nil {
+		remainingTTL = time.Until(claims.ExpiresAt.Time)
+	}
+	if remainingTTL <= 0 {
+		s.logger.Warn("刷新令牌已过期",
+			slog.Uint64("user_id", uint64(user.ID)),
+		)
+		return nil, errors.New("refresh token expired")
+	}
+	if remainingTTL > RefreshTokenRememberTTL {
+		remainingTTL = RefreshTokenRememberTTL
+	}
+
+	newRefreshToken, err := s.jwtService.GenerateRefreshTokenWithTTL(user.ID, user.Username, remainingTTL)
 	if err != nil {
 		s.logger.Error("生成刷新令牌失败", slog.Uint64("user_id", uint64(user.ID)), slog.String("error", err.Error()))
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)

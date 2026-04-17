@@ -62,18 +62,6 @@ func (r *AccessTokenRepository) FindByToken(ctx context.Context, tokenValue stri
 	return &token, nil
 }
 
-// FindByTokenHash 根据令牌哈希查询
-func (r *AccessTokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*models.AccessToken, error) {
-	var token models.AccessToken
-	err := r.db.WithContext(ctx).
-		Where("token_hash = ?", tokenHash).
-		First(&token).Error
-	if err != nil {
-		return nil, err
-	}
-	return &token, nil
-}
-
 // List 查询所有令牌
 func (r *AccessTokenRepository) List(ctx context.Context) ([]*models.AccessToken, error) {
 	tokens, _, err := r.ListWithFilter(ctx, 0, 0, nil, nil)
@@ -133,9 +121,9 @@ func (r *AccessTokenRepository) ListWithFilter(
 
 		// 验证排序字段，防止 SQL 注入
 		allowedFields := map[string]bool{
-			"id":          true,
-			"status":      true,
-			"created_at":  true,
+			"id":           true,
+			"status":       true,
+			"created_at":   true,
 			"last_used_at": true,
 		}
 
@@ -164,7 +152,7 @@ func (r *AccessTokenRepository) IncrementTokenUsage(ctx context.Context, id uint
 	return r.db.WithContext(ctx).
 		Model(&models.AccessToken{}).
 		Where("id = ?", id).
-		Updates(map[string]interface{}{
+		Updates(map[string]any{
 			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", promptTokens),
 			"completion_tokens": gorm.Expr("completion_tokens + ?", completionTokens),
 		}).Error

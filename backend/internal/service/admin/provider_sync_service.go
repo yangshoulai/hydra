@@ -3,10 +3,10 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
@@ -27,7 +27,6 @@ type RemoteProvider struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	IconURL    string `json:"iconURL"`
-	LobeIcon   string `json:"lobeIcon"`
 	ModelCount int    `json:"modelCount"`
 }
 
@@ -60,7 +59,7 @@ func (s *ProviderService) SyncProviders(ctx context.Context) ([]RemoteProvider, 
 		s.logger.Error("远程供应商接口返回无效状态码",
 			slog.Int("status", resp.StatusCode),
 		)
-		return nil, err
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	// 读取响应体
@@ -87,7 +86,7 @@ func (s *ProviderService) SyncProviders(ctx context.Context) ([]RemoteProvider, 
 // BatchCreateProviders 批量创建厂商
 func (s *ProviderService) BatchCreateProviders(ctx context.Context, providers []CreateProviderRequest) ([]models.Provider, []error) {
 	var createdProviders []models.Provider
-	var errors []error
+	var errs []error
 
 	for _, req := range providers {
 		provider, err := s.Create(ctx, req)
@@ -97,16 +96,11 @@ func (s *ProviderService) BatchCreateProviders(ctx context.Context, providers []
 				slog.String("id", req.ID),
 				slog.String("error", err.Error()),
 			)
-			errors = append(errors, err)
+			errs = append(errs, err)
 			continue
 		}
 		createdProviders = append(createdProviders, *provider)
 	}
 
-	return createdProviders, errors
-}
-
-// NormalizeProviderID 标准化厂商ID
-func NormalizeProviderID(id string) string {
-	return strings.TrimSpace(strings.ToLower(id))
+	return createdProviders, errs
 }

@@ -2,9 +2,6 @@ package proxy
 
 import (
 	"context"
-	"errors"
-	"log/slog"
-	"math/rand"
 	"sort"
 
 	"github.com/yangshoulai/hydra/internal/models"
@@ -12,39 +9,33 @@ import (
 	"github.com/yangshoulai/hydra/internal/service/circuit"
 )
 
-var (
-	// ErrNoAvailableChannel 无可用渠道
-	ErrNoAvailableChannel = errors.New("no available channel")
-)
-
-// ChannelSelector Channel 选择器,按优先级和权重选择
+// ChannelSelector Channel 选择器，筛出所有可用渠道供权重路由使用
 type ChannelSelector struct {
-	logger         *slog.Logger
 	channelRepo    *repository.ChannelRepository
-	keySelector    *KeySelector
-	circuitManager *circuit.Manager
+	circuitManager *circuit.CircuitManager
 }
 
 // NewChannelSelector 创建 Channel 选择器
 func NewChannelSelector(
-	logger *slog.Logger,
 	channelRepo *repository.ChannelRepository,
-	keySelector *KeySelector,
-	circuitManager *circuit.Manager,
+	circuitManager *circuit.CircuitManager,
 ) *ChannelSelector {
 	return &ChannelSelector{
-		logger:         logger,
 		channelRepo:    channelRepo,
-		keySelector:    keySelector,
 		circuitManager: circuitManager,
 	}
 }
 
-// SelectChannel 按优先级和权重选择一个可用的 Channel
-// excludeChannelIDs: 需要排除的渠道集合（可为空）
-func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, endpointType string, traceID string, excludeChannelIDs map[uint]bool) (*models.Channel, error) {
+// SelectChannels 返回所有可用渠道（结果会按权重排序，便于日志与调试观察）
+func (cs *ChannelSelector) SelectChannels(
+	ctx context.Context,
+	modelName string,
+	endpointType string,
+	isStream bool,
+	excludeChannelIDs map[uint]bool,
+) ([]models.Channel, error) {
 	// 获取所有支持该模型和端点类型的 Channel
-	channels, err := cs.channelRepo.FindByModel(ctx, modelName, endpointType)
+	channels, err := cs.channelRepo.FindByModel(ctx, modelName, endpointType, isStream)
 	if err != nil {
 		return nil, err
 	}
@@ -54,42 +45,25 @@ func (cs *ChannelSelector) SelectChannel(ctx context.Context, modelName string, 
 	}
 
 	// 过滤出可用的 Channel
-	availableChannels := cs.filterAvailableChannels(channels, modelName, endpointType, traceID, excludeChannelIDs)
+	availableChannels := cs.filterAvailableChannels(channels, excludeChannelIDs)
 
 	if len(availableChannels) == 0 {
 		return nil, ErrNoAvailableChannel
 	}
 
-	// 按优先级分组
-	channelGroups := cs.groupByPriority(availableChannels)
-
-	// 按优先级从高到低尝试选择
-	priorities := make([]int, 0, len(channelGroups))
-	for priority := range channelGroups {
-		priorities = append(priorities, priority)
-	}
-	sort.Sort(sort.Reverse(sort.IntSlice(priorities)))
-
-	for _, priority := range priorities {
-		channelsInGroup := channelGroups[priority]
-		// 按权重选择
-		selectedChannel := cs.selectByWeight(channelsInGroup)
-		if selectedChannel != nil {
-			return selectedChannel, nil
-		}
-	}
-	return nil, ErrNoAvailableChannel
+	cs.sortChannelsByWeight(availableChannels)
+	return availableChannels, nil
 }
 
 // filterAvailableChannels 过滤出可用的 Channel
-func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, modelName string, endpointType string, traceID string, excludeChannelIDs map[uint]bool) []models.Channel {
+func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, excludeChannelIDs map[uint]bool) []models.Channel {
 	available := make([]models.Channel, 0, len(channels))
 	for _, channel := range channels {
-		if excludeChannelIDs != nil && excludeChannelIDs[channel.ID] {
+		if excludeChannelIDs[channel.ID] {
 			continue
 		}
 		var filteredModelConfigs []models.ChannelModelConfig
-		var filteredKeys []models.Key
+		var filteredKeys []models.ChannelKey
 		modelKeyGroups := make(map[string]struct{})
 
 		// 过滤不支持端点类型的模型
@@ -105,11 +79,11 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, mo
 		}
 
 		// 过滤不在密钥分组的渠道密钥
-		for _, key := range channel.Keys {
+		for _, key := range channel.ChannelKeys {
 			if !cs.circuitManager.IsKeyAvailable(key.ID) {
 				continue
 			}
-			if _, ok := modelKeyGroups[key.KeyGroup]; ok {
+			if _, ok := modelKeyGroups[key.ChannelKeyGroup]; ok {
 				filteredKeys = append(filteredKeys, key)
 			}
 		}
@@ -118,68 +92,18 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, mo
 			continue
 		}
 		channel.ModelConfigs = filteredModelConfigs
-		channel.Keys = filteredKeys
+		channel.ChannelKeys = filteredKeys
 		available = append(available, channel)
 	}
 	return available
 }
 
-// hasEndpointType 检查端点类型是否匹配
-func (cs *ChannelSelector) hasEndpointType(endpointTypes []string, targetType string) bool {
-	if targetType == "" {
-		return true
-	}
-	for _, et := range endpointTypes {
-		if et == targetType {
-			return true
+// sortChannelsByWeight 渠道按权重排序（高权重优先）
+func (cs *ChannelSelector) sortChannelsByWeight(channels []models.Channel) {
+	sort.SliceStable(channels, func(i, j int) bool {
+		if channels[i].Weight == channels[j].Weight {
+			return channels[i].ID > channels[j].ID
 		}
-	}
-	return false
-}
-
-// groupByPriority 按优先级分组
-func (cs *ChannelSelector) groupByPriority(channels []models.Channel) map[int][]models.Channel {
-	groups := make(map[int][]models.Channel)
-
-	for _, channel := range channels {
-		priority := channel.Priority
-		groups[priority] = append(groups[priority], channel)
-	}
-
-	return groups
-}
-
-// selectByWeight 按权重选择 Channel
-func (cs *ChannelSelector) selectByWeight(channels []models.Channel) *models.Channel {
-	if len(channels) == 0 {
-		return nil
-	}
-
-	if len(channels) == 1 {
-		return &channels[0]
-	}
-
-	// 计算总权重
-	totalWeight := 0
-	for _, channel := range channels {
-		if channel.Weight <= 0 {
-			channel.Weight = 1
-		}
-		totalWeight += channel.Weight
-	}
-
-	// 生成随机数
-	randomWeight := rand.Intn(totalWeight)
-
-	// 加权随机选择
-	currentWeight := 0
-	for i := range channels {
-		currentWeight += channels[i].Weight
-		if randomWeight < currentWeight {
-			return &channels[i]
-		}
-	}
-
-	// 兜底,返回最后一个
-	return &channels[len(channels)-1]
+		return channels[i].Weight > channels[j].Weight
+	})
 }

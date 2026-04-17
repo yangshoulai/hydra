@@ -12,10 +12,9 @@ import (
 
 // Provider 相关错误定义
 var (
-	ErrProviderIdExists   = errors.New("provider id already exists")
-	ErrProviderNameExists = errors.New("provider name already exists")
-	ErrProviderNotFound   = errors.New("provider not found")
-	ErrProviderInUse      = errors.New("provider is in use by models")
+	ErrProviderIdExists = errors.New("provider id already exists")
+	ErrProviderNotFound = errors.New("provider not found")
+	ErrProviderInUse    = errors.New("provider is in use by models")
 )
 
 // ProviderService 厂商服务
@@ -37,19 +36,17 @@ func NewProviderService(
 
 // CreateProviderRequest 创建厂商请求
 type CreateProviderRequest struct {
-	ID       string `json:"id" binding:"required,min=1,max=50"`
-	Name     string `json:"name" binding:"required,min=1,max=100"`
-	Icon     string `json:"icon" binding:"omitempty,max=500"`
-	LobeIcon string `json:"lobeIcon" binding:"omitempty,max=100"`
-	Remark   string `json:"remark" binding:"omitempty,max=500"`
+	ID     string `json:"id" binding:"required,min=1,max=50"`
+	Name   string `json:"name" binding:"required,min=1,max=100"`
+	Icon   string `json:"icon" binding:"omitempty,max=500"`
+	Remark string `json:"remark" binding:"omitempty,max=500"`
 }
 
 // UpdateProviderRequest 更新厂商请求
 type UpdateProviderRequest struct {
-	Name     string `json:"name" binding:"omitempty,min=1,max=100"`
-	Icon     string `json:"icon" binding:"omitempty,max=500"`
-	LobeIcon string `json:"lobeIcon" binding:"omitempty,max=100"`
-	Remark   string `json:"remark" binding:"omitempty,max=500"`
+	Name   string `json:"name" binding:"omitempty,min=1,max=100"`
+	Icon   string `json:"icon" binding:"omitempty,max=500"`
+	Remark string `json:"remark" binding:"omitempty,max=500"`
 }
 
 // Create 创建厂商
@@ -76,11 +73,10 @@ func (s *ProviderService) Create(ctx context.Context, req CreateProviderRequest)
 	}
 
 	provider := &models.Provider{
-		ID:       id,
-		Name:     name,
-		Icon:     req.Icon,
-		LobeIcon: req.LobeIcon,
-		Remark:   req.Remark,
+		ID:     id,
+		Name:   name,
+		Icon:   req.Icon,
+		Remark: req.Remark,
 	}
 
 	if err := s.providerRepo.Create(ctx, provider); err != nil {
@@ -112,9 +108,6 @@ func (s *ProviderService) Update(ctx context.Context, id string, req UpdateProvi
 	}
 	if req.Icon != "" {
 		provider.Icon = req.Icon
-	}
-	if req.LobeIcon != "" {
-		provider.LobeIcon = req.LobeIcon
 	}
 	if req.Remark != "" {
 		provider.Remark = req.Remark
@@ -164,17 +157,40 @@ func (s *ProviderService) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// List 查询厂商列表
-func (s *ProviderService) List(ctx context.Context) ([]models.Provider, error) {
-	return s.providerRepo.List(ctx)
+// ProviderListItem 厂商列表项（嵌入原厂商 + 扩展统计）
+type ProviderListItem struct {
+	models.Provider
+	ModelCount int64 `json:"model_count"`
+}
+
+// List 查询厂商列表（带每个厂商的模型数量）
+func (s *ProviderService) List(ctx context.Context) ([]ProviderListItem, error) {
+	providers, err := s.providerRepo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(providers))
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	counts, err := s.providerRepo.CountModelsByProviders(ctx, ids)
+	if err != nil {
+		s.logger.Warn("聚合厂商模型数失败",
+			slog.String("error", err.Error()),
+		)
+		counts = map[string]int64{}
+	}
+	items := make([]ProviderListItem, 0, len(providers))
+	for _, p := range providers {
+		items = append(items, ProviderListItem{
+			Provider:   p,
+			ModelCount: counts[p.ID],
+		})
+	}
+	return items, nil
 }
 
 // FindByID 根据 ID 查询厂商
 func (s *ProviderService) FindByID(ctx context.Context, id string) (*models.Provider, error) {
 	return s.providerRepo.FindByID(ctx, id)
-}
-
-// FindByName 根据名称查询厂商
-func (s *ProviderService) FindByName(ctx context.Context, name string) (*models.Provider, error) {
-	return s.providerRepo.FindByName(ctx, name)
 }

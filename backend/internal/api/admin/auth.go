@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -30,8 +31,8 @@ func NewAuthHandler(authService *admin.AuthService, logger *slog.Logger) *AuthHa
 // @Produce json
 // @Param request body admin.LoginRequest true "登录请求"
 // @Success 200 {object} admin.LoginResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 401 {object} map[string]any
 // @Router /admin/api/auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req admin.LoginRequest
@@ -46,12 +47,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		if err == admin.ErrInvalidCredentials {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "invalid username or password",
-			})
-			return
-		}
-		if err == admin.ErrUserDisabled {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "user is disabled",
 			})
 			return
 		}
@@ -77,9 +72,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param request body admin.ChangePasswordRequest true "修改密码请求"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Failure 401 {object} map[string]any
 // @Router /admin/api/auth/change-password [post]
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	// 从 JWT 中间件设置的上下文中获取用户 ID
@@ -99,7 +94,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	if err := h.authService.ChangePassword(c.Request.Context(), userID.(uint), &req); err != nil {
-		if err.Error() == "invalid old password" {
+		if errors.Is(err, admin.ErrInvalidOldPassword) {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": "当前密码不正确",
 			})
@@ -122,8 +117,8 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 // @Produce json
 // @Param request body admin.RefreshTokenRequest true "刷新令牌请求"
 // @Success 200 {object} admin.RefreshTokenResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 401 {object} map[string]any
 // @Router /admin/api/auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req admin.RefreshTokenRequest

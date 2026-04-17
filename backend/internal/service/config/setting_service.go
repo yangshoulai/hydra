@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,11 +31,6 @@ func NewSettingService(logger *slog.Logger, systemSettingRepo *repository.System
 		cacheTTL:          5 * time.Minute, // 缓存 5 分钟
 		notifier:          NewConfigNotifier(),
 	}
-}
-
-// GetNotifier 获取配置变更通知器
-func (s *SettingService) GetNotifier() *ConfigNotifier {
-	return s.notifier
 }
 
 // RegisterListener 注册配置变更监听器
@@ -156,10 +152,10 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 		return nil
 	}
 
-	// 获取默认 category（Repository 会保留原有 category）
+	// 计算配置通知分类（仅用于运行时监听分发，不落库存储）
 	category := s.getDefaultCategory(key)
 
-	err = s.systemSettingRepo.Set(ctx, key, value, category)
+	err = s.systemSettingRepo.Set(ctx, key, value)
 	if err != nil {
 		s.logger.Error("设置配置失败",
 			slog.String("key", key),
@@ -181,48 +177,64 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 		slog.String("category", category),
 	)
 
-	// 获取实际的 category（用于通知）
-	actualCategory, _ := s.getCategoryFromDB(ctx, key)
-	if actualCategory == "" {
-		actualCategory = category
+	s.notifier.Notify(ctx, category)
+
+	// 联动：调试模式驱动 log_add_source；关闭调试时一并关源码定位以减少开销
+	if key == models.SettingLogDebugEnabled {
+		if err := s.cascadeDebugModeToAddSource(ctx, value); err != nil {
+			s.logger.Warn("联动更新 log_add_source 失败",
+				slog.String("error", err.Error()),
+			)
+		}
 	}
-	s.notifier.Notify(ctx, actualCategory)
 
 	return nil
 }
 
-// getCategoryFromDB 从数据库获取配置的 category
-func (s *SettingService) getCategoryFromDB(ctx context.Context, key string) (string, error) {
-	setting, err := s.systemSettingRepo.GetByKey(ctx, key)
-	if err != nil {
-		return "", err
+// cascadeDebugModeToAddSource 在 log_debug_enabled 变化时同步 log_add_source
+func (s *SettingService) cascadeDebugModeToAddSource(ctx context.Context, debugValue string) error {
+	target := "false"
+	if debugValue == "true" {
+		target = "true"
 	}
-
-	if setting != nil && setting.Category != "" {
-		return setting.Category, nil
+	current := s.GetString(ctx, models.SettingLogAddSource, "false")
+	if current == target {
+		return nil
 	}
-
-	// 如果记录不存在或 category 为空，返回错误让调用者使用默认值
-	return "", fmt.Errorf("setting not found or category is empty")
+	return s.Set(ctx, models.SettingLogAddSource, target)
 }
 
-// getDefaultCategory 根据配置键获取默认分类（用于新创建的配置）
+// getDefaultCategory 根据配置键推导通知分类
 func (s *SettingService) getDefaultCategory(key string) string {
 	switch {
+	case key == models.SettingServerPort ||
+		key == models.SettingServerReadTimeout ||
+		key == models.SettingServerWriteTimeout ||
+		key == models.SettingServerMaxHeaderBytes:
+		return "server"
 	case key == models.SettingCircuitBreakerFailureThreshold ||
 		key == models.SettingCircuitBreakerCoolingDuration:
 		return "circuit_breaker"
 	case key == models.SettingLogRetentionDays ||
-		key == models.SettingLogDebugEnabled:
+		key == models.SettingLogDebugEnabled ||
+		key == models.SettingLogAddSource ||
+		key == models.SettingLogFileEnabled ||
+		key == models.SettingLogFileMaxSize ||
+		key == models.SettingLogFileMaxBackups ||
+		key == models.SettingLogFileMaxAge ||
+		key == models.SettingLogFileCompress:
 		return "logging"
 	case key == models.SettingProxyRequestTimeout ||
-		key == models.SettingProxyMaxConcurrent ||
+		key == models.SettingProxyNetworkURL ||
 		key == models.SettingProxyMaxRetry:
 		return "proxy"
+	case key == models.SettingModelTestPrompt:
+		return "model_test"
 	case key == models.SettingSnifferPlainTextErrorRules:
 		return "sniffer"
-	case key == models.SettingChannelGlobalSyncEnabled:
-		return "channel_sync"
+	case key == models.SettingSnifferEnabled ||
+		key == models.SettingSnifferStreamPacketCount:
+		return "sniffer"
 	default:
 		return "unknown"
 	}
@@ -235,18 +247,49 @@ func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureTh
 	return
 }
 
-// GetLogConfig 获取日志配置
-func (s *SettingService) GetLogConfig(ctx context.Context) (retentionDays int, debugEnabled bool) {
-	retentionDays = s.GetInt(ctx, models.SettingLogRetentionDays, 30)
-	debugEnabled = s.GetBool(ctx, models.SettingLogDebugEnabled, false)
+// GetProxyConfig 获取代理配置（超时/网络代理/重试）
+func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, networkProxyURL string, maxRetry int) {
+	requestTimeout = s.GetDuration(ctx, models.SettingProxyRequestTimeout, 120*time.Second)
+	networkProxyURL = s.GetString(ctx, models.SettingProxyNetworkURL, "")
+	maxRetry = s.GetInt(ctx, models.SettingProxyMaxRetry, 3)
 	return
 }
 
-// GetProxyConfig 获取代理配置（超时/并发/重试）
-func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, maxConcurrent int, maxRetry int) {
-	requestTimeout = s.GetDuration(ctx, models.SettingProxyRequestTimeout, 120*time.Second)
-	maxConcurrent = s.GetInt(ctx, models.SettingProxyMaxConcurrent, 1000)
-	maxRetry = s.GetInt(ctx, models.SettingProxyMaxRetry, 3)
+// GetEffectiveLogLevel 获取实际生效的日志级别
+// 规则：log_debug_enabled 是唯一的日志级别开关，开启时输出 debug，否则 info。
+func (s *SettingService) GetEffectiveLogLevel(ctx context.Context) string {
+	if s.GetBool(ctx, models.SettingLogDebugEnabled, false) {
+		return "debug"
+	}
+	return "info"
+}
+
+// GetSnifferConfig 获取响应嗅探配置（启用开关、流式探测包数量、错误关键词）
+func (s *SettingService) GetSnifferConfig(ctx context.Context) (enabled bool, streamPacketCount int, keywords []string) {
+	enabled = s.GetBool(ctx, models.SettingSnifferEnabled, true)
+	streamPacketCount = s.GetInt(ctx, models.SettingSnifferStreamPacketCount, 1)
+	if streamPacketCount <= 0 {
+		streamPacketCount = 1
+	}
+	keywords = s.GetPlainTextErrorRules(ctx)
+	return
+}
+
+// GetModelTestPrompt 获取模型测试默认提示词
+func (s *SettingService) GetModelTestPrompt(ctx context.Context) string {
+	value := strings.TrimSpace(s.GetString(ctx, models.SettingModelTestPrompt, ""))
+	if value != "" {
+		return value
+	}
+	return "Hi"
+}
+
+// GetServerConfig 获取服务启动配置
+func (s *SettingService) GetServerConfig(ctx context.Context) (port int, readTimeout time.Duration, writeTimeout time.Duration, maxHeaderBytes int) {
+	port = s.GetInt(ctx, models.SettingServerPort, 8080)
+	readTimeout = s.GetDuration(ctx, models.SettingServerReadTimeout, 120*time.Second)
+	writeTimeout = s.GetDuration(ctx, models.SettingServerWriteTimeout, 0)
+	maxHeaderBytes = s.GetInt(ctx, models.SettingServerMaxHeaderBytes, 1<<20)
 	return
 }
 
@@ -254,7 +297,6 @@ func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout tim
 func (s *SettingService) GetPlainTextErrorRules(ctx context.Context) []string {
 	value, err := s.get(ctx, models.SettingSnifferPlainTextErrorRules)
 	if err != nil || value == "" {
-		// 返回默认规则
 		return []string{}
 	}
 
@@ -269,44 +311,4 @@ func (s *SettingService) GetPlainTextErrorRules(ctx context.Context) []string {
 	}
 
 	return keywords
-}
-
-// GetStreamErrorRules 获取流式响应错误规则
-func (s *SettingService) GetStreamErrorRules(ctx context.Context) []string {
-	value, err := s.get(ctx, models.SettingSnifferPlainTextErrorRules)
-	if err != nil || value == "" {
-		// 返回默认规则
-		return s.getDefaultStreamErrorRules()
-	}
-
-	// 解析 JSON
-	var keywords []string
-	if err := json.Unmarshal([]byte(value), &keywords); err != nil {
-		s.logger.Warn("解析流式错误规则失败",
-			slog.String("value", value),
-			slog.String("error", err.Error()),
-		)
-		return s.getDefaultStreamErrorRules()
-	}
-
-	return keywords
-}
-
-// getDefaultStreamErrorRules 获取默认的流式错误关键词
-func (s *SettingService) getDefaultStreamErrorRules() []string {
-	return []string{
-		"\"error\"", // JSON error 字段
-		"无可用后端",
-		"额度不足",
-		"maintenance",
-		"service unavailable",
-		"bad gateway",
-		"quota exceeded",
-		"rate limit",
-		"unauthorized",
-		"forbidden",
-		"not found",
-		"invalid api key",
-		"authentication failed",
-	}
 }

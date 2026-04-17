@@ -180,10 +180,16 @@ type ModelListRequest struct {
 
 // ModelListResponse 模型列表响应
 type ModelListResponse struct {
-	Total    int64          `json:"total"`
-	Page     int            `json:"page"`
-	PageSize int            `json:"page_size"`
-	Items    []models.Model `json:"items"`
+	Total    int64           `json:"total"`
+	Page     int             `json:"page"`
+	PageSize int             `json:"page_size"`
+	Items    []ModelListItem `json:"items"`
+}
+
+// ModelListItem 模型列表项（嵌入原模型 + 扩展统计）
+type ModelListItem struct {
+	models.Model
+	ChannelCount int64 `json:"channel_count"`
 }
 
 // ListWithFilter 分页查询模型列表（带过滤和排序）
@@ -221,16 +227,37 @@ func (s *ModelService) ListWithFilter(ctx context.Context, req ModelListRequest)
 	}
 
 	// 查询模型列表
-	models, total, _, err := s.modelRepo.ListWithFilter(ctx, offset, req.PageSize, filter, sortOpts, nil)
+	modelList, total, err := s.modelRepo.ListWithFilter(ctx, offset, req.PageSize, filter, sortOpts)
 	if err != nil {
 		return nil, err
+	}
+
+	// 聚合每个模型的渠道数
+	names := make([]string, 0, len(modelList))
+	for _, m := range modelList {
+		names = append(names, m.Name)
+	}
+	counts, err := s.modelConfigRepo.CountDistinctChannelsByModels(ctx, names)
+	if err != nil {
+		s.logger.Warn("聚合模型渠道数失败",
+			slog.String("error", err.Error()),
+		)
+		counts = map[string]int64{}
+	}
+
+	items := make([]ModelListItem, 0, len(modelList))
+	for _, m := range modelList {
+		items = append(items, ModelListItem{
+			Model:        m,
+			ChannelCount: counts[m.Name],
+		})
 	}
 
 	return &ModelListResponse{
 		Total:    total,
 		Page:     req.Page,
 		PageSize: req.PageSize,
-		Items:    models,
+		Items:    items,
 	}, nil
 }
 

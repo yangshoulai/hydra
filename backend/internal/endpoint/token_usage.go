@@ -7,7 +7,7 @@ import (
 
 // parseTokenUsageFromJSON 解析非流式响应中的 token 使用量
 func parseTokenUsageFromJSON(responseBody string, inputKey, outputKey string) (int64, int64) {
-	var payload interface{}
+	var payload any
 	if err := json.Unmarshal([]byte(responseBody), &payload); err != nil {
 		return 0, 0
 	}
@@ -43,7 +43,7 @@ func parseTokenUsageFromStream(responseBody string, inputKey, outputKey string) 
 			continue
 		}
 
-		var payload interface{}
+		var payload any
 		if err := json.Unmarshal([]byte(data), &payload); err != nil {
 			continue
 		}
@@ -66,10 +66,10 @@ func parseTokenUsageFromStream(responseBody string, inputKey, outputKey string) 
 }
 
 // findUsageMap 在响应中递归查找 usage 字段
-func findUsageMap(payload interface{}) map[string]interface{} {
+func findUsageMap(payload any) map[string]any {
 	switch value := payload.(type) {
-	case map[string]interface{}:
-		if usage, ok := value["usage"].(map[string]interface{}); ok {
+	case map[string]any:
+		if usage, ok := value["usage"].(map[string]any); ok {
 			return usage
 		}
 		for _, nested := range value {
@@ -77,7 +77,7 @@ func findUsageMap(payload interface{}) map[string]interface{} {
 				return found
 			}
 		}
-	case []interface{}:
+	case []any:
 		for _, item := range value {
 			if found := findUsageMap(item); found != nil {
 				return found
@@ -88,7 +88,7 @@ func findUsageMap(payload interface{}) map[string]interface{} {
 }
 
 // extractTokensFromUsage 从 usage 中提取输入输出 tokens
-func extractTokensFromUsage(usage map[string]interface{}, inputKey, outputKey string) (int64, int64, bool) {
+func extractTokensFromUsage(usage map[string]any, inputKey, outputKey string) (int64, int64, bool) {
 	inputTokens, inputOk := parseUsageValue(usage, inputKey)
 	outputTokens, outputOk := parseUsageValue(usage, outputKey)
 	if !inputOk && !outputOk {
@@ -106,7 +106,7 @@ func extractTokensFromUsage(usage map[string]interface{}, inputKey, outputKey st
 }
 
 // parseNumericToInt64 将数值类型转换为 int64
-func parseNumericToInt64(value interface{}) (int64, bool) {
+func parseNumericToInt64(value any) (int64, bool) {
 	switch v := value.(type) {
 	case int:
 		return int64(v), true
@@ -127,7 +127,7 @@ func parseNumericToInt64(value interface{}) (int64, bool) {
 	}
 }
 
-func parseUsageValue(usage map[string]interface{}, key string) (int64, bool) {
+func parseUsageValue(usage map[string]any, key string) (int64, bool) {
 	value, ok := usage[key]
 	if !ok {
 		return 0, false

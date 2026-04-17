@@ -7,12 +7,13 @@ const Layout = () => import('@/layouts/DefaultLayout.vue')
 // 页面组件（懒加载）
 const Dashboard = () => import('@/pages/Dashboard.vue')
 const ChannelList = () => import('@/pages/ChannelList.vue')
-const LogQuery = () => import('@/pages/LogQuery.vue')
 const Settings = () => import('@/pages/Settings.vue')
 const TokenManagement = () => import('@/pages/TokenManagement.vue')
 const ModelManagement = () => import('@/pages/ModelManagement.vue')
 const ProviderManagement = () => import('@/pages/ProviderManagement.vue')
+const RequestLogs = () => import('@/pages/RequestLogs.vue')
 const Login = () => import('@/pages/Login.vue')
+const NotFound = () => import('@/pages/NotFound.vue')
 
 // 路由配置
 const routes: RouteRecordRaw[] = [
@@ -70,15 +71,6 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'logs',
-        name: 'LogQuery',
-        component: LogQuery,
-        meta: {
-          title: '日志查询',
-          icon: 'document-text-outline',
-        },
-      },
-      {
         path: 'settings',
         name: 'Settings',
         component: Settings,
@@ -96,10 +88,26 @@ const routes: RouteRecordRaw[] = [
           icon: 'key-outline',
         },
       },
+      {
+        path: 'logs',
+        name: 'RequestLogs',
+        component: RequestLogs,
+        meta: {
+          title: '请求日志',
+          icon: 'document-text-outline',
+        },
+      },
+      {
+        path: ':pathMatch(.*)*',
+        name: 'NotFound',
+        component: NotFound,
+        meta: {
+          title: '页面不存在',
+        },
+      },
     ],
   },
   {
-    // 404 重定向
     path: '/:pathMatch(.*)*',
     redirect: '/dashboard',
   },

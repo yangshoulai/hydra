@@ -16,7 +16,7 @@ func (e *MessagesEndpoint) GetName() string {
 }
 
 func (e *MessagesEndpoint) GetType() string {
-	return "anthropic"
+	return TypeAnthropicMessages
 }
 
 func (e *MessagesEndpoint) GetPath() string {
@@ -32,9 +32,9 @@ func (e *MessagesEndpoint) GetColor() string {
 }
 
 func (e *MessagesEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"model": modelName,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{
 				"role":    "user",
 				"content": "请告诉我你的知识库的截止日期是哪一天？",
@@ -64,7 +64,7 @@ func (e *MessagesEndpoint) ValidateResponse(statusCode int, body []byte) (bool, 
 		return false, "invalid JSON response"
 	}
 
-	content, ok := result["content"].([]interface{})
+	content, ok := result["content"].([]any)
 	if !ok || len(content) == 0 {
 		if errMsg, ok := result["error"]; ok {
 			errBytes, _ := json.Marshal(errMsg)

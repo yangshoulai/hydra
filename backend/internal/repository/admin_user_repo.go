@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"gorm.io/gorm"
@@ -64,23 +63,6 @@ func (r *AdminUserRepository) List(ctx context.Context) ([]*models.AdminUser, er
 // Update 更新用户
 func (r *AdminUserRepository) Update(ctx context.Context, user *models.AdminUser) error {
 	return r.db.WithContext(ctx).Save(user).Error
-}
-
-// UpdatePassword 更新用户密码
-func (r *AdminUserRepository) UpdatePassword(ctx context.Context, id uint, passwordHash string) error {
-	return r.db.WithContext(ctx).
-		Model(&models.AdminUser{}).
-		Where("id = ?", id).
-		Update("password_hash", passwordHash).Error
-}
-
-// UpdateLastLogin 更新最后登录时间
-func (r *AdminUserRepository) UpdateLastLogin(ctx context.Context, id uint) error {
-	now := time.Now()
-	return r.db.WithContext(ctx).
-		Model(&models.AdminUser{}).
-		Where("id = ?", id).
-		Update("last_login_at", &now).Error
 }
 
 // Delete 删除用户

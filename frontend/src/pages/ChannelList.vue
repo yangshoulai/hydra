@@ -1,186 +1,154 @@
 <template>
-  <div class="space-y-4">
-    <!-- 页面头部 -->
-    <n-card :bordered="false" class="page-header-card">
-      <n-space justify="space-between" align="center">
-        <n-space vertical :size="4">
-          <n-text class="page-title">渠道管理</n-text>
-          <n-text depth="3" class="page-subtitle">
-            管理 AI 服务渠道，配置接入地址、密钥和模型映射
-          </n-text>
-        </n-space>
-        <n-button type="primary" @click="handleCreate" size="large" strong>
-          <template #icon>
-            <n-icon>
-              <AddOutline/>
-            </n-icon>
-          </template>
-          新建渠道
-        </n-button>
+  <div class="app-page">
+    <n-alert v-if="listError" type="error" :bordered="false">
+      <n-space align="center" justify="space-between" style="width: 100%">
+        <span>{{ listError }}</span>
+        <n-button text type="error" @click="fetchChannels">重试</n-button>
       </n-space>
-    </n-card>
+    </n-alert>
 
-    <!-- 过滤表单 -->
-    <n-form inline :label-width="50" :model="filters" :label-placement="'left'" :label-align="'left'" :show-feedback="false">
-      <n-grid :cols="24" :x-gap="24" responsive="screen">
-        <n-form-item-gi :span="6" label="名称">
+    <section class="panel-card">
+      <header class="panel-card__header table-toolbar">
+        <div class="table-toolbar__title">
+          <h3 class="panel-card__title">渠道列表</h3>
+        </div>
+        <div class="table-toolbar__actions">
+          <n-button size="small" type="primary" @click="handleCreate">
+            <template #icon>
+              <n-icon>
+                <AddOutline />
+              </n-icon>
+            </template>
+            新建渠道
+          </n-button>
+        </div>
+      </header>
+      <div class="panel-card__body">
+        <div class="table-inline-search">
           <n-input
-              v-model:value="filters.name"
-              placeholder="输入渠道名称"
-              clearable
-              @update:value="handleFilterChange"
-          />
-        </n-form-item-gi>
-        <n-form-item-gi :span="6" label="BASE URL" :label-width="80">
+            v-model:value="filters.name"
+            class="table-filter-input"
+            size="small"
+            clearable
+            placeholder="渠道名称"
+            @keyup.enter="handleSearch"
+          >
+            <template #prefix>
+              <n-icon><SearchOutline /></n-icon>
+            </template>
+          </n-input>
           <n-input
-              v-model:value="filters.base_url"
-              placeholder="输入 Base URL"
-              clearable
-              @update:value="handleFilterChange"
-          />
-        </n-form-item-gi>
-        <n-form-item-gi :span="6" label="状态">
+            v-model:value="filters.base_url"
+            class="table-filter-input"
+            size="small"
+            clearable
+            placeholder="Base URL"
+            @keyup.enter="handleSearch"
+          >
+            <template #prefix>
+              <n-icon><SearchOutline /></n-icon>
+            </template>
+          </n-input>
           <n-select
-              v-model:value="filters.status"
-              placeholder="选择状态"
-              clearable
-              :options="statusOptions"
-              @update:value="handleFilterChange"
+            v-model:value="filters.status"
+            class="table-filter-select"
+            size="small"
+            clearable
+            :options="statusOptions"
+            placeholder="状态"
           />
-        </n-form-item-gi>
-        <n-form-item-gi :span="6">
-          <n-space>
-            <n-button type="primary" @click="handleSearch">
-              <template #icon>
-                <n-icon>
-                  <SearchOutline/>
-                </n-icon>
-              </template>
-              查询
-            </n-button>
-            <n-button @click="handleReset">
-              <template #icon>
-                <n-icon>
-                  <RefreshOutline/>
-                </n-icon>
-              </template>
-              重置
-            </n-button>
-          </n-space>
-        </n-form-item-gi>
-      </n-grid>
-    </n-form>
+          <n-button size="small" type="primary" @click="handleSearch">查询</n-button>
+          <n-button size="small" quaternary @click="handleReset">重置</n-button>
+        </div>
 
-    <!-- 数据表格 -->
-    <n-data-table
-        :columns="columns"
-        :data="channels"
-        :loading="loading"
-        :pagination="false"
-        :single-line="false"
-        bordered
-        :scroll-x="1000"
-        striped
-        :row-key="(row: Channel) => row.id"
-        @update:sorter="handleSorterChange"
+        <n-data-table
+          :columns="columns"
+          :data="channels"
+          :loading="loading"
+          :locale="tableLocale"
+          :pagination="false"
+          :single-line="false"
+          :scroll-x="1030"
+          :row-key="(row: Channel) => row.id"
+          @update:sorter="handleSorterChange"
+        />
+
+        <div style="display: flex; justify-content: flex-end; margin-top: 16px">
+          <n-pagination
+            :page="pagination.page"
+            :on-update-page="pagination.onChange"
+            :page-size="pagination.pageSize"
+            :on-update:page-size="pagination.onUpdatePageSize"
+            :item-count="pagination.total"
+            :page-sizes="pagination.pageSizes"
+            :show-size-picker="pagination.showSizePicker"
+          />
+        </div>
+      </div>
+    </section>
+
+    <ChannelEditorDrawer
+      v-model="showEditor"
+      :channel="editingChannel"
+      @saved="handleSaved"
     />
 
-    <div class="flex justify-end">
-      <n-pagination
-          :page="pagination.page"
-          :on-update-page="pagination.onChange"
-          @update:page-size="pagination.onUpdatePageSize"
-          :page-size="pagination.pageSize"
-          :item-count="pagination.total"
-          :page-sizes="pagination.pageSizes"
-          :show-size-picker="pagination.showSizePicker"
-      />
-    </div>
-
-    <!-- 渠道对话框 -->
-    <ChannelDialog
-        v-if="showDialog"
-        :channel="editingChannel"
-        @confirm="handleDialogConfirm"
-        @cancel="handleDialogCancel"
-    />
-
-    <!-- 密钥管理对话框 -->
-    <KeyManagementDialog
-        v-if="selectedChannel"
-        v-model="showKeyManagement"
-        :channel-id="selectedChannel.id"
-        :channel-name="selectedChannel.name"
-        @refresh="fetchChannels"
-    />
-
-    <!-- 模型管理对话框 -->
     <ModelManagementDialog
-        v-model="showModelManagement"
-        :channel-id="selectedChannel?.id || 0"
-        :channel-name="selectedChannel?.name || ''"
-        @refresh="fetchChannels"
+      v-model="showModelManagement"
+      :channel-id="selectedChannel?.id || 0"
+      :channel-name="selectedChannel?.name || ''"
+      @refresh="fetchChannels"
     />
   </div>
-
-
 </template>
 
 <script setup lang="ts">
-import {computed, h, onMounted, reactive, ref} from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import {
   type DataTableColumns,
+  NAlert,
   NButton,
-  NCard,
   NDataTable,
-  NForm,
-  NFormItemGi,
-  NGrid,
   NIcon,
   NInput,
   NPagination,
   NSelect,
   NSpace,
   NTag,
-  NText,
-  NTooltip
+  NTooltip,
 } from 'naive-ui'
-import {AddOutline, CreateOutline, GridOutline, KeyOutline, RefreshOutline, SearchOutline, TrashOutline} from '@vicons/ionicons5'
-import {channelApi} from '../services/channelService'
-import type {Channel, ChannelListParams} from '../types/channel'
-import ChannelDialog from '../components/ChannelDialog.vue'
-import KeyManagementDialog from '../components/KeyManagementDialog.vue'
-import ModelManagementDialog from '../components/ModelManagementDialog.vue'
+import { AddOutline, LayersOutline, PowerOutline, SearchOutline, SettingsOutline, TrashOutline } from '@vicons/ionicons5'
+import type { Channel, ChannelListParams } from '@/types/channel'
+import { channelApi } from '@/services/channelService'
+import ChannelEditorDrawer from '@/components/ChannelEditorDrawer.vue'
+import ModelManagementDialog from '@/components/ModelManagementDialog.vue'
+import { getErrorMessage, toastApiError } from '@/utils/error'
 
-// State
 const channels = ref<Channel[]>([])
 const loading = ref(false)
-const showDialog = ref(false)
-const editingChannel = ref<Channel | null>(null)
-const showKeyManagement = ref(false)
+const listError = ref('')
+const showEditor = ref(false)
 const showModelManagement = ref(false)
+const editingChannel = ref<Channel | null>(null)
 const selectedChannel = ref<Channel | null>(null)
+const togglingStatusMap = ref<Record<number, boolean>>({})
 
-// 过滤条件
 const filters = reactive<ChannelListParams>({
   name: '',
   base_url: '',
-  status: null
+  status: null,
 })
 
-// 排序状态
 const sortState = reactive({
-  columnKey: '' as 'id' | 'name' | 'priority' | 'weight' | 'status' | '',
-  order: false as boolean | 'asc' | 'desc' // false: 无排序, 'asc': 升序, 'desc': 降序
+  columnKey: '' as 'id' | 'name' | 'weight' | 'status' | '',
+  order: false as boolean | 'asc' | 'desc',
 })
 
-// 状态选项
 const statusOptions = [
-  {label: '激活', value: 'active'},
-  {label: '禁用', value: 'disabled'}
+  { label: '启用', value: 'active' },
+  { label: '停用', value: 'inactive' },
 ]
 
-// 分页
 const pagination = reactive({
   page: 1,
   pageSize: 20,
@@ -195,52 +163,187 @@ const pagination = reactive({
     pagination.pageSize = pageSize
     pagination.page = 1
     fetchChannels()
-  }
+  },
 })
 
-function getModelStats(channel: Channel) {
-  const stats = channel.model_stats
-  if (stats) {
-    return {
-      active: stats.active || 0,
-      cooling: stats.cooling || 0,
-      disabled: stats.disabled || 0,
-      nonExist: stats.non_exist || 0
-    }
-  }
+const tableLocale = computed(() => ({
+  emptyText: loading.value ? '加载中...' : '暂无渠道数据',
+}))
 
-  if (channel.model_configs && channel.model_configs.length > 0) {
-    const result = {active: 0, cooling: 0, disabled: 0, nonExist: 0}
-    channel.model_configs.forEach((config) => {
-      if (config.status === 'active') {
-        result.active += 1
-      } else if (config.status === 'cooling') {
-        result.cooling += 1
-      } else if (config.status === 'disabled') {
-        result.disabled += 1
-      } else if (config.status === 'non_exist') {
-        result.nonExist += 1
-      }
-    })
-    return result
+function getSortOrder(key: string) {
+  if (sortState.columnKey === key) {
+    return sortState.order === 'asc' ? 'ascend' : sortState.order === 'desc' ? 'descend' : false
   }
-
-  return {active: 0, cooling: 0, disabled: 0, nonExist: 0}
+  return false
 }
 
-// 获取渠道列表
+const columns = computed<DataTableColumns<Channel>>(() => [
+  {
+    title: 'ID',
+    key: 'id',
+    width: 70,
+    sortable: true,
+    sorter: 'default',
+    sortOrder: getSortOrder('id'),
+  },
+  {
+    title: '渠道',
+    key: 'name',
+    minWidth: 210,
+    ellipsis: { tooltip: true },
+    render: (row) =>
+      h('div', {}, [
+        h('div', { style: 'font-weight: 650; color: #111111' }, row.name),
+        h('a', {
+          href: buildBaseUrlLink(row.base_url),
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          class: 'channel-base-url-link',
+          title: row.base_url,
+        }, row.base_url),
+      ]),
+  },
+  {
+    title: '状态',
+    key: 'status',
+    width: 90,
+    align: 'center',
+    sortable: true,
+    sorter: 'default',
+    sortOrder: getSortOrder('status'),
+    render: (row) =>
+      h(
+        NTag,
+        { type: row.status === 'active' ? 'success' : 'default', size: 'small', bordered: false },
+        { default: () => (row.status === 'active' ? '启用' : '停用') },
+      ),
+  },
+  {
+    title: '权重',
+    key: 'weight',
+    width: 110,
+    align: 'right',
+    sortable: true,
+    sorter: 'default',
+    sortOrder: getSortOrder('weight'),
+  },
+  {
+    title: '模型数',
+    key: 'model_count',
+    width: 100,
+    align: 'right',
+    render: (row) => `${row.model_stats?.active || 0} / ${row.model_stats?.inactive || 0}`,
+  },
+  {
+    title: '密钥数',
+    key: 'key_stats',
+    width: 100,
+    align: 'right',
+    render: (row) => `${row.key_stats?.active || 0} / ${row.key_stats?.inactive || 0}`,
+  },
+  {
+    title: '更新时间',
+    key: 'updated_at',
+    width: 170,
+    align: 'center',
+    render: (row) => new Date(row.updated_at).toLocaleString('zh-CN'),
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 172,
+    fixed: 'right',
+    align: 'center',
+    render: (row) =>
+      h(NSpace, { size: 4, justify: 'center', class: 'table-action-group' }, {
+        default: () => [
+          renderActionIcon({
+            tooltip: '基础/密钥',
+            ariaLabel: `编辑渠道 ${row.name} 的基础信息和密钥`,
+            icon: SettingsOutline,
+            type: 'primary',
+            onClick: () => handleEdit(row),
+          }),
+          renderActionIcon({
+            tooltip: '模型配置',
+            ariaLabel: `配置渠道 ${row.name} 的模型`,
+            icon: LayersOutline,
+            type: 'info',
+            onClick: () => handleModelManagement(row),
+          }),
+          renderActionIcon({
+            tooltip: row.status === 'active' ? '禁用' : '启用',
+            ariaLabel: `${row.status === 'active' ? '禁用' : '启用'}渠道 ${row.name}`,
+            icon: PowerOutline,
+            type: row.status === 'active' ? 'warning' : 'success',
+            loading: !!togglingStatusMap.value[row.id],
+            onClick: () => handleToggleStatus(row),
+          }),
+          renderActionIcon({
+            tooltip: '删除',
+            ariaLabel: `删除渠道 ${row.name}`,
+            icon: TrashOutline,
+            type: 'error',
+            onClick: () => handleDelete(row),
+          }),
+        ],
+      }),
+  },
+])
+
+function renderActionIcon(options: {
+  tooltip: string
+  ariaLabel: string
+  icon: any
+  type?: 'default' | 'primary' | 'info' | 'warning' | 'error' | 'success'
+  loading?: boolean
+  onClick: () => void
+}) {
+  return h(
+    NTooltip,
+    null,
+    {
+      trigger: () =>
+        h(
+          NButton,
+          {
+            class: 'table-action-btn',
+            size: 'tiny',
+            quaternary: true,
+            type: options.type,
+            circle: true,
+            loading: options.loading,
+            'aria-label': options.ariaLabel,
+            onClick: options.onClick,
+          },
+          {
+            icon: () => h(NIcon, null, { default: () => h(options.icon) }),
+          },
+        ),
+      default: () => options.tooltip,
+    },
+  )
+}
+
+function buildBaseUrlLink(baseUrl: string): string {
+  const trimmed = (baseUrl || '').trim()
+  if (!trimmed) return '#'
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
+}
+
 async function fetchChannels() {
   loading.value = true
+  listError.value = ''
   try {
     const params: ChannelListParams = {
       page: pagination.page,
       page_size: pagination.pageSize,
       name: filters.name || undefined,
       base_url: filters.base_url || undefined,
-      status: filters.status || undefined
+      status: filters.status || undefined,
     }
 
-    // 添加排序参数
     if (sortState.columnKey && sortState.order) {
       params.sort_by = sortState.columnKey
       params.sort_order = sortState.order as 'asc' | 'desc'
@@ -249,40 +352,19 @@ async function fetchChannels() {
     const result = await channelApi.list(params)
     channels.value = result.items
     pagination.total = result.total
-  } catch (error: any) {
-    console.error('Failed to fetch channels:', error)
-    window.$message?.error(error.response?.data?.error || '获取渠道列表失败')
+  } catch (err) {
+    listError.value = getErrorMessage(err, '获取渠道列表失败')
+    window.$message?.error(listError.value)
   } finally {
     loading.value = false
   }
 }
 
-// 处理排序变化
-function handleSorterChange(sorter: { columnKey: string; order: 'ascend' | 'descend' | false }) {
-  if (sorter.columnKey) {
-    sortState.columnKey = sorter.columnKey as 'id' | 'name' | 'priority' | 'weight' | 'status'
-    sortState.order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : false
-  } else {
-    sortState.columnKey = '' as 'id' | 'name' | 'priority' | 'weight' | 'status'
-    sortState.order = false
-  }
-
-  pagination.page = 1
-  fetchChannels()
-}
-
-// 过滤条件变化时重置到第一页
-function handleFilterChange() {
-  pagination.page = 1
-}
-
-// 搜索
 function handleSearch() {
   pagination.page = 1
   fetchChannels()
 }
 
-// 重置
 function handleReset() {
   filters.name = ''
   filters.base_url = ''
@@ -291,316 +373,111 @@ function handleReset() {
   fetchChannels()
 }
 
-// 表格列定义（使用 computed 响应式更新排序状态）
-const columns = computed<DataTableColumns<Channel>>(() => {
-  const getSortOrder = (key: string) => {
-    if (sortState.columnKey === key) {
-      return sortState.order === 'asc' ? 'ascend' : sortState.order === 'desc' ? 'descend' : false
-    }
-    return false
+function handleSorterChange(sorter: { columnKey: string; order: 'ascend' | 'descend' | false }) {
+  if (sorter.columnKey) {
+    sortState.columnKey = sorter.columnKey as 'id' | 'name' | 'weight' | 'status'
+    sortState.order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : false
+  } else {
+    sortState.columnKey = ''
+    sortState.order = false
   }
 
-  return [
-    {
-      title: 'ID',
-      key: 'id',
-      width: 80,
-      align: 'left',
-      sortable: true,
-      sorter: 'default',
-      sortOrder: getSortOrder('id')
-    },
-    {
-      title: '名称',
-      key: 'name',
-      width: 160,
-      ellipsis: {
-        tooltip: true
-      },
-      render(row) {
-        return h(
-            NButton,
-            {
-              text: true,
-              tag: 'a',
-              size: "small",
-              href: row.base_url,
-              type: "primary",
-              target: "_blank"
-            },
-            {
-              default: () => (row.name)
-            }
-        )
-      }
-    },
-    {
-      title: '状态',
-      key: 'status',
-      align: 'center',
-      width: 80,
-      sortable: true,
-      sorter: 'default',
-      sortOrder: getSortOrder('status'),
-      render(row) {
-        return h(
-            NTag,
-            {
-              type: row.status === 'active' ? 'success' : 'warning',
-              size: "small"
-            },
-            {
-              default: () => (row.status === 'active' ? '激活' : '禁用')
-            }
-        )
-      }
-    },
-    {
-      title: '优先级',
-      key: 'priority',
-      width: 80,
-      align: 'right',
-      sortable: true,
-      sorter: 'default',
-      sortOrder: getSortOrder('priority')
-    },
-    {
-      title: '权重',
-      key: 'weight',
-      width: 80,
-      align: 'right',
-      sortable: true,
-      sorter: 'default',
-      sortOrder: getSortOrder('weight')
-    },
-    {
-      title: '模型',
-      key: 'model_count',
-      width: 120,
-      align: 'right',
-      render(row) {
-        const stats = getModelStats(row)
-        const color = stats.active > 0
-            ? '#10b981'
-            : stats.cooling > 0
-                ? '#f59e0b'
-                : stats.disabled > 0
-                    ? '#f59e0b'
-                    : '#ef4444'
-
-        return h(
-            NTooltip,
-            {},
-            {
-              trigger: () =>
-                  h(NText, {style: {color: color, fontWeight: 500}}, {
-                    default: () => `${stats.active} / ${stats.cooling} / ${stats.disabled} / ${stats.nonExist}`
-                  }),
-              default: () =>
-                  h('div', {style: {lineHeight: '1.8'}}, [
-                    h('div', {}, `正常：${stats.active}`),
-                    h('div', {}, `冷却：${stats.cooling}`),
-                    h('div', {}, `禁用：${stats.disabled}`),
-                    h('div', {}, `失效：${stats.nonExist}`)
-                  ])
-            }
-        )
-      }
-    },
-    {
-      title: '密钥',
-      key: 'keys_count',
-      width: 120,
-      align: 'right',
-      render(row) {
-        const stats = row.key_stats
-        if (!stats) {
-          return h(NText, {depth: 3}, {default: () => '0 / 0 / 0'})
-        }
-        const color = stats.active > 0 ? '#10b981' : stats.cooling > 0 ? '#f59e0b' : '#ef4444'
-
-        return h(
-            NTooltip,
-            {},
-            {
-              trigger: () =>
-                  h(NText, {style: {color: color, fontWeight: 500}}, {
-                    default: () => `${stats.active} / ${stats.cooling} / ${stats.disabled}`
-                  }),
-              default: () =>
-                  h('div', {style: {lineHeight: '1.8'}}, [
-                    h('div', {}, `健康：${stats.active}`),
-                    h('div', {}, `冷却：${stats.cooling}`),
-                    h('div', {}, `失效：${stats.disabled}`)
-                  ])
-            }
-        )
-      }
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 280,
-      align: 'center',
-      fixed: 'right',
-      render(row) {
-        return h(
-            'div',
-            {class: 'flex gap-2 justify-center'},
-            [
-              h(
-                  NButton,
-                  {
-                    size: 'tiny',
-                    type: 'info',
-                    onClick: () => handleKeyManagement(row)
-                  },
-                  {
-                    default: () => '密钥管理',
-                    icon: () => h(NIcon, {}, {default: () => h(KeyOutline)})
-                  }
-              ),
-              h(
-                  NButton,
-                  {
-                    size: 'tiny',
-                    type: 'primary',
-                    onClick: () => handleModelManagement(row)
-                  },
-                  {
-                    default: () => '模型管理',
-                    icon: () => h(NIcon, {}, {default: () => h(GridOutline)})
-                  }
-              ),
-              h(
-                  NButton,
-                  {
-                    size: 'tiny',
-                    type: 'warning',
-                    onClick: () => handleEdit(row)
-                  },
-                  {
-                    default: () => '编辑',
-                    icon: () => h(NIcon, {}, {default: () => h(CreateOutline)})
-                  }
-              ),
-              h(
-                  NButton,
-                  {
-                    size: 'tiny',
-                    type: 'error',
-                    onClick: () => handleDelete(row)
-                  },
-                  {
-                    default: () => '删除',
-                    icon: () => h(NIcon, {}, {default: () => h(TrashOutline)})
-                  }
-              )
-            ]
-        )
-      }
-    }
-  ]
-})
-
-
-// 密钥管理
-function handleKeyManagement(channel: Channel) {
-  selectedChannel.value = channel
-  showKeyManagement.value = true
+  pagination.page = 1
+  fetchChannels()
 }
 
-// 模型管理
+function handleCreate() {
+  editingChannel.value = null
+  showEditor.value = true
+}
+
+function handleEdit(channel: Channel) {
+  editingChannel.value = channel
+  showEditor.value = true
+}
+
 function handleModelManagement(channel: Channel) {
   selectedChannel.value = channel
   showModelManagement.value = true
 }
 
-// 创建渠道
-function handleCreate() {
-  editingChannel.value = null
-  showDialog.value = true
+async function handleToggleStatus(channel: Channel) {
+  const nextStatus: 'active' | 'inactive' = channel.status === 'active' ? 'inactive' : 'active'
+  const actionText = nextStatus === 'active' ? '启用' : '禁用'
+
+  await window.$dialog?.warning({
+    title: '确认操作',
+    content: `确定要${actionText}渠道“${channel.name}”吗？`,
+    positiveText: '确认',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      togglingStatusMap.value = {
+        ...togglingStatusMap.value,
+        [channel.id]: true,
+      }
+      try {
+        await channelApi.update(channel.id, { status: nextStatus })
+        window.$message?.success(`渠道已${actionText}`)
+        await fetchChannels()
+      } catch (err) {
+        toastApiError(err, '更新渠道状态失败')
+      } finally {
+        const { [channel.id]: _removed, ...rest } = togglingStatusMap.value
+        togglingStatusMap.value = rest
+      }
+    },
+  })
 }
 
-// 编辑渠道
-function handleEdit(channel: Channel) {
-  editingChannel.value = channel
-  showDialog.value = true
-}
-
-// 删除渠道
 async function handleDelete(channel: Channel) {
   await window.$dialog?.warning({
     title: '确认删除',
-    content: `确定要删除渠道 "${channel.name}" 吗？`,
-    positiveText: '删除',
+    content: `确定删除渠道“${channel.name}”吗？相关密钥和模型配置会一并删除。`,
+    positiveText: '确认删除',
     negativeText: '取消',
     onPositiveClick: async () => {
       try {
         await channelApi.delete(channel.id)
         window.$message?.success('删除成功')
         await fetchChannels()
-      } catch (error: any) {
-        console.error('Failed to delete channel:', error)
-        window.$message?.error(error.response?.data?.error || '删除失败')
+      } catch (err) {
+        toastApiError(err, '删除失败')
       }
-    }
+    },
   })
-
 }
 
-// 对话框确认
-async function handleDialogConfirm(data: any) {
-  try {
-    if (editingChannel.value) {
-      // 更新
-      await channelApi.update(editingChannel.value.id, data)
-      window.$message?.success('更新成功')
-    } else {
-      // 创建
-      await channelApi.create(data)
-      window.$message?.success('创建成功')
-    }
-
-    showDialog.value = false
-    await fetchChannels()
-  } catch (error: any) {
-    console.error('Failed to save channel:', error)
-    window.$message?.error(error.response?.data?.error || '保存失败')
-  }
+function handleSaved() {
+  fetchChannels()
 }
 
-// 对话框取消
-function handleDialogCancel() {
-  showDialog.value = false
-  editingChannel.value = null
-}
-
-// 初始化
 onMounted(() => {
   fetchChannels()
 })
 </script>
 
 <style scoped>
-/* 页面头部卡片 */
-.page-header-card {
-  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  border-radius: 12px;
-  padding: 24px;
+.table-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #333;
-  line-height: 1.4;
+.channel-base-url-link {
+  margin-top: 2px;
+  display: inline-block;
+  max-width: 300px;
+  font-size: 12px;
+  color: #525252;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.page-subtitle {
-  font-size: 14px;
-  line-height: 1.6;
+.channel-base-url-link:hover {
+  color: #111111;
+  text-decoration: underline;
 }
-
 </style>

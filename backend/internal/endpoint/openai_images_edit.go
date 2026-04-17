@@ -2,7 +2,6 @@ package endpoint
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,9 +11,6 @@ import (
 	"net/http"
 )
 
-//go:embed assets/test.png
-var testImage []byte
-
 // ImagesEditEndpoint OpenAI Images Edit 端点
 type ImagesEditEndpoint struct{}
 
@@ -23,7 +19,7 @@ func (e *ImagesEditEndpoint) GetName() string {
 }
 
 func (e *ImagesEditEndpoint) GetType() string {
-	return "openai-image-edit"
+	return TypeOpenAIImagesEdits
 }
 
 func (e *ImagesEditEndpoint) GetPath() string {
@@ -39,26 +35,7 @@ func (e *ImagesEditEndpoint) GetColor() string {
 }
 
 func (e *ImagesEditEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	_ = writer.WriteField("model", modelName)
-	_ = writer.WriteField("prompt", "请将图片中的背景替换为星空")
-
-	part, err := writer.CreateFormFile("image", "test.png")
-	if err != nil {
-		return fmt.Errorf("创建测试图片字段异常: %w", err)
-	}
-	if _, err := part.Write(testImage); err != nil {
-		return fmt.Errorf("写入测试图片异常: %w", err)
-	}
-
-	_ = writer.Close()
-	data := buf.Bytes()
-	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Body = io.NopCloser(bytes.NewBuffer(data))
-	req.ContentLength = int64(len(data))
 	return nil
 }
 
@@ -72,7 +49,7 @@ func (e *ImagesEditEndpoint) ValidateResponse(statusCode int, body []byte) (bool
 		return false, "invalid JSON response"
 	}
 
-	data, ok := result["data"].([]interface{})
+	data, ok := result["data"].([]any)
 	if !ok || len(data) == 0 {
 		if errMsg, ok := result["error"]; ok {
 			errBytes, _ := json.Marshal(errMsg)

@@ -14,16 +14,14 @@ import (
 
 // ProbeHandler 探测请求处理器
 type ProbeHandler struct {
-	manager    *Manager
 	logger     *slog.Logger
 	httpClient *http.Client
 }
 
 // NewProbeHandler 创建探测处理器
-func NewProbeHandler(manager *Manager, logger *slog.Logger) *ProbeHandler {
+func NewProbeHandler(logger *slog.Logger) *ProbeHandler {
 	return &ProbeHandler{
-		manager: manager,
-		logger:  logger,
+		logger: logger,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
@@ -35,12 +33,12 @@ func NewProbeHandler(manager *Manager, logger *slog.Logger) *ProbeHandler {
 	}
 }
 
-// ProbeKey 探测指定的 Key
+// ProbeChannelKey 探测指定的渠道密钥
 // 返回值: (成功, 是否为硬故障, 错误信息)
 // 通过调用渠道的 /models 接口来判断密钥是否可用
-func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *models.Channel) (bool, bool, error) {
+func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.ChannelKey, channel *models.Channel) (bool, bool, error) {
 	ph.logger.Debug("开始嗅探密钥",
-		slog.Uint64("key_id", uint64(key.ID)),
+		slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
 	)
@@ -51,21 +49,21 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	req, err := http.NewRequestWithContext(ctx, "GET", probeURL, nil)
 	if err != nil {
 		ph.logger.Error("创建嗅探请求异常",
-			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.String("error", err.Error()),
 		)
 		return false, false, err
 	}
 
 	// 设置请求头（使用 OpenAI 格式的认证头）
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", key.KeyValue))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", channelKey.ChannelKeyValue))
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36")
 
 	// 发送探测请求
 	resp, err := ph.httpClient.Do(req)
 	if err != nil {
 		ph.logger.Warn("嗅探请求失败（网络错误）",
-			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
@@ -82,7 +80,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		ph.logger.Warn("无法读取嗅探响应报文",
-			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
@@ -96,7 +94,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	// 200 状态码表示密钥可用（包括模型列表为空的情况）
 	if resp.StatusCode == http.StatusOK {
 		ph.logger.Info("嗅探成功",
-			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
@@ -110,19 +108,19 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		// 认证失败,硬故障
 		ph.logger.Warn("嗅探失败 (authentication error)",
-			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
 			slog.Int("status_code", resp.StatusCode),
 			slog.String("response_body", string(body)),
 		)
-		return false, false, fmt.Errorf("authentication failed: %d", resp.StatusCode)
+		return false, true, fmt.Errorf("authentication failed: %d", resp.StatusCode)
 
 	case resp.StatusCode == 429:
 		// 限流,视为软故障
 		ph.logger.Warn("嗅探失败 (rate limited)",
-			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
@@ -133,7 +131,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	case resp.StatusCode >= 500:
 		// 服务器错误,软故障
 		ph.logger.Warn("嗅探失败 (server error)",
-			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
@@ -144,7 +142,7 @@ func (ph *ProbeHandler) ProbeKey(ctx context.Context, key *models.Key, channel *
 	default:
 		// 其他错误,视为软故障
 		ph.logger.Warn("嗅探失败 (unexpected status)",
-			slog.Uint64("key_id", uint64(key.ID)),
+			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),

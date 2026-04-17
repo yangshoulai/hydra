@@ -6,12 +6,13 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/models"
 )
 
 // ApplySyncRequest 应用同步请求
 type ApplySyncRequest struct {
-	// 添加的模型配置（unified_model为空则使用upstream_model）
+	// 添加的模型配置（model 为空则使用 channel_model）
 	AddModels []ModelConfigItem `json:"add_models" binding:"required"`
 	// 删除的模型配置ID列表
 	DeleteModelIDs []uint `json:"delete_model_ids"`
@@ -21,20 +22,24 @@ type ApplySyncRequest struct {
 
 // ModelConfigItem 模型配置项
 type ModelConfigItem struct {
-	UnifiedModel  string   `json:"unified_model"`
-	UpstreamModel string   `json:"upstream_model" binding:"required"`
+	Model         string   `json:"model"`
+	ChannelModel  string   `json:"channel_model" binding:"required"`
+	Weight        int      `json:"weight"`
 	EndpointTypes []string `json:"endpoint_types"`
 	KeyGroups     []string `json:"key_groups"`
+	TestPrompt    string   `json:"test_prompt"`
 	Remark        string   `json:"remark"`
 }
 
 // ModelConfigUpdateItem 模型配置更新项
 type ModelConfigUpdateItem struct {
 	ID            uint     `json:"id" binding:"required"`
-	UnifiedModel  string   `json:"unified_model"`
-	UpstreamModel string   `json:"upstream_model" binding:"required"`
+	Model         string   `json:"model"`
+	ChannelModel  string   `json:"channel_model" binding:"required"`
+	Weight        int      `json:"weight"`
 	EndpointTypes []string `json:"endpoint_types"`
 	KeyGroups     []string `json:"key_groups"`
+	TestPrompt    *string  `json:"test_prompt"`
 	Remark        string   `json:"remark"`
 }
 
@@ -57,8 +62,8 @@ type ApplySyncResponse struct {
 // @Param id path int true "渠道ID"
 // @Param request body ApplySyncRequest true "应用同步请求"
 // @Success 200 {object} ApplySyncResponse
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 500 {object} map[string]any
 // @Router /admin/api/channels/{id}/apply-sync [post]
 func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 	idStr := c.Param("id")
@@ -82,34 +87,59 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 	}
 
 	channelID := uint(id)
+	channel, err := h.syncService.GetChannel(c.Request.Context(), channelID)
+	if err != nil {
+		h.logger.Error("查询渠道异常",
+			slog.Uint64("channel_id", uint64(channelID)),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to find channel",
+		})
+		return
+	}
+	if channel == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "channel not found",
+		})
+		return
+	}
+
+	defaultWeight := channel.Weight
 	addedCount := 0
 	updatedCount := 0
 	deletedCount := 0
 
 	// 1. 添加新模型
 	for _, item := range req.AddModels {
-		// 如果 unified_model 为空，使用上游模型名称
-		unifiedModel := item.UnifiedModel
-		if unifiedModel == "" {
-			unifiedModel = item.UpstreamModel
+		// 如果 model 为空，使用上游模型名称
+		modelName := item.Model
+		if modelName == "" {
+			modelName = item.ChannelModel
 		}
 
 		// 处理端点类型，如果为空则使用默认值
 		endpointTypes := item.EndpointTypes
 		if len(endpointTypes) == 0 {
-			endpointTypes = []string{"openai-chat"}
+			endpointTypes = []string{endpoint.TypeOpenAIChatCompletions}
 		}
 		keyGroups := item.KeyGroups
 		if len(keyGroups) == 0 {
 			keyGroups = []string{"Default"}
 		}
+		weight := item.Weight
+		if weight <= 0 {
+			weight = defaultWeight
+		}
 
 		config := &models.ChannelModelConfig{
 			ChannelID:     channelID,
-			UnifiedModel:  unifiedModel,
-			UpstreamModel: item.UpstreamModel,
+			Model:         modelName,
+			ChannelModel:  item.ChannelModel,
+			Weight:        weight,
 			EndpointTypes: models.EndpointTypes(endpointTypes),
 			KeyGroups:     models.KeyGroups(keyGroups),
+			TestPrompt:    item.TestPrompt,
 			Status:        "active",
 			Remark:        item.Remark,
 		}
@@ -117,7 +147,7 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		if err := h.modelConfigRepo.Create(c.Request.Context(), config); err != nil {
 			h.logger.Error("新建渠道模型配置异常",
 				slog.Uint64("channel_id", uint64(channelID)),
-				slog.String("upstream_model", item.UpstreamModel),
+				slog.String("channel_model", item.ChannelModel),
 				slog.String("error", err.Error()),
 			)
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -130,10 +160,10 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 
 	// 2. 更新现有模型
 	for _, item := range req.UpdateModels {
-		// 如果 unified_model 为空，使用上游模型名称
-		unifiedModel := item.UnifiedModel
-		if unifiedModel == "" {
-			unifiedModel = item.UpstreamModel
+		// 如果 model 为空，使用上游模型名称
+		modelName := item.Model
+		if modelName == "" {
+			modelName = item.ChannelModel
 		}
 
 		config, err := h.modelConfigRepo.FindByID(c.Request.Context(), item.ID)
@@ -163,8 +193,11 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 			return
 		}
 
-		config.UnifiedModel = unifiedModel
-		config.UpstreamModel = item.UpstreamModel
+		config.Model = modelName
+		config.ChannelModel = item.ChannelModel
+		if item.Weight > 0 {
+			config.Weight = item.Weight
+		}
 		config.Remark = item.Remark
 
 		// 更新端点类型，如果提供了的话
@@ -173,6 +206,9 @@ func (h *ModelSyncHandler) ApplyChannelSync(c *gin.Context) {
 		}
 		if len(item.KeyGroups) > 0 {
 			config.KeyGroups = models.KeyGroups(item.KeyGroups)
+		}
+		if item.TestPrompt != nil {
+			config.TestPrompt = *item.TestPrompt
 		}
 
 		if err := h.modelConfigRepo.Update(c.Request.Context(), config); err != nil {

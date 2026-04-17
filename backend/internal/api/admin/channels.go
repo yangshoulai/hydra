@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/models"
@@ -18,25 +17,25 @@ import (
 type ChannelHandler struct {
 	channelRepo     *repository.ChannelRepository
 	modelConfigRepo *repository.ChannelModelConfigRepository
-	keyRepo         *repository.KeyRepository
+	channelKeyRepo  *repository.ChannelKeyRepository
 	db              *gorm.DB
 	logger          *slog.Logger
-	circuitManager  *circuit.Manager
+	circuitManager  *circuit.CircuitManager
 }
 
 // NewChannelHandler 创建渠道处理器
 func NewChannelHandler(
 	channelRepo *repository.ChannelRepository,
 	modelConfigRepo *repository.ChannelModelConfigRepository,
-	keyRepo *repository.KeyRepository,
+	channelKeyRepo *repository.ChannelKeyRepository,
 	db *gorm.DB,
 	logger *slog.Logger,
-	circuitManager *circuit.Manager,
+	circuitManager *circuit.CircuitManager,
 ) *ChannelHandler {
 	return &ChannelHandler{
 		channelRepo:     channelRepo,
 		modelConfigRepo: modelConfigRepo,
-		keyRepo:         keyRepo,
+		channelKeyRepo:  channelKeyRepo,
 		db:              db,
 		logger:          logger,
 		circuitManager:  circuitManager,
@@ -47,11 +46,11 @@ func NewChannelHandler(
 type ChannelListRequest struct {
 	Page      int    `form:"page" binding:"omitempty,min=1"`
 	PageSize  int    `form:"page_size" binding:"omitempty,min=1,max=1000"`
-	Name      string `form:"name" binding:"omitempty,max=100"`                                 // 名称过滤
-	BaseURL   string `form:"base_url" binding:"omitempty,max=500"`                             // Base URL 过滤
-	Status    string `form:"status" binding:"omitempty,oneof=active disabled"`                 // 状态过滤
-	SortBy    string `form:"sort_by" binding:"omitempty,oneof=id name priority weight status"` // 排序字段
-	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`                    // 排序方向
+	Name      string `form:"name" binding:"omitempty,max=100"`                        // 名称过滤
+	BaseURL   string `form:"base_url" binding:"omitempty,max=500"`                    // Base URL 过滤
+	Status    string `form:"status" binding:"omitempty,oneof=active inactive"`        // 状态过滤
+	SortBy    string `form:"sort_by" binding:"omitempty,oneof=id name weight status"` // 排序字段
+	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`           // 排序方向
 }
 
 // ChannelListResponse 渠道列表响应
@@ -65,31 +64,27 @@ type ChannelListResponse struct {
 // ChannelWithModelCount 带模型数量的渠道信息
 type ChannelWithModelCount struct {
 	*models.Channel
-	ModelCount      int                        `json:"model_count"`
-	ModelStats      *repository.ModelConfigStatusCount `json:"model_stats"`
-	KeyStats        *repository.KeyStatusCount `json:"key_stats"`
+	ModelCount int                                `json:"model_count"`
+	ModelStats *repository.ModelConfigStatusCount `json:"model_stats"`
+	KeyStats   *repository.ChannelKeyStatusCount  `json:"key_stats"`
 }
 
 // CreateChannelRequest 创建渠道请求
 type CreateChannelRequest struct {
 	Name        string `json:"name" binding:"required,max=100"`
 	BaseURL     string `json:"base_url" binding:"required,url,max=500"`
-	Priority    int    `json:"priority" binding:"omitempty,min=1,max=1000"`
 	Weight      int    `json:"weight" binding:"omitempty,min=1,max=1000"`
-	Status      string `json:"status" binding:"omitempty,oneof=active disabled"`
+	Status      string `json:"status" binding:"omitempty,oneof=active inactive"`
 	Description string `json:"description" binding:"omitempty,max=500"`
-	SyncEnabled *bool  `json:"sync_enabled" binding:"omitempty"`
 }
 
 // UpdateChannelRequest 更新渠道请求
 type UpdateChannelRequest struct {
 	Name        string `json:"name" binding:"omitempty,max=100"`
 	BaseURL     string `json:"base_url" binding:"omitempty,url,max=500"`
-	Priority    int    `json:"priority" binding:"omitempty,min=1,max=1000"`
 	Weight      int    `json:"weight" binding:"omitempty,min=1,max=1000"`
-	Status      string `json:"status" binding:"omitempty,oneof=active disabled"`
+	Status      string `json:"status" binding:"omitempty,oneof=active inactive"`
 	Description string `json:"description" binding:"omitempty,max=500"`
-	SyncEnabled *bool  `json:"sync_enabled" binding:"omitempty"`
 }
 
 // ListChannels 获取渠道列表(分页)
@@ -102,7 +97,7 @@ type UpdateChannelRequest struct {
 // @Param page query int false "页码" default(1)
 // @Param page_size query int false "每页数量" default(20)
 // @Success 200 {object} ChannelListResponse
-// @Failure 400 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
 // @Router /admin/api/channels [get]
 func (h *ChannelHandler) ListChannels(c *gin.Context) {
 	var req ChannelListRequest
@@ -170,16 +165,16 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 			)
 			modelStats = &repository.ModelConfigStatusCount{}
 		}
-		modelCount := int(modelStats.Active + modelStats.Cooling + modelStats.Disabled + modelStats.NonExist)
+		modelCount := int(modelStats.Active + modelStats.Inactive)
 
 		// 查询该渠道的密钥统计
-		keyStats, err := h.keyRepo.CountByChannelIDAndStatus(c.Request.Context(), channel.ID)
+		keyStats, err := h.channelKeyRepo.CountByChannelIDAndStatus(c.Request.Context(), channel.ID)
 		if err != nil {
 			h.logger.Warn("查询渠道密钥统计失败",
 				slog.Uint64("channel_id", uint64(channel.ID)),
 				slog.String("error", err.Error()),
 			)
-			keyStats = &repository.KeyStatusCount{}
+			keyStats = &repository.ChannelKeyStatusCount{}
 		}
 
 		result = append(result, ChannelWithModelCount{
@@ -207,7 +202,7 @@ func (h *ChannelHandler) ListChannels(c *gin.Context) {
 // @Security BearerAuth
 // @Param request body CreateChannelRequest true "创建渠道请求"
 // @Success 201 {object} models.Channel
-// @Failure 400 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
 // @Router /admin/api/channels [post]
 func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 	var req CreateChannelRequest
@@ -225,27 +220,17 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 	channel := &models.Channel{
 		Name:        req.Name,
 		BaseURL:     req.BaseURL,
-		Priority:    req.Priority,
 		Weight:      req.Weight,
 		Status:      req.Status,
 		Description: req.Description,
 	}
 
 	// 设置默认值
-	if channel.Priority == 0 {
-		channel.Priority = 100
-	}
 	if channel.Weight == 0 {
 		channel.Weight = 100
 	}
 	if channel.Status == "" {
 		channel.Status = "active"
-	}
-	// 默认开启自动同步（实际执行仍受全局开关控制）
-	if req.SyncEnabled == nil {
-		channel.SyncEnabled = true
-	} else {
-		channel.SyncEnabled = *req.SyncEnabled
 	}
 
 	// 保存到数据库
@@ -277,7 +262,7 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 // @Security BearerAuth
 // @Param id path int true "渠道ID"
 // @Success 200 {object} models.Channel
-// @Failure 404 {object} map[string]interface{}
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/channels/{id} [get]
 func (h *ChannelHandler) GetChannel(c *gin.Context) {
 	idStr := c.Param("id")
@@ -321,8 +306,8 @@ func (h *ChannelHandler) GetChannel(c *gin.Context) {
 // @Param id path int true "渠道ID"
 // @Param request body UpdateChannelRequest true "更新渠道请求"
 // @Success 200 {object} models.Channel
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/channels/{id} [put]
 func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 	idStr := c.Param("id")
@@ -367,14 +352,12 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 
 	// 更新字段
 	oldStatus := channel.Status
+	oldWeight := channel.Weight
 	if req.Name != "" {
 		channel.Name = req.Name
 	}
 	if req.BaseURL != "" {
 		channel.BaseURL = req.BaseURL
-	}
-	if req.Priority > 0 {
-		channel.Priority = req.Priority
 	}
 	if req.Weight > 0 {
 		channel.Weight = req.Weight
@@ -384,9 +367,6 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 	}
 	if req.Description != "" {
 		channel.Description = req.Description
-	}
-	if req.SyncEnabled != nil {
-		channel.SyncEnabled = *req.SyncEnabled
 	}
 
 	// 保存更新
@@ -401,15 +381,43 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	// 如果渠道被禁用，清理所有相关熔断器
-	if oldStatus == "active" && channel.Status == "disabled" {
-		if h.circuitManager != nil {
-			h.circuitManager.RemoveChannelBreakersAndKeys(uint(id))
-			h.logger.Info("渠道已禁用，已清理熔断器",
-				slog.Uint64("channel_id", id),
-				slog.String("name", channel.Name),
+	// 如果渠道被停用，清理所有相关熔断器
+	if oldStatus == "active" && channel.Status == "inactive" {
+		h.circuitManager.RemoveChannelBreakersAndKeys(uint(id))
+		h.logger.Info("渠道已停用，已清理熔断器",
+			slog.Uint64("channel_id", id),
+			slog.String("name", channel.Name),
+		)
+	}
+
+	// 如果渠道权重变化，则批量同步仍“继承渠道权重”的模型配置权重
+	// 规则：仅更新 weight == oldWeight 的配置，手工覆盖过权重的配置不受影响。
+	if oldWeight != channel.Weight {
+		affected, updateErr := h.modelConfigRepo.BulkUpdateWeightByChannelAndCurrentWeight(
+			c.Request.Context(),
+			channel.ID,
+			oldWeight,
+			channel.Weight,
+		)
+		if updateErr != nil {
+			h.logger.Error("同步渠道模型权重失败",
+				slog.Uint64("channel_id", uint64(channel.ID)),
+				slog.Int("old_channel_weight", oldWeight),
+				slog.Int("new_channel_weight", channel.Weight),
+				slog.String("error", updateErr.Error()),
 			)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to sync channel model weights",
+			})
+			return
 		}
+
+		h.logger.Info("渠道模型权重已同步",
+			slog.Uint64("channel_id", uint64(channel.ID)),
+			slog.Int("old_channel_weight", oldWeight),
+			slog.Int("new_channel_weight", channel.Weight),
+			slog.Int64("affected_model_configs", affected),
+		)
 	}
 
 	h.logger.Info("渠道已更新",
@@ -428,9 +436,9 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "渠道ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Failure 404 {object} map[string]any
 // @Router /admin/api/channels/{id} [delete]
 func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 	idStr := c.Param("id")
@@ -445,12 +453,6 @@ func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 	// 先检查渠道是否存在
 	channel, err := h.channelRepo.FindByID(c.Request.Context(), uint(id))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "channel not found",
-			})
-			return
-		}
 		h.logger.Error("查找渠道失败",
 			slog.Uint64("channel_id", id),
 			slog.String("error", err.Error()),
@@ -481,9 +483,7 @@ func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 	}
 
 	// 清理熔断器缓存
-	if h.circuitManager != nil {
-		h.circuitManager.RemoveChannelBreakersAndKeys(uint(id))
-	}
+	h.circuitManager.RemoveChannelBreakersAndKeys(uint(id))
 
 	h.logger.Info("渠道已删除", slog.Uint64("channel_id", id), slog.String("name", channel.Name))
 
@@ -544,11 +544,11 @@ func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
 	type ChannelModelInfo struct {
 		ConfigID      uint     `json:"config_id"`
 		ConfigStatus  string   `json:"config_status"`
-		CoolingAt     *time.Time `json:"cooling_at"`
+		Weight        int      `json:"weight"`
 		ChannelID     uint     `json:"channel_id"`
 		ChannelName   string   `json:"channel_name"`
 		ChannelStatus string   `json:"channel_status"`
-		UpstreamModel string   `json:"upstream_model"`
+		ChannelModel  string   `json:"channel_model"`
 		EndpointTypes []string `json:"endpoint_types"`
 	}
 
@@ -558,11 +558,11 @@ func (h *ChannelHandler) GetChannelsByModel(c *gin.Context) {
 			result = append(result, ChannelModelInfo{
 				ConfigID:      config.ID,
 				ConfigStatus:  config.Status,
-				CoolingAt:     config.CoolingAt,
+				Weight:        config.Weight,
 				ChannelID:     config.ChannelID,
 				ChannelName:   config.Channel.Name,
 				ChannelStatus: config.Channel.Status,
-				UpstreamModel: config.UpstreamModel,
+				ChannelModel:  config.ChannelModel,
 				EndpointTypes: config.EndpointTypes,
 			})
 		}

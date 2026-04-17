@@ -4,8 +4,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LinearGradient } from 'echarts/lib/util/graphic'
+import type { ECharts, ComposeOption } from 'echarts/core'
+import type { LineSeriesOption } from 'echarts/charts'
+import type { GridComponentOption, TooltipComponentOption } from 'echarts/components'
 import type { QPSDataPoint } from '@/services/dashboardService'
+
+echarts.use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
+
+type ChartOption = ComposeOption<LineSeriesOption | GridComponentOption | TooltipComponentOption>
 
 interface Props {
   data: QPSDataPoint[]
@@ -17,9 +28,8 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const chartRef = ref<HTMLDivElement>()
-let chartInstance: echarts.ECharts | null = null
+let chartInstance: ECharts | null = null
 
-// 初始化图表
 const initChart = () => {
   if (!chartRef.value) return
 
@@ -27,14 +37,13 @@ const initChart = () => {
   updateChart()
 }
 
-// 更新图表数据
 const updateChart = () => {
   if (!chartInstance || !props.data) return
 
   const timestamps = props.data.map((d) => d.timestamp)
   const qpsValues = props.data.map((d) => d.qps)
 
-  const option: echarts.EChartsOption = {
+  const option: ChartOption = {
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
@@ -42,7 +51,6 @@ const updateChart = () => {
         return `时间: ${param.axisValue}<br/>QPS: ${param.value.toFixed(2)}`
       },
     },
-    dataZoom: [],
     grid: {
       left: '3%',
       right: '4%',
@@ -89,17 +97,17 @@ const updateChart = () => {
         smooth: true,
         data: qpsValues,
         areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(99, 102, 241, 0.3)' },
-            { offset: 1, color: 'rgba(99, 102, 241, 0.05)' },
+          color: new LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(64, 64, 64, 0.28)' },
+            { offset: 1, color: 'rgba(64, 64, 64, 0.04)' },
           ]),
         },
         lineStyle: {
-          color: '#6366f1',
+          color: '#262626',
           width: 2,
         },
         itemStyle: {
-          color: '#6366f1',
+          color: '#262626',
         },
       },
     ],
@@ -108,7 +116,6 @@ const updateChart = () => {
   chartInstance.setOption(option)
 }
 
-// 监听数据变化
 watch(
   () => props.data,
   () => {
@@ -117,7 +124,6 @@ watch(
   { deep: true }
 )
 
-// 响应式调整大小
 const handleResize = () => {
   chartInstance?.resize()
 }

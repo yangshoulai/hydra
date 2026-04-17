@@ -11,7 +11,7 @@
       :bordered="false"
       class="channel-dialog"
   >
-    <n-space vertical :size="24">
+      <n-space vertical :size="24">
       <!-- 提示信息 -->
       <n-alert type="info" :bordered="false" class="info-alert">
         <template #icon>
@@ -19,7 +19,7 @@
             <InformationCircleOutline/>
           </n-icon>
         </template>
-        {{ isEdit ? '修改渠道配置信息。优先级和权重将影响渠道的调用顺序和负载分配。' : '配置新的 API 渠道。渠道将按照优先级和权重进行负载均衡。' }}
+        {{ isEdit ? '修改渠道配置信息。权重越高，被选中的概率越大。' : '配置新的 API 渠道。渠道会按权重参与调度。' }}
       </n-alert>
 
       <n-form
@@ -69,9 +69,9 @@
           </n-grid-item>
 
           <n-grid-item>
-            <n-form-item label="优先级" path="priority">
+            <n-form-item label="权重" path="weight">
               <n-input-number
-                  v-model:value="formData.priority"
+                  v-model:value="formData.weight"
                   :min="1"
                   :max="1000"
                   placeholder="1-1000"
@@ -84,28 +84,7 @@
                 </template>
               </n-input-number>
               <template #feedback>
-                数值越大优先级越高，范围 1-1000
-              </template>
-            </n-form-item>
-          </n-grid-item>
-
-          <n-grid-item>
-            <n-form-item label="权重" path="weight">
-              <n-input-number
-                  v-model:value="formData.weight"
-                  :min="1"
-                  :max="100"
-                  placeholder="1-100"
-                  style="width: 100%"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <ScaleOutline/>
-                  </n-icon>
-                </template>
-              </n-input-number>
-              <template #feedback>
-                用于同优先级渠道的负载均衡，范围 1-100
+                数值越大权重越高，范围 1-1000
               </template>
             </n-form-item>
           </n-grid-item>
@@ -116,22 +95,7 @@
                   v-model:value="formData.status"
                   :options="statusOptions"
                   placeholder="选择状态"
-              >
-                <template #prefix>
-                  <n-icon>
-                    <PowerOutline/>
-                  </n-icon>
-                </template>
-              </n-select>
-            </n-form-item>
-          </n-grid-item>
-
-          <n-grid-item>
-            <n-form-item label="自动同步" path="sync_enabled">
-              <n-switch v-model:value="formData.sync_enabled"/>
-              <template #feedback>
-                开启后允许定时同步渠道模型
-              </template>
+              />
             </n-form-item>
           </n-grid-item>
 
@@ -174,7 +138,6 @@
 </template>
 
 <script setup lang="ts">
-// @ts-nocheck
 import {computed, reactive, ref, watch} from 'vue'
 import {
   type FormInst,
@@ -190,17 +153,14 @@ import {
   NInputNumber,
   NModal,
   NSelect,
-  NSpace,
-  NSwitch
+  NSpace
 } from 'naive-ui'
 import {
   BookmarkOutline,
   DocumentTextOutline,
   GlobeOutline,
   InformationCircleOutline,
-  PowerOutline,
   SaveOutline,
-  ScaleOutline,
   TrendingUpOutline
 } from '@vicons/ionicons5'
 import type {Channel, CreateChannelRequest, UpdateChannelRequest} from '../types/channel'
@@ -228,17 +188,15 @@ const isEdit = computed(() => !!props.channel)
 const formData = reactive({
   name: '',
   base_url: '',
-  priority: 100,
   weight: 100,
-  status: 'active' as 'active' | 'disabled',
-  sync_enabled: true,
+  status: 'active' as 'active' | 'inactive',
   description: ''
 })
 
 // 状态选项
 const statusOptions = [
   {label: '激活', value: 'active'},
-  {label: '禁用', value: 'disabled'}
+  {label: '停用', value: 'inactive'}
 ]
 
 // 表单验证规则
@@ -252,12 +210,6 @@ const rules: FormRules = {
     required: true,
     message: '请输入Base URL',
     trigger: ['blur', 'input']
-  },
-  priority: {
-    type: 'number',
-    required: true,
-    message: '请输入优先级',
-    trigger: ['blur', 'change']
   },
   weight: {
     type: 'number',
@@ -274,20 +226,16 @@ watch(
       if (newChannel) {
         formData.name = newChannel.name
         formData.base_url = newChannel.base_url
-        formData.priority = newChannel.priority
         formData.weight = newChannel.weight
         formData.status = newChannel.status
         formData.description = newChannel.description
-        formData.sync_enabled = newChannel.sync_enabled ?? true
       } else {
         // 重置表单
         formData.name = ''
         formData.base_url = ''
-        formData.priority = 100
         formData.weight = 100
         formData.status = 'active'
         formData.description = ''
-        formData.sync_enabled = true
       }
       // 每次打开时重置显示状态
       showModal.value = true
@@ -306,20 +254,16 @@ async function handleSubmit() {
         ? ({
           name: formData.name,
           base_url: formData.base_url,
-          priority: formData.priority,
           weight: formData.weight,
           status: formData.status,
-          description: formData.description,
-          sync_enabled: formData.sync_enabled
+          description: formData.description
         } as UpdateChannelRequest)
         : ({
           name: formData.name,
           base_url: formData.base_url,
-          priority: formData.priority,
           weight: formData.weight,
           status: formData.status,
-          description: formData.description,
-          sync_enabled: formData.sync_enabled
+          description: formData.description
         } as CreateChannelRequest)
 
     emit('confirm', data)

@@ -41,22 +41,9 @@ func (r *ModelRepository) FindByID(ctx context.Context, id uint) (*models.Model,
 	return &model, nil
 }
 
-// FindByName 根据名称查询统一模型
-func (r *ModelRepository) FindByName(ctx context.Context, name string) (*models.Model, error) {
-	var model models.Model
-	err := r.db.WithContext(ctx).Where("name = ?", name).First(&model).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &model, nil
-}
-
 // List 查询统一模型列表
 func (r *ModelRepository) List(ctx context.Context) ([]models.Model, error) {
-	list, _, _, err := r.ListWithFilter(ctx, 0, 0, nil, nil, nil)
+	list, _, err := r.ListWithFilter(ctx, 0, 0, nil, nil)
 	return list, err
 }
 
@@ -68,7 +55,7 @@ type ModelFilter struct {
 
 // ModelSortOptions 模型排序选项
 type ModelSortOptions struct {
-	Field     string // 排序字段：id, name, channel_count
+	Field     string // 排序字段：id, name
 	Direction string // 排序方向：asc, desc
 }
 
@@ -78,18 +65,11 @@ func (r *ModelRepository) ListWithFilter(
 	offset, limit int,
 	filter *ModelFilter,
 	sortOpts *ModelSortOptions,
-	channelCount *bool, // 是否返回渠道数量
-) ([]models.Model, int64, int, error) {
-	type ModelWithCount struct {
-		models.Model
-		ChannelCount int
-	}
-
+) ([]models.Model, int64, error) {
 	query := r.db.WithContext(ctx).
 		Table("models").
-		Select("models.*, COUNT(DISTINCT channel_model_configs.channel_id) as channel_count").
-		Joins("LEFT JOIN providers ON models.provider_id = providers.id").
-		Joins("LEFT JOIN channel_model_configs ON channel_model_configs.unified_model = models.name")
+		Select("models.*").
+		Joins("LEFT JOIN providers ON models.provider_id = providers.id")
 
 	// 应用过滤条件
 	if filter != nil {
@@ -115,18 +95,7 @@ func (r *ModelRepository) ListWithFilter(
 		}
 	}
 	if err := countQuery.Count(&total).Error; err != nil {
-		return nil, 0, 0, err
-	}
-
-	// 计算总数时过滤后的渠道配置总数
-	var totalChannelConfigs int
-	if channelCount != nil && *channelCount {
-		var results []ModelWithCount
-		tempQuery := query.Group("models.id, providers.name")
-		if err := tempQuery.Scan(&results).Error; err != nil {
-			return nil, 0, 0, err
-		}
-		totalChannelConfigs = len(results)
+		return nil, 0, err
 	}
 
 	// 构建排序
@@ -139,17 +108,12 @@ func (r *ModelRepository) ListWithFilter(
 
 		// 验证排序字段，防止 SQL 注入
 		allowedFields := map[string]bool{
-			"id":            true,
-			"name":          true,
-			"channel_count": true,
+			"id":   true,
+			"name": true,
 		}
 
 		if allowedFields[sortOpts.Field] {
-			if sortOpts.Field == "channel_count" {
-				orderBy = "channel_count " + direction + ", providers.name ASC, models.name ASC"
-			} else {
-				orderBy = "models." + sortOpts.Field + " " + direction
-			}
+			orderBy = "models." + sortOpts.Field + " " + direction
 		}
 	}
 
@@ -159,18 +123,11 @@ func (r *ModelRepository) ListWithFilter(
 	}
 
 	// 执行查询
-	query = query.Group("models.id, providers.name").Order(orderBy)
+	query = query.Order(orderBy)
 
-	var results []ModelWithCount
-	if err := query.Scan(&results).Error; err != nil {
-		return nil, 0, 0, err
-	}
-
-	// 转换为 []models.Model 并预加载 Provider
-	modelList := make([]models.Model, len(results))
-	for i, result := range results {
-		modelList[i] = result.Model
-		modelList[i].ChannelCount = result.ChannelCount
+	var modelList []models.Model
+	if err := query.Scan(&modelList).Error; err != nil {
+		return nil, 0, err
 	}
 
 	// 预加载 Provider
@@ -198,7 +155,7 @@ func (r *ModelRepository) ListWithFilter(
 		}
 	}
 
-	return modelList, total, totalChannelConfigs, nil
+	return modelList, total, nil
 }
 
 // ListWithActiveChannelConfigs 查询有激活渠道配置的统一模型列表
@@ -209,7 +166,7 @@ func (r *ModelRepository) ListWithActiveChannelConfigs(ctx context.Context) ([]m
 	err := r.db.WithContext(ctx).
 		Distinct("models.*").
 		Table("models").
-		Joins("INNER JOIN channel_model_configs ON channel_model_configs.unified_model = models.name").
+		Joins("INNER JOIN channel_model_configs ON channel_model_configs.model = models.name").
 		Joins("INNER JOIN channels ON channel_model_configs.channel_id = channels.id").
 		Where("channel_model_configs.status = ?", "active").
 		Where("channels.status = ?", "active").
@@ -228,7 +185,7 @@ func (r *ModelRepository) ListWithActiveChannelConfigsByEndpointType(ctx context
 	err := r.db.WithContext(ctx).
 		Distinct("models.*").
 		Table("models").
-		Joins("INNER JOIN channel_model_configs ON channel_model_configs.unified_model = models.name").
+		Joins("INNER JOIN channel_model_configs ON channel_model_configs.model = models.name").
 		Joins("INNER JOIN channels ON channel_model_configs.channel_id = channels.id").
 		Where("channel_model_configs.status = ?", "active").
 		Where("channels.status = ?", "active").
@@ -243,17 +200,12 @@ func (r *ModelRepository) ListWithActiveChannelConfigsByEndpointType(ctx context
 
 // Update 更新统一模型
 func (r *ModelRepository) Update(ctx context.Context, model *models.Model) error {
-	err := r.db.WithContext(ctx).Save(model).Error
-	return err
+	return r.db.WithContext(ctx).Save(model).Error
 }
 
 // Delete 删除统一模型
 func (r *ModelRepository) Delete(ctx context.Context, id uint) error {
-	err := r.db.WithContext(ctx).Delete(&models.Model{}, id).Error
-	if err != nil {
-		return err
-	}
-	return nil
+	return r.db.WithContext(ctx).Delete(&models.Model{}, id).Error
 }
 
 // ExistsByName 检查名称是否存在

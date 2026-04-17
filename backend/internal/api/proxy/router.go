@@ -20,9 +20,9 @@ func RegisterRoutes(
 	repos := components.Repos
 	services := components.Services
 	proxySvc := services.ProxyService
-	settingService := services.Setting
+	settingService := services.SettingService
 
-	// 从系统设置加载明文错误规则（用于非流式响应嗅探）
+	// 从系统设置加载明文错误规则（用于响应嗅探）
 	ctx := context.Background()
 	keywords := settingService.GetPlainTextErrorRules(ctx)
 	if len(keywords) > 0 {
@@ -33,7 +33,7 @@ func RegisterRoutes(
 	}
 
 	// 创建通用 handlers
-	modelsHandler := NewModelsHandler(logger, repos.Model)
+	modelsHandler := NewModelsHandler(logger, repos.ModelRepo)
 
 	// 创建 v1 路由组
 	v1 := router.Group("/v1")
@@ -42,11 +42,11 @@ func RegisterRoutes(
 		// 应用中间件
 		v1.Use(middleware.TraceID())
 		v1.Use(middleware.RequestLogger(logger))
-		v1.Use(middleware.Auth(repos.AccessToken, logger)) // 访问令牌认证
+		v1.Use(middleware.Auth(repos.AccessTokenRepo, logger)) // 访问令牌认证
 
 		v1beta.Use(middleware.TraceID())
 		v1beta.Use(middleware.RequestLogger(logger))
-		v1beta.Use(middleware.Auth(repos.AccessToken, logger)) // 访问令牌认证
+		v1beta.Use(middleware.Auth(repos.AccessTokenRepo, logger)) // 访问令牌认证
 
 		// 从端点注册中心动态注册路由
 		registry := endpoint.GetGlobalRegistry()
@@ -54,7 +54,7 @@ func RegisterRoutes(
 			epPath := ep.GetPath()
 
 			// 创建通用 handler
-			handler := NewGenericHandler(logger, proxySvc, epPath, ep.GetName())
+			handler := NewGenericHandler(logger, proxySvc, ep)
 
 			if strings.HasPrefix(epPath, "/v1beta/") {
 				routePath := strings.TrimPrefix(epPath, "/v1beta")

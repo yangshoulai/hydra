@@ -1,11 +1,10 @@
 <template>
-  <n-space v-if="endpointInfos.length > 0" :size="4">
+  <n-space v-if="endpointInfos.length > 0" :size="4" :wrap="true">
     <n-tag
       v-for="endpoint in endpointInfos"
       :key="endpoint.type"
       :bordered="false"
       size="small"
-      :style="{ backgroundColor: endpoint.color + '20', color: endpoint.color, border: `1px solid ${endpoint.color}40` }"
     >
       {{ endpoint.name }}
     </n-tag>

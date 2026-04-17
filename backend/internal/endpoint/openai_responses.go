@@ -16,7 +16,7 @@ func (e *ResponsesEndpoint) GetName() string {
 }
 
 func (e *ResponsesEndpoint) GetType() string {
-	return "openai-response"
+	return TypeOpenAIResponses
 }
 
 func (e *ResponsesEndpoint) GetPath() string {
@@ -32,9 +32,9 @@ func (e *ResponsesEndpoint) GetColor() string {
 }
 
 func (e *ResponsesEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"model": modelName,
-		"input": []map[string]interface{}{
+		"input": []map[string]any{
 			{
 				"role": "user",
 				"content": []map[string]string{
@@ -65,7 +65,7 @@ func (e *ResponsesEndpoint) ValidateResponse(statusCode int, body []byte) (bool,
 	}
 
 	// OpenAI Response: 检查 output 字段
-	if output, ok := result["output"].([]interface{}); !ok || len(output) <= 0 {
+	if output, ok := result["output"].([]any); !ok || len(output) <= 0 {
 		// 有 output 字段
 		if errMsg, ok := result["error"]; ok {
 			errBytes, _ := json.Marshal(errMsg)

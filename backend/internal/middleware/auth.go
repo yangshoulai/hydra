@@ -61,6 +61,7 @@ func Auth(tokenRepo *repository.AccessTokenRepository, logger *slog.Logger) gin.
 		// 将 token 信息存储到上下文
 		c.Set("access_token_id", token.ID)
 		c.Set("access_token_name", token.Name)
+		c.Set("access_token_allowed_models", []string(token.AllowedModels))
 
 		c.Next()
 	}

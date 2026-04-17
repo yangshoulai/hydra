@@ -1,449 +1,539 @@
 <template>
-  <div class="dashboard-container">
-    <!--    &lt;!&ndash; 页面标题 &ndash;&gt;-->
-    <!--    <div class="page-header">-->
-    <!--      <h1 class="page-title">仪表盘</h1>-->
-    <!--      <n-text depth="3" class="page-subtitle">实时监控系统状态</n-text>-->
-    <!--    </div>-->
+  <div class="app-page dashboard-page">
+    <div class="dashboard-toolbar">
+      <span class="dashboard-toolbar__meta">
+        <n-icon :component="TimeOutline" />
+        最近更新 {{ lastUpdated }}
+      </span>
+      <n-button quaternary circle size="small" aria-label="刷新仪表盘数据" @click="handleRefresh">
+        <template #icon>
+          <n-icon>
+            <RefreshOutline />
+          </n-icon>
+        </template>
+      </n-button>
+    </div>
 
-    <!-- 顶部统计卡片 -->
-    <n-grid :cols="6" :x-gap="16" :y-gap="16" responsive="screen" class="stats-grid">
-      <!-- 当前 QPS -->
-      <n-grid-item>
-        <div class="metric-card metric-card--blue">
-          <div class="metric-card__header">
-            <div class="metric-card__icon">
-              <n-icon size="20">
-                <FlashIcon/>
-              </n-icon>
+    <n-alert v-if="error" type="error" :bordered="false">
+      <n-space align="center" justify="space-between" style="width: 100%">
+        <span>指标拉取失败，请检查网络或后端服务状态。</span>
+        <n-button text type="error" @click="handleRefresh">重试</n-button>
+      </n-space>
+    </n-alert>
+
+    <section v-if="isLoading && !metrics" class="panel-card">
+      <div class="panel-card__body dashboard-skeleton">
+        <n-skeleton text :repeat="10" />
+      </div>
+    </section>
+
+    <template v-if="metrics || !isLoading">
+      <section class="metric-cards">
+        <div class="metric-card">
+          <div class="metric-card__icon metric-card__icon--neutral">
+            <n-icon :component="FlashOutline" />
+          </div>
+          <div class="metric-card__content">
+            <div class="metric-card__label">当前 QPS</div>
+            <div class="metric-card__value">
+              <n-number-animation :from="0" :to="metrics?.current_qps || 0" :precision="2" :active="true" />
             </div>
-            <n-tag :bordered="false" type="info" size="small">
-              实时
-            </n-tag>
+            <div class="metric-card__subtext">实时指标</div>
           </div>
-          <div class="metric-card__value">
-            <n-number-animation
-                :from="0"
-                :to="metrics?.current_qps || 0"
-                :active="true"
-            />
-          </div>
-          <div class="metric-card__label">当前 QPS</div>
         </div>
-      </n-grid-item>
 
-      <!-- 近24小时请求 -->
-      <n-grid-item>
-        <div class="metric-card metric-card--green">
-          <div class="metric-card__header">
-            <div class="metric-card__icon">
-              <n-icon size="20">
-                <TrendingUpIcon/>
-              </n-icon>
+        <div class="metric-card">
+          <div class="metric-card__icon" :class="successRateIconClass">
+            <n-icon :component="CheckmarkCircleOutline" />
+          </div>
+          <div class="metric-card__content">
+            <div class="metric-card__label">成功率</div>
+            <div class="metric-card__value">
+              <n-number-animation :from="0" :to="metrics?.success_rate || 0" :precision="1" :active="true" />
+              <span class="metric-card__unit">%</span>
             </div>
-            <n-tag
-                :bordered="false"
-                :type="'info'"
-                size="small"
-            >
-              近24小时
-            </n-tag>
+            <div class="metric-card__subtext">失败率 {{ (100 - (metrics?.success_rate || 0)).toFixed(1) }}%</div>
           </div>
-          <div class="metric-card__value">
-            {{ formatCompactNumber(metrics?.total_requests || 0) }}
-          </div>
-          <div class="metric-card__label">请求总数</div>
         </div>
-      </n-grid-item>
 
-      <!-- 成功率 -->
-      <n-grid-item>
-        <div class="metric-card metric-card--emerald">
-          <div class="metric-card__header">
-            <div class="metric-card__icon">
-              <n-icon size="20">
-                <CheckmarkCircleIcon/>
-              </n-icon>
+        <div class="metric-card">
+          <div class="metric-card__icon metric-card__icon--neutral">
+            <n-icon :component="TrendingUpOutline" />
+          </div>
+          <div class="metric-card__content">
+            <div class="metric-card__label">近 24h 请求量</div>
+            <div class="metric-card__value">{{ formatCompactNumber(metrics?.total_requests || 0) }}</div>
+            <div class="metric-card__subtext">模型总请求 {{ formatCompactNumber(metrics?.model_stats?.total_requests || 0) }}</div>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-card__icon" :class="healthIconClass">
+            <n-icon :component="ShieldCheckmarkOutline" />
+          </div>
+          <div class="metric-card__content">
+            <div class="metric-card__label">整体健康度</div>
+            <div class="metric-card__value">{{ formatPercent(overallHealthValue) }}</div>
+            <div class="metric-card__subtext">
+              <span v-if="resolvedUnhealthyKeys > 0" class="metric-card__trend--down">
+                异常密钥 {{ resolvedUnhealthyKeys }}
+              </span>
+              <span v-else class="metric-card__trend--up">全部健康</span>
             </div>
-            <n-tag
-                :bordered="false"
-                :type="'info'"
-                size="small"
-            >
-              近24小时
-            </n-tag>
           </div>
-          <div class="metric-card__value">
-            <n-number-animation
-                :from="0"
-                :to="metrics?.success_rate || 0"
-                :precision="1"
-                :active="true"
-            />
-            <span class="metric-card__unit">%</span>
-          </div>
-          <div class="metric-card__label">成功率</div>
         </div>
-      </n-grid-item>
 
-      <!-- 活跃渠道 -->
-      <n-grid-item>
-        <div class="metric-card metric-card--violet">
-          <div class="metric-card__header">
-            <div class="metric-card__icon">
-              <n-icon size="20">
-                <ServerIcon/>
-              </n-icon>
+        <div class="metric-card">
+          <div class="metric-card__icon metric-card__icon--neutral">
+            <n-icon :component="GridOutline" />
+          </div>
+          <div class="metric-card__content">
+            <div class="metric-card__label">活跃渠道</div>
+            <div class="metric-card__value">
+              {{ metrics?.active_channels || 0 }}
+              <span class="metric-card__unit">/ {{ metrics?.total_channels || 0 }}</span>
             </div>
-            <n-tag
-                :bordered="false"
-                :type="'info'"
-                size="small"
-            >
-              近24小时
-            </n-tag>
+            <div class="metric-card__subtext">启用 / 总数</div>
           </div>
-          <div class="metric-card__value">
-            {{ metrics?.active_channels || 0 }}
-            <span class="metric-card__unit">/ {{ metrics?.total_channels || 0 }}</span>
-          </div>
-          <div class="metric-card__label">活跃渠道</div>
         </div>
-      </n-grid-item>
 
-      <!-- Token 统计 -->
-      <n-grid-item :span="2">
-        <div class="metric-card metric-card--amber">
-          <div class="metric-card__header">
-            <div class="metric-card__icon">
-              <n-icon size="20">
-                <StatsChartIcon/>
-              </n-icon>
+        <div class="metric-card">
+          <div class="metric-card__icon metric-card__icon--neutral">
+            <n-icon :component="CubeOutline" />
+          </div>
+          <div class="metric-card__content">
+            <div class="metric-card__label">统一模型</div>
+            <div class="metric-card__value">{{ metrics?.model_stats?.active_models || 0 }}</div>
+            <div class="metric-card__subtext">已启用模型数</div>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-card__icon" :class="keyHealthIconClass">
+            <n-icon :component="KeyOutline" />
+          </div>
+          <div class="metric-card__content">
+            <div class="metric-card__label">密钥健康</div>
+            <div class="metric-card__value">
+              {{ resolvedHealthyKeys }}
+              <span class="metric-card__unit">/ {{ resolvedTotalKeys }}</span>
             </div>
-            <n-tag
-                :bordered="false"
-                :type="'info'"
-                size="small"
-            >
-              近24小时
-            </n-tag>
+            <div class="metric-card__subtext">健康 / 总数</div>
           </div>
-          <div class="metric-card__value">
-            {{ formatCompactNumber(metrics?.total_prompt_tokens || 0) }}
-            <span class="metric-card__divider">/</span>
-            {{ formatCompactNumber(metrics?.total_completion_tokens || 0) }}
-          </div>
-          <div class="metric-card__label">输入 / 输出 Tokens</div>
         </div>
-      </n-grid-item>
-    </n-grid>
 
-    <!-- QPS 趋势图 -->
-    <n-card
-        title="QPS 趋势"
-        size="small"
-        :bordered="false"
-        class="chart-card"
-    >
-      <template #header-extra>
-        <n-tag :bordered="false" type="info" size="small">
-          近 1 小时
-        </n-tag>
-      </template>
-      <QpsChart :data="metrics?.qps_trend || []"/>
-    </n-card>
+        <div class="metric-card">
+          <div class="metric-card__icon metric-card__icon--neutral">
+            <n-icon :component="StatsChartOutline" />
+          </div>
+          <div class="metric-card__content">
+            <div class="metric-card__label">Token 用量</div>
+            <div class="metric-card__value metric-card__value--compact">
+              {{ formatCompactNumber(metrics?.total_prompt_tokens || 0) }}
+              <span class="metric-card__unit">/ {{ formatCompactNumber(metrics?.total_completion_tokens || 0) }}</span>
+            </div>
+            <div class="metric-card__subtext">输入 / 输出</div>
+          </div>
+        </div>
+      </section>
 
-    <!-- 渠道统计概览 -->
-    <n-card
-        title="渠道统计（近24小时）"
-        size="small"
-        :bordered="false"
-        class="channel-stats-card">
-      <n-space vertical :size="24">
-        <n-data-table
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">QPS 趋势</h3>
+          <n-tag :bordered="false" size="small">近 1 小时</n-tag>
+        </header>
+        <div class="panel-card__body">
+          <QpsChart :data="metrics?.qps_trend || []" :height="260" />
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">渠道健康（近 24 小时）</h3>
+        </header>
+        <div class="panel-card__body">
+          <n-data-table
             :columns="channelColumns"
             :data="metrics?.channel_health_list || []"
+            :loading="isLoading"
+            :locale="tableLocale"
             :pagination="false"
-            :bordered="true"
-            :single-line="true"
+            :single-line="false"
             striped
-            size="small"
-            :scroll-x="940"
-        />
-      </n-space>
-    </n-card>
+            :scroll-x="860"
+          />
+        </div>
+      </section>
 
-    <!-- 模型统计 -->
-    <n-card
-        title="模型统计（近24小时）"
-        size="small"
-        :bordered="false"
-        class="model-stats-card"
-    >
-      <n-space vertical :size="24">
-        <n-grid :cols="4" :x-gap="16" :y-gap="16" responsive="screen" style="max-width: 1040px;">
-          <n-grid-item>
-            <div class="stat-item stat-item--primary">
-              <div class="stat-item__icon">
-                <n-icon size="24">
-                  <CubeIcon/>
-                </n-icon>
-              </div>
-              <div class="stat-item__content">
-                <div class="stat-item__value">{{ metrics?.model_stats?.active_models || 0 }}</div>
-                <div class="stat-item__label">活跃模型</div>
-              </div>
-            </div>
-          </n-grid-item>
-          <n-grid-item>
-            <div class="stat-item stat-item--info">
-              <div class="stat-item__icon">
-                <n-icon size="24">
-                  <StatsChartIcon/>
-                </n-icon>
-              </div>
-              <div class="stat-item__content">
-                <div class="stat-item__value">{{ formatCompactNumber(metrics?.model_stats?.total_requests || 0) }}</div>
-                <div class="stat-item__label">请求总数</div>
-              </div>
-            </div>
-          </n-grid-item>
-          <n-grid-item>
-            <div class="stat-item stat-item--success">
-              <div class="stat-item__icon">
-                <n-icon size="24">
-                  <CheckmarkCircleIcon/>
-                </n-icon>
-              </div>
-              <div class="stat-item__content">
-                <div class="stat-item__value">{{ formatCompactNumber(metrics?.model_stats?.success_requests || 0) }}</div>
-                <div class="stat-item__label">成功请求</div>
-              </div>
-            </div>
-          </n-grid-item>
-          <n-grid-item>
-            <div class="stat-item stat-item--error">
-              <div class="stat-item__icon">
-                <n-icon size="24">
-                  <CloseCircleIcon/>
-                </n-icon>
-              </div>
-              <div class="stat-item__content">
-                <div class="stat-item__value">{{ formatCompactNumber(metrics?.model_stats?.failed_requests || 0) }}</div>
-                <div class="stat-item__label">失败请求</div>
-              </div>
-            </div>
-          </n-grid-item>
-        </n-grid>
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">熔断状态</h3>
+          <n-tag :bordered="false" size="small">{{ circuits.length }} 项冷却中</n-tag>
+        </header>
+        <div class="panel-card__body">
+          <n-data-table
+            :columns="circuitColumns"
+            :data="circuits"
+            :loading="isLoading"
+            :locale="{
+              emptyText: isLoading ? '指标加载中...' : '当前全部渠道密钥与模型运行正常',
+            }"
+            :pagination="false"
+            :single-line="false"
+            striped
+            :scroll-x="860"
+          />
+        </div>
+      </section>
 
-        <n-data-table
+      <section class="panel-card">
+        <header class="panel-card__header">
+          <h3 class="panel-card__title">模型表现（近 24 小时）</h3>
+        </header>
+        <div class="panel-card__body">
+          <n-data-table
             :columns="modelColumns"
             :data="metrics?.model_stats?.model_list || []"
+            :loading="isLoading"
+            :locale="tableLocale"
             :pagination="false"
-            :bordered="true"
-            :single-line="true"
+            :single-line="false"
             striped
-            size="small"
-            :scroll-x="560"
-        />
-      </n-space>
-    </n-card>
+            :scroll-x="700"
+          />
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import {h, onMounted} from 'vue'
-import {type DataTableColumns, NCard, NDataTable, NGrid, NGridItem, NIcon, NNumberAnimation, NProgress, NSpace, NTag} from 'naive-ui'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import {
-  CheckmarkCircle as CheckmarkCircleIcon,
-  CloseCircle as CloseCircleIcon,
-  Cube as CubeIcon,
-  Flash as FlashIcon,
-  Server as ServerIcon,
-  StatsChart as StatsChartIcon,
-  TrendingUp as TrendingUpIcon
+  type DataTableColumns,
+  NAlert,
+  NButton,
+  NDataTable,
+  NIcon,
+  NNumberAnimation,
+  NSkeleton,
+  NSpace,
+  NTag,
+  NText,
+} from 'naive-ui'
+import {
+  CheckmarkCircleOutline,
+  CubeOutline,
+  FlashOutline,
+  GridOutline,
+  KeyOutline,
+  RefreshOutline,
+  ShieldCheckmarkOutline,
+  StatsChartOutline,
+  TimeOutline,
+  TrendingUpOutline,
 } from '@vicons/ionicons5'
-import type {ChannelHealthInfo, DashboardMetrics, ModelDetailInfo} from '@/services/dashboardService'
+import type {
+  ChannelHealthInfo,
+  CircuitSnapshot,
+  DashboardFrame,
+  DashboardMetrics,
+  ModelDetailInfo,
+} from '@/services/dashboardService'
 import dashboardService from '@/services/dashboardService'
-import {usePolling} from '@/composables/usePolling'
+import { useEventStream } from '@/composables/useEventStream'
 import QpsChart from '@/components/QpsChart.vue'
 
-// 使用轮询获取仪表盘数据（每 5 秒）
-const {data: metrics, error} = usePolling<DashboardMetrics>(
-    () => dashboardService.getMetrics(),
-    5000,
-    true
-)
+const metrics = ref<DashboardMetrics | null>(null)
+const circuits = ref<CircuitSnapshot[]>([])
+const isLoading = ref(false)
+const fallbackError = ref<Error | null>(null)
+const lastUpdatedAt = ref('')
 
-// 渠道表格列定义
+const {
+  error: streamError,
+  isConnected,
+  reconnect,
+} = useEventStream<DashboardFrame>({
+  url: '/admin/api/dashboard/metrics/stream',
+  event: 'metrics',
+  onMessage: (frame) => {
+    metrics.value = frame.metrics
+    circuits.value = frame.circuits || []
+    lastUpdatedAt.value = new Date().toISOString()
+    fallbackError.value = null
+    isLoading.value = false
+  },
+})
+
+const error = computed(() => fallbackError.value || streamError.value)
+
+const lastUpdated = computed(() => {
+  const source = metrics.value?.generated_at || lastUpdatedAt.value
+  if (!source) return '刚刚'
+  const date = new Date(source)
+  if (Number.isNaN(date.getTime())) return '刚刚'
+  return date.toLocaleString('zh-CN')
+})
+
+const resolvedTotalKeys = computed(() => {
+  if (typeof metrics.value?.total_keys === 'number' && metrics.value.total_keys > 0) {
+    return metrics.value.total_keys
+  }
+  return (metrics.value?.channel_health_list || []).reduce((sum, item) => sum + (item.total_keys || 0), 0)
+})
+
+const resolvedHealthyKeys = computed(() => {
+  if (typeof metrics.value?.overall_health?.healthy_keys === 'number') {
+    return metrics.value.overall_health.healthy_keys
+  }
+  return (metrics.value?.channel_health_list || []).reduce((sum, item) => sum + (item.healthy_keys || 0), 0)
+})
+
+const resolvedUnhealthyKeys = computed(() => {
+  if (typeof metrics.value?.overall_health?.unhealthy_keys === 'number') {
+    return metrics.value.overall_health.unhealthy_keys
+  }
+  return Math.max(0, resolvedTotalKeys.value - resolvedHealthyKeys.value)
+})
+
+const overallHealthValue = computed(() => {
+  if (typeof metrics.value?.overall_health?.overall_health === 'number') {
+    return metrics.value.overall_health.overall_health
+  }
+  if (resolvedTotalKeys.value > 0) {
+    return (resolvedHealthyKeys.value / resolvedTotalKeys.value) * 100
+  }
+  const channelList = metrics.value?.channel_health_list || []
+  if (!channelList.length) return 0
+  const total = channelList.reduce((sum, item) => sum + (item.health_percentage || 0), 0)
+  return total / channelList.length
+})
+
+const healthIconClass = computed(() => {
+  const health = overallHealthValue.value
+  if (health >= 90) return 'metric-card__icon--success'
+  if (health >= 60) return 'metric-card__icon--warning'
+  return 'metric-card__icon--error'
+})
+
+const successRateIconClass = computed(() => {
+  const successRate = metrics.value?.success_rate || 0
+  if (successRate >= 95) return 'metric-card__icon--success'
+  if (successRate >= 80) return 'metric-card__icon--warning'
+  return 'metric-card__icon--error'
+})
+
+const keyHealthIconClass = computed(() => {
+  return resolvedUnhealthyKeys.value === 0 ? 'metric-card__icon--success' : 'metric-card__icon--warning'
+})
+
+const tableLocale = computed(() => ({
+  emptyText: isLoading.value ? '指标加载中...' : '暂无统计数据',
+}))
+
+const channelNameMap = computed(() => {
+  const map = new Map<number, string>()
+  for (const item of metrics.value?.channel_health_list || []) {
+    map.set(item.channel_id, item.channel_name)
+  }
+  return map
+})
+
 const channelColumns: DataTableColumns<ChannelHealthInfo> = [
   {
-    title: '渠道名称',
+    title: '渠道',
     key: 'channel_name',
-    width: 120,
-    ellipsis: {tooltip: true},
-    sorter: (a, b) => a.channel_name.localeCompare(b.channel_name)
+    minWidth: 180,
+    ellipsis: { tooltip: true },
   },
   {
     title: '状态',
     key: 'status',
-    width: 80,
+    width: 84,
     align: 'center',
-    render: (row) => {
-      const statusMap: Record<string, { type: 'success' | 'warning' | 'error', text: string }> = {
-        'active': {type: 'success', text: '激活'},
-        'disabled': {type: 'warning', text: '禁用'}
-      }
-      const status = statusMap[row.status] || {type: 'error', text: '未知'}
-      return h(NTag, {type: status.type, size: 'small', bordered: false}, {default: () => status.text})
-    }
+    render: (row) =>
+      h(
+        NTag,
+        { type: row.status === 'active' ? 'success' : 'default', size: 'small', bordered: false },
+        { default: () => (row.status === 'active' ? '启用' : '停用') },
+      ),
   },
   {
-    title: '请求总数',
+    title: '请求量',
     key: 'total_requests',
-    width: 80,
+    width: 98,
     align: 'right',
     render: (row) => formatCompactNumber(row.total_requests),
-    sorter: (a, b) => a.total_requests - b.total_requests
   },
   {
-    title: '输入 Tokens',
-    key: 'prompt_tokens',
-    width: 110,
+    title: 'Token（入/出）',
+    key: 'token_usage',
+    width: 145,
     align: 'right',
-    render: (row) => formatCompactNumber(row.prompt_tokens),
-    sorter: (a, b) => a.prompt_tokens - b.prompt_tokens
-  },
-  {
-    title: '输出 Tokens',
-    key: 'completion_tokens',
-    width: 110,
-    align: 'right',
-    render: (row) => formatCompactNumber(row.completion_tokens),
-    sorter: (a, b) => a.completion_tokens - b.completion_tokens
+    render: (row) => `${formatCompactNumber(row.prompt_tokens)} / ${formatCompactNumber(row.completion_tokens)}`,
   },
   {
     title: '成功率',
     key: 'success_rate',
-    align: 'center',
-    width: 120,
-    sorter: (a, b) => a.success_rate - b.success_rate,
-    render: (row) => {
-      const rate = row.success_rate
-      const type = rate >= 90 ? 'success' : rate >= 80 ? 'warning' : 'error'
-      return h('div', {class: 'flex items-center gap-2 pl-2 pr-2'}, [
-        h(NProgress, {
-          type: 'line',
-          percentage: parseFloat(rate.toFixed(2)),
-          showIndicator: true,
-          height: 12,
-          borderRadius: 3,
-          indicatorPlacement: "inside",
-          color: type === 'success' ? '#10b981' : type === 'warning' ? '#f59e0b' : '#ef4444'
-        })
-      ])
-    }
+    width: 110,
+    align: 'right',
+    render: (row) => `${row.success_rate.toFixed(2)}%`,
   },
   {
     title: '密钥健康',
-    key: 'healthy_keys',
-    width: 80,
+    key: 'keys',
+    width: 90,
     align: 'right',
-    render: (row) => `${row.healthy_keys} / ${row.total_keys}`
+    render: (row) => `${row.healthy_keys}/${row.total_keys}`,
   },
-  {
-    title: '健康度',
-    key: 'health_percentage',
-    width: 80,
-    align: 'right',
-    render: (row) => {
-      const percentage = row.health_percentage
-      const type = percentage >= 80 ? 'success' : percentage >= 50 ? 'warning' : 'error'
-      return h(NTag, {type, size: 'small', bordered: false}, {default: () => `${percentage.toFixed(0)}%`})
-    }
-  },
-  {
-    title: '优先级',
-    key: 'priority',
-    width: 80,
-    align: 'right'
-  },
-  {
-    title: '权重',
-    key: 'weight',
-    width: 80,
-    align: 'right'
-  }
 ]
 
-// 模型表格列定义
+const circuitColumns: DataTableColumns<CircuitSnapshot> = [
+  {
+    title: '类型',
+    key: 'kind',
+    width: 84,
+    align: 'center',
+    render: (row) =>
+      h(
+        NTag,
+        {
+          size: 'small',
+          bordered: false,
+          type: row.kind === 'key' ? 'warning' : 'info',
+        },
+        { default: () => (row.kind === 'key' ? '密钥' : '模型') },
+      ),
+  },
+  {
+    title: '渠道',
+    key: 'channel_id',
+    minWidth: 160,
+    ellipsis: { tooltip: true },
+    render: (row) => channelNameMap.value.get(row.channel_id) || `渠道 #${row.channel_id}`,
+  },
+  {
+    title: '标识',
+    key: 'identifier',
+    minWidth: 150,
+    ellipsis: { tooltip: true },
+    render: (row) => {
+      if (row.kind === 'key') {
+        const tail = String(row.id).slice(-4).padStart(4, '0')
+        return h(NText, { code: true }, { default: () => `Key ****${tail}` })
+      }
+      return h(NText, { code: true }, { default: () => `ModelConfig #${row.id}` })
+    },
+  },
+  {
+    title: '连续失败',
+    key: 'failure_count',
+    width: 100,
+    align: 'right',
+    render: (row) => row.failure_count || 0,
+  },
+  {
+    title: '状态',
+    key: 'state',
+    width: 90,
+    align: 'center',
+    render: (row) =>
+      h(
+        NTag,
+        {
+          size: 'small',
+          bordered: false,
+          type: row.state === 'cooling' ? 'warning' : 'default',
+        },
+        { default: () => (row.state === 'cooling' ? '冷却中' : '停用') },
+      ),
+  },
+  {
+    title: '剩余冷却',
+    key: 'remaining_sec',
+    width: 110,
+    align: 'right',
+    render: (row) => (row.state === 'cooling' ? formatRemainingSeconds(row.remaining_sec) : '-'),
+  },
+]
+
 const modelColumns: DataTableColumns<ModelDetailInfo> = [
   {
     title: '模型名称',
     key: 'model_name',
-    width: 160,
-    ellipsis: {tooltip: true},
-    sorter: (a, b) => a.model_name.localeCompare(b.model_name)
+    minWidth: 220,
+    ellipsis: { tooltip: true },
+    render: (row) => h(NText, { code: true }, { default: () => row.model_name }),
   },
   {
-    title: '请求总数',
+    title: '总请求',
     key: 'total_requests',
-    width: 80,
+    width: 100,
     align: 'right',
     render: (row) => formatCompactNumber(row.total_requests),
-    sorter: (a, b) => a.total_requests - b.total_requests
   },
   {
-    title: '成功请求',
+    title: '成功',
     key: 'success_requests',
-    width: 80,
+    width: 90,
     align: 'right',
     render: (row) => formatCompactNumber(row.success_requests),
-    sorter: (a, b) => a.success_requests - b.success_requests
   },
   {
-    title: '失败请求',
+    title: '失败',
     key: 'failed_requests',
-    width: 80,
+    width: 90,
     align: 'right',
     render: (row) => formatCompactNumber(row.failed_requests),
-    sorter: (a, b) => a.failed_requests - b.failed_requests
   },
   {
     title: '成功率',
     key: 'success_rate',
-    align: 'center',
-    width: 160,
-    sorter: (a, b) => a.success_rate - b.success_rate,
-    render: (row) => {
-      const rate = row.success_rate
-      const type = rate >= 90 ? 'success' : rate >= 80 ? 'warning' : 'error'
-      return h('div', {class: 'flex items-center gap-2 pl-2 pr-2'}, [
-        h(NProgress, {
-          type: 'line',
-          percentage: parseFloat(rate.toFixed(2)),
-          showIndicator: true,
-          height: 12,
-          borderRadius: 3,
-          indicatorPlacement: "inside",
-          color: type === 'success' ? '#10b981' : type === 'warning' ? '#f59e0b' : '#ef4444'
-        })
-      ])
-    }
-  }
+    width: 100,
+    align: 'right',
+    render: (row) => `${row.success_rate.toFixed(2)}%`,
+  },
 ]
 
+async function loadFallbackData() {
+  isLoading.value = true
+  try {
+    const [metricsData, circuitData] = await Promise.all([
+      dashboardService.getMetrics(),
+      dashboardService.getCircuitStatus(),
+    ])
+    metrics.value = metricsData
+    circuits.value = circuitData
+    lastUpdatedAt.value = new Date().toISOString()
+    fallbackError.value = null
+  } catch (fallbackErr) {
+    fallbackError.value = fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr))
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function handleRefresh() {
+  await loadFallbackData()
+  reconnect()
+}
+
+function formatRemainingSeconds(totalSeconds: number): string {
+  const safe = Math.max(0, Number.isFinite(totalSeconds) ? Math.floor(totalSeconds) : 0)
+  const minutes = Math.floor(safe / 60)
+  const seconds = safe % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
 
 function formatCompactNumber(value: number): string {
-  if (!Number.isFinite(value)) {
-    return '0.00'
-  }
+  if (!Number.isFinite(value)) return '0'
 
   const units = [
-    {value: 1e12, symbol: 'T'},
-    {value: 1e9, symbol: 'B'},
-    {value: 1e6, symbol: 'M'},
-    {value: 1e3, symbol: 'K'}
+    { value: 1e12, symbol: 'T' },
+    { value: 1e9, symbol: 'B' },
+    { value: 1e6, symbol: 'M' },
+    { value: 1e3, symbol: 'K' },
   ]
 
   const sign = value < 0 ? '-' : ''
@@ -458,277 +548,184 @@ function formatCompactNumber(value: number): string {
   return `${sign}${Math.round(absValue)}`
 }
 
+function formatPercent(value: number): string {
+  return `${Math.max(0, Math.min(100, value)).toFixed(1)}%`
+}
+
+watch(isConnected, (connected) => {
+  if (!connected && !metrics.value) {
+    void loadFallbackData()
+  }
+})
 
 onMounted(() => {
-  if (error.value) {
-    console.error('Failed to load dashboard metrics:', error.value)
-  }
+  void loadFallbackData()
 })
 </script>
 
 <style scoped>
-
-/* 统计网格 */
-.stats-grid {
-  margin-bottom: 24px;
+.dashboard-page {
+  --metric-neutral-bg: #f4f4f5;
+  --metric-neutral-fg: #171717;
+  --metric-success-bg: #f4f4f5;
+  --metric-success-fg: #171717;
+  --metric-warning-bg: #ededed;
+  --metric-warning-fg: #262626;
+  --metric-error-bg: #e3e3e3;
+  --metric-error-fg: #111111;
 }
 
-/* 卡片间距 */
-.chart-card,
-.channel-stats-card,
-.channel-details-card,
-.model-stats-card {
-  margin-bottom: 24px;
+.dashboard-skeleton {
+  min-height: 280px;
 }
 
-/* 统计卡片 - 现代设计 */
+.dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px;
+}
+
+.dashboard-toolbar__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #737373;
+}
+
+.metric-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .metric-card {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
   background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid #e5e7eb;
-  transition: all 0.2s ease;
+  border: 1px solid #e3e3e3;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
   overflow: hidden;
 }
 
-.metric-card::before {
-  content: '';
+.metric-card::after {
+  content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--card-color), var(--card-color-light));
+  right: -30px;
+  top: -30px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
 }
 
 .metric-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
-  border-color: var(--card-color);
-}
-
-.metric-card--blue {
-  --card-color: #3b82f6;
-  --card-color-light: #60a5fa;
-}
-
-.metric-card--green {
-  --card-color: #22c55e;
-  --card-color-light: #4ade80;
-}
-
-.metric-card--emerald {
-  --card-color: #10b981;
-  --card-color-light: #34d399;
-}
-
-.metric-card--violet {
-  --card-color: #8b5cf6;
-  --card-color-light: #a78bfa;
-}
-
-.metric-card--amber {
-  --card-color: #f59e0b;
-  --card-color-light: #fbbf24;
-}
-
-.metric-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  border-color: #d4d4d4;
 }
 
 .metric-card__icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--card-color), var(--card-color-light));
-  color: white;
+  font-size: 22px;
+  flex-shrink: 0;
 }
 
-.metric-card__value {
-  font-size: 32px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1;
-  margin-bottom: 8px;
-  letter-spacing: -1px;
+.metric-card__icon--neutral {
+  background: var(--metric-neutral-bg);
+  color: var(--metric-neutral-fg);
 }
 
-.metric-card__divider {
-  font-size: 18px;
-  font-weight: 600;
-  color: #64748b;
-  margin: 0 6px;
+.metric-card__icon--success {
+  background: var(--metric-success-bg);
+  color: var(--metric-success-fg);
 }
 
-.metric-card__unit {
-  font-size: 16px;
-  font-weight: 500;
-  color: #64748b;
-  margin-left: 4px;
+.metric-card__icon--warning {
+  background: var(--metric-warning-bg);
+  color: var(--metric-warning-fg);
+}
+
+.metric-card__icon--error {
+  background: var(--metric-error-bg);
+  color: var(--metric-error-fg);
+}
+
+.metric-card__content {
+  min-width: 0;
+  flex: 1;
 }
 
 .metric-card__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #64748b;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-/* 图表卡片 */
-.chart-card,
-.channel-stats-card,
-.channel-details-card,
-.model-stats-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
-}
-
-.chart-card:hover,
-.channel-stats-card:hover,
-.channel-details-card:hover,
-.model-stats-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-/* 卡片标题样式 */
-:deep(.n-card__header) {
-  padding: 16px 20px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-:deep(.n-card__content) {
-  padding: 20px;
-}
-
-/* 统计项样式 */
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px;
-  background: #f8fafc;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  transition: all 0.2s ease;
-}
-
-.stat-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border-color: var(--stat-color);
-}
-
-.stat-item--total {
-  --stat-color: #64748b;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-}
-
-.stat-item--healthy {
-  --stat-color: #10b981;
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-color: #86efac;
-}
-
-.stat-item--degraded {
-  --stat-color: #f59e0b;
-  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-  border-color: #fcd34d;
-}
-
-.stat-item--unhealthy {
-  --stat-color: #ef4444;
-  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-  border-color: #fca5a5;
-}
-
-.stat-item--primary {
-  --stat-color: #3b82f6;
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-  border-color: #93c5fd;
-}
-
-.stat-item--info {
-  --stat-color: #06b6d4;
-  background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
-  border-color: #67e8f9;
-}
-
-.stat-item--success {
-  --stat-color: #10b981;
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-color: #86efac;
-}
-
-.stat-item--error {
-  --stat-color: #ef4444;
-  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-  border-color: #fca5a5;
-}
-
-.stat-item__icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  color: var(--stat-color);
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.stat-item__content {
-  flex: 1;
-  min-width: 0;
-}
-
-.stat-item__value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1;
+  font-size: 11px;
+  color: #737373;
+  font-weight: 580;
   margin-bottom: 6px;
-  letter-spacing: -0.5px;
+  letter-spacing: 0.2px;
 }
 
-.stat-item__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #64748b;
-}
-
-
-/* 数字动画样式 */
-:deep(.n-number-animation) {
+.metric-card__value {
+  font-size: 22px;
+  font-weight: 720;
+  line-height: 1.1;
+  color: #111111;
   font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
 }
 
-/* 标签样式 */
-:deep(.n-tag) {
-  border-radius: 6px;
+.metric-card__value--compact {
+  font-size: 17px;
+}
+
+.metric-card__unit {
+  font-size: 12px;
   font-weight: 500;
+  color: #737373;
 }
 
-/* 分隔线样式 */
-:deep(.n-divider) {
-  border-color: #f1f5f9;
+.metric-card__subtext {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #737373;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-/* 进度条样式 */
-:deep(.n-progress .n-progress-graph-line-rail) {
-  background: #f1f5f9;
+.metric-card__trend--up {
+  color: #171717;
 }
 
+.metric-card__trend--down {
+  color: #525252;
+}
+
+@media (max-width: 1280px) {
+  .metric-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .metric-cards {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

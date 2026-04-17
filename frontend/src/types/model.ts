@@ -6,10 +6,11 @@ export interface Provider {
   id: string
   name: string
   icon: string
-  lobeIcon?: string
   remark: string
   created_at: string
   updated_at: string
+  /** 关联模型数（由后端列表接口聚合返回） */
+  model_count?: number
 }
 
 export interface Model {
@@ -18,23 +19,22 @@ export interface Model {
   provider_id: string | null
   provider?: Provider
   remark: string
-  channel_count: number
   created_at: string
   updated_at: string
+  /** 关联渠道数（由后端列表接口聚合返回） */
+  channel_count?: number
 }
 
 export interface CreateProviderRequest {
   id: string
   name: string
   icon?: string
-  lobeIcon?: string
   remark?: string
 }
 
 export interface UpdateProviderRequest {
   name?: string
   icon?: string
-  lobeIcon?: string
   remark?: string
 }
 
@@ -42,7 +42,6 @@ export interface RemoteProvider {
   id: string
   name: string
   iconURL: string
-  lobeIcon?: string
 }
 
 export interface CreateModelRequest {

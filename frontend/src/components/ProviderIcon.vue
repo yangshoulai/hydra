@@ -16,14 +16,12 @@
 
 <script setup lang="ts">
 interface Props {
-  lobeIcon?: string  // 保留接口兼容性，但不再使用
   iconURL?: string
   alt?: string
   size?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  lobeIcon: undefined,
   iconURL: undefined,
   alt: 'Icon',
   size: 24

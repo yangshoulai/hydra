@@ -1,14 +1,15 @@
 <template>
   <n-config-provider
-      :theme-overrides="themeOverrides"
-      :inline-theme-disabled="false"
-      :locale="zhCN"
-      :date-locale="dateZhCN">
+    :theme-overrides="themeOverrides"
+    :inline-theme-disabled="false"
+    :locale="zhCN"
+    :date-locale="dateZhCN"
+  >
     <n-message-provider>
       <n-dialog-provider>
         <n-notification-provider>
-          <slot/>
-          <GlobalHooks/>
+          <slot />
+          <GlobalHooks />
         </n-notification-provider>
       </n-dialog-provider>
     </n-message-provider>
@@ -16,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import { defineComponent } from 'vue'
 import {
   dateZhCN,
   type GlobalThemeOverrides,
@@ -29,7 +31,6 @@ import {
   zhCN,
 } from 'naive-ui'
 
-// 全局 hooks 初始化组件
 const GlobalHooks = defineComponent({
   name: 'GlobalHooks',
   setup() {
@@ -37,7 +38,6 @@ const GlobalHooks = defineComponent({
     const dialog = useDialog()
     const notification = useNotification()
 
-    // 挂载到 window，方便全局访问
     window.$message = message
     window.$dialog = dialog
     window.$notification = notification
@@ -46,45 +46,74 @@ const GlobalHooks = defineComponent({
   },
 })
 
-// Naive UI 主题覆盖配置 - 清新简约、高端大气
 const themeOverrides: GlobalThemeOverrides = {
-  common: {},
-
-  // 布局
+  common: {
+    primaryColor: '#111111',
+    primaryColorHover: '#000000',
+    primaryColorPressed: '#000000',
+    primaryColorSuppl: '#111111',
+    successColor: '#111111',
+    warningColor: '#404040',
+    warningColorHover: '#262626',
+    warningColorPressed: '#111111',
+    warningColorSuppl: '#404040',
+    errorColor: '#1f1f1f',
+    infoColor: '#262626',
+    infoColorHover: '#111111',
+    infoColorPressed: '#000000',
+    infoColorSuppl: '#111111',
+    borderRadius: '12px',
+    fontSize: '14px',
+    textColorBase: '#111111',
+    bodyColor: '#f5f5f5',
+    cardColor: '#ffffff',
+    modalColor: '#ffffff',
+    popoverColor: '#ffffff',
+    borderColor: '#d4d4d4',
+  },
   Layout: {
-    color: '#ffffff',
-    textColor: '#111827',
-    siderColor: '#1a1f36',
-    siderTextColor: '#ffffff',
-    siderBorderColor: 'transparent',
+    color: '#f5f5f5',
+    siderColor: '#ffffff',
+    siderBorderColor: '#e5e5e5',
     headerColor: '#ffffff',
-    headerBorderColor: '#e5e7eb',
+    headerBorderColor: '#e5e5e5',
   },
-
-  // 菜单
   Menu: {
-    itemTextColor: 'rgba(255, 255, 255, 0.75)',
-    itemTextColorHover: '#ffffff',
-    itemTextColorActive: '#ffffff',
-    itemTextColorChildActive: '#ffffff',
-    itemIconColor: 'rgba(255, 255, 255, 0.75)',
-    itemIconColorHover: '#ffffff',
-    itemIconColorActive: '#667eea',
-    itemIconColorChildActive: '#667eea',
-    itemColorActive: 'rgba(102, 126, 234, 0.15)',
-    itemColorActiveHover: 'rgba(102, 126, 234, 0.2)',
-    itemColorActiveCollapsed: 'rgba(102, 126, 234, 0.2)',
-    arrowColor: 'rgba(255, 255, 255, 0.6)',
-    arrowColorHover: '#ffffff',
-    arrowColorActive: '#667eea',
+    itemTextColor: '#404040',
+    itemTextColorHover: '#000000',
+    itemTextColorActive: '#000000',
+    itemIconColor: '#525252',
+    itemIconColorHover: '#111111',
+    itemColorHover: 'transparent',
+    itemColorActive: 'transparent',
+    itemColorActiveCollapsed: 'transparent',
+    itemIconColorActive: '#111111',
+    arrowColor: '#737373',
+    arrowColorHover: '#262626',
+    arrowColorActive: '#111111',
   },
-}
-</script>
-
-<script lang="ts">
-import {defineComponent} from 'vue'
-
-export default {
-  name: 'NaiveProvider',
+  Card: {
+    borderRadius: '12px',
+    color: '#ffffff',
+    borderColor: '#e2e2e2',
+  },
+  DataTable: {
+    tdColor: '#ffffff',
+    thColor: '#f5f5f5',
+    borderColor: '#e2e2e2',
+    thTextColor: '#525252',
+    tdTextColor: '#171717',
+  },
+  Input: {
+    borderRadius: '10px',
+  },
+  Button: {
+    borderRadiusSmall: '10px',
+    borderRadiusMedium: '10px',
+    borderRadiusLarge: '12px',
+  },
+  Select: {
+    menuBoxShadow: '0 10px 28px rgba(0, 0, 0, 0.12)',
+  },
 }
 </script>

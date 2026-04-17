@@ -1,11 +1,19 @@
 package logger
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"os"
+	"strings"
+	"sync/atomic"
 
 	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+var (
+	runtimeLevelVar  = &slog.LevelVar{}
+	runtimeAddSource atomic.Bool
 )
 
 // LoggerConfig 日志配置
@@ -23,29 +31,15 @@ type LoggerConfig struct {
 
 // InitLogger 初始化 Slog 结构化日志
 func InitLogger(cfg *LoggerConfig) (*slog.Logger, error) {
-	// 解析日志级别
-	var level slog.Level
-	switch cfg.Level {
-	case "debug":
-		level = slog.LevelDebug
-	case "info":
-		level = slog.LevelInfo
-	case "warn":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo
-	}
+	SetLogLevel(cfg.Level)
+	SetAddSource(cfg.AddSource)
 
-	// 创建日志选项
+	// AddSource 固定打开；真正的开关由 dynamicSourceHandler 在运行时清 record.PC 实现
 	opts := &slog.HandlerOptions{
-		Level:     level,
-		AddSource: cfg.AddSource,
-		// 使用 ReplaceAttr 将时间转换为本地时间
+		Level:     runtimeLevelVar,
+		AddSource: true,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
-				// 将 UTC 时间转换为本地时间
 				localTime := a.Value.Time().Local()
 				a.Value = slog.StringValue(localTime.Format("2006-01-02T15:04:05Z07:00"))
 			}
@@ -53,13 +47,9 @@ func InitLogger(cfg *LoggerConfig) (*slog.Logger, error) {
 		},
 	}
 
-	// 构建日志输出目标
 	var writers []io.Writer
-
-	// 始终输出到 stderr(用于容器环境)
 	writers = append(writers, os.Stderr)
 
-	// 如果启用文件日志
 	if cfg.EnableFile && cfg.FilePath != "" {
 		fileWriter := &lumberjack.Logger{
 			Filename:   cfg.FilePath,
@@ -71,22 +61,63 @@ func InitLogger(cfg *LoggerConfig) (*slog.Logger, error) {
 		writers = append(writers, fileWriter)
 	}
 
-	// 创建多写入器
 	multiWriter := io.MultiWriter(writers...)
 
-	// 创建 Text Handler
-	handler := slog.NewTextHandler(multiWriter, opts)
+	inner := slog.NewTextHandler(multiWriter, opts)
+	handler := &dynamicSourceHandler{inner: inner}
 
-	// 创建 Logger
 	logger := slog.New(handler)
-
-	// 设置为全局默认 logger
 	slog.SetDefault(logger)
 
 	return logger, nil
 }
 
-// GetLogger 获取当前全局 logger
-func GetLogger() *slog.Logger {
-	return slog.Default()
+// SetLogLevel 动态更新运行时日志级别
+func SetLogLevel(level string) {
+	runtimeLevelVar.Set(parseLogLevel(level))
+}
+
+// SetAddSource 动态切换是否在日志中输出源码位置
+func SetAddSource(enabled bool) {
+	runtimeAddSource.Store(enabled)
+}
+
+// dynamicSourceHandler 包装底层 handler，根据 runtimeAddSource 决定是否保留 record.PC。
+// slog 内部仅在 record.PC != 0 时解析源码位置，所以把 PC 清零即可动态关闭 AddSource。
+type dynamicSourceHandler struct {
+	inner slog.Handler
+}
+
+func (h *dynamicSourceHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.inner.Enabled(ctx, level)
+}
+
+func (h *dynamicSourceHandler) Handle(ctx context.Context, r slog.Record) error {
+	if !runtimeAddSource.Load() {
+		r.PC = 0
+	}
+	return h.inner.Handle(ctx, r)
+}
+
+func (h *dynamicSourceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &dynamicSourceHandler{inner: h.inner.WithAttrs(attrs)}
+}
+
+func (h *dynamicSourceHandler) WithGroup(name string) slog.Handler {
+	return &dynamicSourceHandler{inner: h.inner.WithGroup(name)}
+}
+
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }

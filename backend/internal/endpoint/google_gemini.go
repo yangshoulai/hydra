@@ -18,7 +18,7 @@ func (e *GeminiEndpoint) GetName() string {
 }
 
 func (e *GeminiEndpoint) GetType() string {
-	return "gemini"
+	return TypeGemini
 }
 
 func (e *GeminiEndpoint) GetPath() string {
@@ -34,8 +34,8 @@ func (e *GeminiEndpoint) GetColor() string {
 }
 
 func (e *GeminiEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
-	payload := map[string]interface{}{
-		"contents": []map[string]interface{}{
+	payload := map[string]any{
+		"contents": []map[string]any{
 			{
 				"role": "user",
 				"parts": []map[string]string{
@@ -74,7 +74,7 @@ func (e *GeminiEndpoint) ValidateResponse(statusCode int, body []byte) (bool, st
 		return false, "invalid JSON response"
 	}
 
-	candidates, ok := result["candidates"].([]interface{})
+	candidates, ok := result["candidates"].([]any)
 	if !ok || len(candidates) == 0 {
 		if errMsg, ok := result["error"]; ok {
 			errBytes, _ := json.Marshal(errMsg)
@@ -130,12 +130,12 @@ func (e *GeminiEndpoint) GetModelFromRequest(req *http.Request, body []byte) (st
 }
 
 func parseGeminiTokenUsageFromJSON(responseBody string) (int64, int64) {
-	var payload map[string]interface{}
+	var payload map[string]any
 	if err := json.Unmarshal([]byte(responseBody), &payload); err != nil {
 		return 0, 0
 	}
 
-	usage, ok := payload["usageMetadata"].(map[string]interface{})
+	usage, ok := payload["usageMetadata"].(map[string]any)
 	if !ok {
 		return 0, 0
 	}
@@ -163,12 +163,12 @@ func parseGeminiTokenUsageFromStream(responseBody string) (int64, int64) {
 			continue
 		}
 
-		var payload map[string]interface{}
+		var payload map[string]any
 		if err := json.Unmarshal([]byte(data), &payload); err != nil {
 			continue
 		}
 
-		usage, ok := payload["usageMetadata"].(map[string]interface{})
+		usage, ok := payload["usageMetadata"].(map[string]any)
 		if !ok {
 			continue
 		}

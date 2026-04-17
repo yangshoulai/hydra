@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,6 +22,7 @@ type HTTPClient struct {
 // HTTPClientConfig HTTP 客户端配置
 type HTTPClientConfig struct {
 	RequestTimeout        time.Duration // 请求超时时间
+	UpstreamProxyURL      string        // 上游网络代理地址（http/https/socks5）
 	DialTimeout           time.Duration // 连接超时时间
 	KeepAlive             time.Duration // Keep-Alive 时长
 	MaxIdleConns          int           // 最大空闲连接数
@@ -35,6 +38,7 @@ type HTTPClientConfig struct {
 func DefaultHTTPClientConfig() *HTTPClientConfig {
 	return &HTTPClientConfig{
 		RequestTimeout:        120 * time.Second,
+		UpstreamProxyURL:      "",
 		DialTimeout:           10 * time.Second,
 		KeepAlive:             30 * time.Second,
 		MaxIdleConns:          100,
@@ -49,29 +53,10 @@ func DefaultHTTPClientConfig() *HTTPClientConfig {
 
 // NewHTTPClient 创建 HTTP 客户端
 func NewHTTPClient(config *HTTPClientConfig, logger *slog.Logger) *HTTPClient {
-	if config == nil {
-		config = DefaultHTTPClientConfig()
-	}
-
 	// 复制配置以避免外部修改
 	configCopy := *config
 
-	transport := &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout:   configCopy.DialTimeout,
-			KeepAlive: configCopy.KeepAlive,
-		}).DialContext,
-		MaxIdleConns:          configCopy.MaxIdleConns,
-		MaxIdleConnsPerHost:   configCopy.MaxIdleConnsPerHost,
-		MaxConnsPerHost:       configCopy.MaxConnsPerHost,
-		IdleConnTimeout:       configCopy.IdleConnTimeout,
-		TLSHandshakeTimeout:   configCopy.TLSHandshakeTimeout,
-		ExpectContinueTimeout: configCopy.ExpectContinueTimeout,
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: configCopy.InsecureSkipVerify,
-		},
-	}
-
+	transport := buildTransport(configCopy, logger)
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   configCopy.RequestTimeout,
@@ -85,13 +70,73 @@ func NewHTTPClient(config *HTTPClientConfig, logger *slog.Logger) *HTTPClient {
 	}
 }
 
+func buildTransport(config HTTPClientConfig, logger *slog.Logger) *http.Transport {
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   config.DialTimeout,
+			KeepAlive: config.KeepAlive,
+		}).DialContext,
+		MaxIdleConns:          config.MaxIdleConns,
+		MaxIdleConnsPerHost:   config.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       config.MaxConnsPerHost,
+		IdleConnTimeout:       config.IdleConnTimeout,
+		TLSHandshakeTimeout:   config.TLSHandshakeTimeout,
+		ExpectContinueTimeout: config.ExpectContinueTimeout,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: config.InsecureSkipVerify,
+		},
+	}
+
+	if proxyFunc := buildProxyFunc(config.UpstreamProxyURL, logger); proxyFunc != nil {
+		transport.Proxy = proxyFunc
+	}
+	return transport
+}
+
+func buildProxyFunc(proxyURL string, logger *slog.Logger) func(*http.Request) (*url.URL, error) {
+	trimmed := strings.TrimSpace(proxyURL)
+	if trimmed == "" {
+		return nil
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		logger.Warn("网络代理地址无效，已忽略",
+			slog.String("proxy_url", trimmed),
+			slog.String("error", err.Error()),
+		)
+		return nil
+	}
+
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https", "socks5", "socks5h":
+	default:
+		logger.Warn("网络代理协议不支持，已忽略",
+			slog.String("proxy_url", trimmed),
+			slog.String("scheme", parsed.Scheme),
+		)
+		return nil
+	}
+
+	if parsed.Host == "" {
+		logger.Warn("网络代理地址缺少主机信息，已忽略",
+			slog.String("proxy_url", trimmed),
+		)
+		return nil
+	}
+
+	return http.ProxyURL(parsed)
+}
+
 // Do 发送 HTTP 请求
 func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, error) {
 	startTime := time.Now()
 
 	// 记录当前超时配置
 	hc.configMu.RLock()
+	client := hc.client
 	currentTimeout := hc.config.RequestTimeout
+	currentProxyURL := hc.config.UpstreamProxyURL
 	hc.configMu.RUnlock()
 
 	hc.logger.Debug("渠道调用开始",
@@ -99,9 +144,10 @@ func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, err
 		slog.String("method", req.Method),
 		slog.String("url", req.URL.String()),
 		slog.Duration("request_timeout", currentTimeout),
+		slog.String("network_proxy_url", currentProxyURL),
 	)
 
-	resp, err := hc.client.Do(req)
+	resp, err := client.Do(req)
 
 	duration := time.Since(startTime)
 
@@ -130,22 +176,29 @@ func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, err
 
 // Close 关闭客户端(清理连接池)
 func (hc *HTTPClient) Close() {
-	hc.client.CloseIdleConnections()
-}
-
-// GetClient 获取底层 http.Client
-func (hc *HTTPClient) GetClient() *http.Client {
-	return hc.client
+	hc.configMu.RLock()
+	client := hc.client
+	hc.configMu.RUnlock()
+	if client != nil {
+		client.CloseIdleConnections()
+	}
 }
 
 // UpdateRequestTimeout 动态更新请求超时时间
 func (hc *HTTPClient) UpdateRequestTimeout(timeout time.Duration) {
 	hc.configMu.Lock()
-	defer hc.configMu.Unlock()
-
-	oldTimeout := hc.client.Timeout
-	hc.client.Timeout = timeout
+	oldTimeout := hc.config.RequestTimeout
+	oldClient := hc.client
 	hc.config.RequestTimeout = timeout
+	hc.client = &http.Client{
+		Transport: buildTransport(*hc.config, hc.logger),
+		Timeout:   hc.config.RequestTimeout,
+	}
+	hc.configMu.Unlock()
+
+	if oldClient != nil {
+		oldClient.CloseIdleConnections()
+	}
 
 	hc.logger.Info("HTTP客户端超时时间已更新",
 		slog.Duration("old_timeout", oldTimeout),
@@ -153,9 +206,24 @@ func (hc *HTTPClient) UpdateRequestTimeout(timeout time.Duration) {
 	)
 }
 
-// GetRequestTimeout 获取当前请求超时时间
-func (hc *HTTPClient) GetRequestTimeout() time.Duration {
-	hc.configMu.RLock()
-	defer hc.configMu.RUnlock()
-	return hc.config.RequestTimeout
+// UpdateUpstreamProxyURL 动态更新上游网络代理地址
+func (hc *HTTPClient) UpdateUpstreamProxyURL(proxyURL string) {
+	hc.configMu.Lock()
+	oldProxyURL := hc.config.UpstreamProxyURL
+	oldClient := hc.client
+	hc.config.UpstreamProxyURL = strings.TrimSpace(proxyURL)
+	hc.client = &http.Client{
+		Transport: buildTransport(*hc.config, hc.logger),
+		Timeout:   hc.config.RequestTimeout,
+	}
+	hc.configMu.Unlock()
+
+	if oldClient != nil {
+		oldClient.CloseIdleConnections()
+	}
+
+	hc.logger.Info("HTTP客户端网络代理已更新",
+		slog.String("old_proxy_url", oldProxyURL),
+		slog.String("new_proxy_url", strings.TrimSpace(proxyURL)),
+	)
 }
