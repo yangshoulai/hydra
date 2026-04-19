@@ -140,7 +140,21 @@
       <section class="panel-card">
         <header class="panel-card__header">
           <h3 class="panel-card__title">QPS 趋势</h3>
-          <n-tag :bordered="false" size="small">近 1 小时</n-tag>
+          <n-space size="small" align="center">
+            <span class="range-switch__label">时间范围</span>
+            <div class="range-switch">
+              <n-button
+                v-for="option in qpsRangeOptions"
+                :key="option.value"
+                size="small"
+                :type="qpsRange === option.value ? 'primary' : 'default'"
+                :quaternary="qpsRange !== option.value"
+                @click="handleQPSRangeChange(option.value)"
+              >
+                {{ option.label }}
+              </n-button>
+            </div>
+          </n-space>
         </header>
         <div class="panel-card__body">
           <QpsChart :data="metrics?.qps_trend || []" :height="260" />
@@ -238,6 +252,7 @@ import type {
   CircuitSnapshot,
   DashboardFrame,
   DashboardMetrics,
+  DashboardQPSRange,
   ModelDetailInfo,
 } from '@/services/dashboardService'
 import dashboardService from '@/services/dashboardService'
@@ -249,13 +264,20 @@ const circuits = ref<CircuitSnapshot[]>([])
 const isLoading = ref(false)
 const fallbackError = ref<Error | null>(null)
 const lastUpdatedAt = ref('')
+const qpsRange = ref<DashboardQPSRange>('1h')
+
+const qpsRangeOptions: Array<{ label: string; value: DashboardQPSRange }> = [
+  { label: '1h', value: '1h' },
+  { label: '6h', value: '6h' },
+  { label: '24h', value: '24h' },
+]
 
 const {
   error: streamError,
   isConnected,
   reconnect,
 } = useEventStream<DashboardFrame>({
-  url: '/admin/api/dashboard/metrics/stream',
+  url: () => `/admin/api/dashboard/metrics/stream?qps_range=${encodeURIComponent(qpsRange.value)}`,
   event: 'metrics',
   onMessage: (frame) => {
     metrics.value = frame.metrics
@@ -350,7 +372,7 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
   {
     title: '状态',
     key: 'status',
-    width: 84,
+    width: 120,
     align: 'center',
     render: (row) =>
       h(
@@ -362,30 +384,30 @@ const channelColumns: DataTableColumns<ChannelHealthInfo> = [
   {
     title: '请求量',
     key: 'total_requests',
-    width: 98,
+    width: 120,
     align: 'right',
     render: (row) => formatCompactNumber(row.total_requests),
   },
   {
     title: 'Token（入/出）',
     key: 'token_usage',
-    width: 145,
+    width: 160,
     align: 'right',
     render: (row) => `${formatCompactNumber(row.prompt_tokens)} / ${formatCompactNumber(row.completion_tokens)}`,
   },
   {
     title: '成功率',
     key: 'success_rate',
-    width: 110,
+    width: 120,
     align: 'right',
     render: (row) => `${row.success_rate.toFixed(2)}%`,
   },
   {
     title: '密钥健康',
     key: 'keys',
-    width: 90,
+    width: 120,
     align: 'right',
-    render: (row) => `${row.healthy_keys}/${row.total_keys}`,
+    render: (row) => `${row.healthy_keys} / ${row.total_keys}`,
   },
 ]
 
@@ -393,7 +415,7 @@ const circuitColumns: DataTableColumns<CircuitSnapshot> = [
   {
     title: '类型',
     key: 'kind',
-    width: 84,
+    width: 100,
     align: 'center',
     render: (row) =>
       h(
@@ -429,14 +451,14 @@ const circuitColumns: DataTableColumns<CircuitSnapshot> = [
   {
     title: '连续失败',
     key: 'failure_count',
-    width: 100,
+    width: 120,
     align: 'right',
     render: (row) => row.failure_count || 0,
   },
   {
     title: '状态',
     key: 'state',
-    width: 90,
+    width: 120,
     align: 'center',
     render: (row) =>
       h(
@@ -452,7 +474,7 @@ const circuitColumns: DataTableColumns<CircuitSnapshot> = [
   {
     title: '剩余冷却',
     key: 'remaining_sec',
-    width: 110,
+    width: 120,
     align: 'right',
     render: (row) => (row.state === 'cooling' ? formatRemainingSeconds(row.remaining_sec) : '-'),
   },
@@ -462,35 +484,35 @@ const modelColumns: DataTableColumns<ModelDetailInfo> = [
   {
     title: '模型名称',
     key: 'model_name',
-    minWidth: 220,
+    minWidth: 240,
     ellipsis: { tooltip: true },
     render: (row) => h(NText, { code: true }, { default: () => row.model_name }),
   },
   {
     title: '总请求',
     key: 'total_requests',
-    width: 100,
+    width: 120,
     align: 'right',
     render: (row) => formatCompactNumber(row.total_requests),
   },
   {
     title: '成功',
     key: 'success_requests',
-    width: 90,
+    width: 120,
     align: 'right',
     render: (row) => formatCompactNumber(row.success_requests),
   },
   {
     title: '失败',
     key: 'failed_requests',
-    width: 90,
+    width: 120,
     align: 'right',
     render: (row) => formatCompactNumber(row.failed_requests),
   },
   {
     title: '成功率',
     key: 'success_rate',
-    width: 100,
+    width: 120,
     align: 'right',
     render: (row) => `${row.success_rate.toFixed(2)}%`,
   },
@@ -500,7 +522,7 @@ async function loadFallbackData() {
   isLoading.value = true
   try {
     const [metricsData, circuitData] = await Promise.all([
-      dashboardService.getMetrics(),
+      dashboardService.getMetrics(qpsRange.value),
       dashboardService.getCircuitStatus(),
     ])
     metrics.value = metricsData
@@ -515,6 +537,13 @@ async function loadFallbackData() {
 }
 
 async function handleRefresh() {
+  await loadFallbackData()
+  reconnect()
+}
+
+async function handleQPSRangeChange(value: DashboardQPSRange) {
+  if (qpsRange.value === value) return
+  qpsRange.value = value
   await loadFallbackData()
   reconnect()
 }
@@ -593,6 +622,17 @@ onMounted(() => {
   gap: 6px;
   font-size: 12px;
   color: #737373;
+}
+
+.range-switch__label {
+  font-size: 12px;
+  color: #737373;
+}
+
+.range-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .metric-cards {

@@ -177,6 +177,7 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 		repos.ChannelRepo,
 		repos.ChannelKeyRepo,
 		repos.ModelRepo,
+		repos.RequestLogRepo,
 		circuitManager,
 		runtimeMetrics,
 	)

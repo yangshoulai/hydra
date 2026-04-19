@@ -3,7 +3,7 @@ import { onUnmounted, ref } from 'vue'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 interface UseEventStreamOptions<T> {
-  url: string
+  url: string | (() => string)
   event?: string
   autoStart?: boolean
   initialRetryDelay?: number
@@ -84,6 +84,8 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
     controller?.abort()
     controller = new AbortController()
 
+    const targetURL = typeof options.url === 'function' ? options.url() : options.url
+
     const accessToken = localStorage.getItem('access_token') || ''
     const headers: Record<string, string> = {
       Accept: 'text/event-stream',
@@ -94,7 +96,7 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
     }
 
     try {
-      const response = await fetch(resolveURL(options.url), {
+      const response = await fetch(resolveURL(targetURL), {
         method: 'GET',
         headers,
         signal: controller.signal,

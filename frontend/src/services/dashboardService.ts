@@ -2,6 +2,8 @@ import { apiClient } from './api'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
+export type DashboardQPSRange = '1h' | '6h' | '24h'
+
 export interface QPSDataPoint {
   timestamp: string
   qps: number
@@ -134,13 +136,17 @@ function parseSSEBlock<T>(rawBlock: string): { event: string; data: T } | null {
 }
 
 class DashboardService {
-  async getMetrics(): Promise<DashboardMetrics> {
-    const response = await apiClient.get('/admin/api/dashboard/metrics')
+  async getMetrics(qpsRange: DashboardQPSRange = '1h'): Promise<DashboardMetrics> {
+    const response = await apiClient.get('/admin/api/dashboard/metrics', {
+      params: { qps_range: qpsRange },
+    })
     return response.data.data
   }
 
-  async getQPSMetrics(): Promise<QPSMetrics> {
-    const response = await apiClient.get('/admin/api/dashboard/metrics/qps')
+  async getQPSMetrics(qpsRange: DashboardQPSRange = '1h'): Promise<QPSMetrics> {
+    const response = await apiClient.get('/admin/api/dashboard/metrics/qps', {
+      params: { qps_range: qpsRange },
+    })
     return response.data.data
   }
 
@@ -159,9 +165,12 @@ class DashboardService {
     return response.data.data || []
   }
 
-  openMetricsStream(onMessage: (frame: DashboardFrame) => void): { close: () => void } {
+  openMetricsStream(
+    onMessage: (frame: DashboardFrame) => void,
+    qpsRange: DashboardQPSRange = '1h',
+  ): { close: () => void } {
     const controller = new AbortController()
-    const url = resolveURL('/admin/api/dashboard/metrics/stream')
+    const url = resolveURL(`/admin/api/dashboard/metrics/stream?qps_range=${encodeURIComponent(qpsRange)}`)
     const accessToken = localStorage.getItem('access_token') || ''
 
     const headers: Record<string, string> = {

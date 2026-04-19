@@ -47,6 +47,42 @@ type RequestLogFull struct {
 	Attempts []*models.RequestLogAttempt `json:"attempts"`
 }
 
+// RequestLogSummary 请求日志聚合总览
+type RequestLogSummary struct {
+	TotalRequests         int   `json:"total_requests"`
+	SuccessRequests       int   `json:"success_requests"`
+	FailedRequests        int   `json:"failed_requests"`
+	TotalPromptTokens     int64 `json:"total_prompt_tokens"`
+	TotalCompletionTokens int64 `json:"total_completion_tokens"`
+}
+
+// RequestLogMinuteAggregate 请求日志按分钟聚合
+type RequestLogMinuteAggregate struct {
+	MinuteUnix      int64 `json:"minute_unix"`
+	TotalRequests   int   `json:"total_requests"`
+	SuccessRequests int   `json:"success_requests"`
+	FailedRequests  int   `json:"failed_requests"`
+}
+
+// RequestLogChannelAggregate 请求日志按渠道聚合
+type RequestLogChannelAggregate struct {
+	ChannelID        uint   `json:"channel_id"`
+	ChannelName      string `json:"channel_name"`
+	TotalRequests    int    `json:"total_requests"`
+	SuccessRequests  int    `json:"success_requests"`
+	FailedRequests   int    `json:"failed_requests"`
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+}
+
+// RequestLogModelAggregate 请求日志按模型聚合
+type RequestLogModelAggregate struct {
+	ModelName       string `json:"model_name"`
+	TotalRequests   int    `json:"total_requests"`
+	SuccessRequests int    `json:"success_requests"`
+	FailedRequests  int    `json:"failed_requests"`
+}
+
 // CreateWithTx 在单一事务内写入主表 + 详情 + 尝试明细
 // detail 与 attempts 为 nil 时跳过写入，支持调试模式开关语义。
 func (r *RequestLogRepository) CreateWithTx(
@@ -183,6 +219,94 @@ func (r *RequestLogRepository) GetFull(ctx context.Context, traceID string) (*Re
 	full.Attempts = attempts
 
 	return full, nil
+}
+
+// AggregateSummary 获取指定时间之后的请求日志总览聚合
+func (r *RequestLogRepository) AggregateSummary(ctx context.Context, since time.Time) (*RequestLogSummary, error) {
+	var summary RequestLogSummary
+	err := r.db.WithContext(ctx).
+		Model(&models.RequestLog{}).
+		Select(`
+			COUNT(*) AS total_requests,
+			COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_requests,
+			COALESCE(SUM(CASE WHEN success = 1 THEN 0 ELSE 1 END), 0) AS failed_requests,
+			COALESCE(SUM(prompt_tokens), 0) AS total_prompt_tokens,
+			COALESCE(SUM(completion_tokens), 0) AS total_completion_tokens
+		`).
+		Where("created_at >= ?", since).
+		Scan(&summary).Error
+	if err != nil {
+		return nil, err
+	}
+	return &summary, nil
+}
+
+// AggregateQPSByMinute 获取指定时间之后按分钟聚合的请求日志
+func (r *RequestLogRepository) AggregateQPSByMinute(ctx context.Context, since time.Time) ([]RequestLogMinuteAggregate, error) {
+	var rows []RequestLogMinuteAggregate
+	err := r.db.WithContext(ctx).
+		Model(&models.RequestLog{}).
+		Select(`
+			CAST(strftime('%s', created_at) AS INTEGER) / 60 AS minute_unix,
+			COUNT(*) AS total_requests,
+			COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_requests,
+			COALESCE(SUM(CASE WHEN success = 1 THEN 0 ELSE 1 END), 0) AS failed_requests
+		`).
+		Where("created_at >= ?", since).
+		Group("minute_unix").
+		Order("minute_unix ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// AggregateByChannel 获取指定时间之后按渠道聚合的请求日志
+func (r *RequestLogRepository) AggregateByChannel(ctx context.Context, since time.Time) ([]RequestLogChannelAggregate, error) {
+	var rows []RequestLogChannelAggregate
+	err := r.db.WithContext(ctx).
+		Model(&models.RequestLog{}).
+		Select(`
+			final_channel_id AS channel_id,
+			MAX(final_channel_name) AS channel_name,
+			COUNT(*) AS total_requests,
+			COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_requests,
+			COALESCE(SUM(CASE WHEN success = 1 THEN 0 ELSE 1 END), 0) AS failed_requests,
+			COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+			COALESCE(SUM(completion_tokens), 0) AS completion_tokens
+		`).
+		Where("created_at >= ?", since).
+		Where("final_channel_id > 0").
+		Group("final_channel_id").
+		Order("total_requests DESC, channel_id ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// AggregateByModel 获取指定时间之后按模型聚合的请求日志
+func (r *RequestLogRepository) AggregateByModel(ctx context.Context, since time.Time) ([]RequestLogModelAggregate, error) {
+	var rows []RequestLogModelAggregate
+	err := r.db.WithContext(ctx).
+		Model(&models.RequestLog{}).
+		Select(`
+			model AS model_name,
+			COUNT(*) AS total_requests,
+			COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS success_requests,
+			COALESCE(SUM(CASE WHEN success = 1 THEN 0 ELSE 1 END), 0) AS failed_requests
+		`).
+		Where("created_at >= ?", since).
+		Where("model <> ''").
+		Group("model").
+		Order("total_requests DESC, model_name ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 // DeleteByIDs 按主键批量删除请求日志，并同步删除关联的 detail / attempts。

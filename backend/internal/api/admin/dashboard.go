@@ -21,6 +21,10 @@ type dashboardStreamFrame struct {
 	Circuits []circuit.BreakerSnapshot `json:"circuits"`
 }
 
+type dashboardMetricsQuery struct {
+	QPSRange string `form:"qps_range" binding:"omitempty,oneof=1h 6h 24h"`
+}
+
 // NewDashboardHandler 创建仪表盘处理器
 func NewDashboardHandler(
 	dashboardService *admin.DashboardService,
@@ -33,7 +37,13 @@ func NewDashboardHandler(
 // GetMetrics 获取仪表盘指标
 // GET /admin/api/dashboard/metrics
 func (h *DashboardHandler) GetMetrics(c *gin.Context) {
-	metrics, err := h.dashboardService.GetMetrics(c.Request.Context())
+	var query dashboardMetricsQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	metrics, err := h.dashboardService.GetMetricsWithQPSRange(c.Request.Context(), admin.QPSRange(query.QPSRange))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to get dashboard metrics",
@@ -50,7 +60,13 @@ func (h *DashboardHandler) GetMetrics(c *gin.Context) {
 // GetQPSMetrics 获取 QPS 指标
 // GET /admin/api/dashboard/metrics/qps
 func (h *DashboardHandler) GetQPSMetrics(c *gin.Context) {
-	metrics, err := h.dashboardService.GetQPSMetrics(c.Request.Context())
+	var query dashboardMetricsQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	metrics, err := h.dashboardService.GetQPSMetricsWithRange(c.Request.Context(), admin.QPSRange(query.QPSRange))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to get QPS metrics",
@@ -118,6 +134,12 @@ func (h *DashboardHandler) GetCircuitStatus(c *gin.Context) {
 // StreamMetrics SSE 推送仪表盘指标
 // GET /admin/api/dashboard/metrics/stream
 func (h *DashboardHandler) StreamMetrics(c *gin.Context) {
+	var query dashboardMetricsQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -132,7 +154,7 @@ func (h *DashboardHandler) StreamMetrics(c *gin.Context) {
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 
 	push := func() bool {
-		metrics, err := h.dashboardService.GetMetrics(c.Request.Context())
+		metrics, err := h.dashboardService.GetMetricsWithQPSRange(c.Request.Context(), admin.QPSRange(query.QPSRange))
 		if err != nil {
 			return writeSSEEvent(c, flusher, "error", map[string]string{"message": err.Error()})
 		}
