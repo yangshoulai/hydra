@@ -66,8 +66,19 @@
             </n-button>
           </n-form>
 
-          <n-alert v-if="authStore.error" type="error" style="margin-top: 14px" :bordered="false">
-            {{ authStore.error }}
+          <n-alert
+            v-if="loginError"
+            type="error"
+            :bordered="false"
+            closable
+            class="login-error-alert"
+            @close="handleDismissError"
+          >
+            <template #header>登录失败</template>
+            <div class="login-error-alert__body">
+              <div>{{ loginError }}</div>
+              <div class="login-error-alert__hint">请检查用户名、密码或系统连接状态后重试。</div>
+            </div>
           </n-alert>
         </n-card>
       </div>
@@ -78,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { type FormInst, NAlert, NButton, NCard, NCheckbox, NForm, NFormItem, NIcon, NInput, NSpace } from 'naive-ui'
 import { LockClosedOutline, PersonOutline } from '@vicons/ionicons5'
@@ -94,6 +105,8 @@ const formData = reactive({
   password: '',
 })
 const rememberMe = ref(false)
+const loginError = ref('')
+const lastSubmittedCredential = ref('')
 
 const rules = {
   username: {
@@ -112,7 +125,10 @@ async function handleLogin() {
   if (!formRef.value) return
 
   try {
+    authStore.clearError()
     await formRef.value.validate()
+    const currentCredentialFingerprint = `${formData.username}\n${formData.password}`
+    lastSubmittedCredential.value = currentCredentialFingerprint
     const result = await authStore.login({
       username: formData.username,
       password: formData.password,
@@ -120,6 +136,7 @@ async function handleLogin() {
     })
 
     if (result.success) {
+      loginError.value = ''
       const username = formData.username.trim()
       if (rememberMe.value && username) {
         localStorage.setItem('last_username', username)
@@ -127,13 +144,34 @@ async function handleLogin() {
         localStorage.removeItem('last_username')
       }
       router.push('/')
+      return
     }
+
+    loginError.value = result.error || authStore.error || '登录失败'
   } catch {
     // 表单校验错误由 Naive UI 自行提示
   }
 }
 
+function handleDismissError() {
+  loginError.value = ''
+  authStore.clearError()
+}
+
+watch(
+  () => `${formData.username}\n${formData.password}`,
+  (value) => {
+    if (!loginError.value) return
+    if (!lastSubmittedCredential.value) return
+    if (value !== lastSubmittedCredential.value) {
+      loginError.value = ''
+      authStore.clearError()
+    }
+  },
+)
+
 onMounted(() => {
+  authStore.clearError()
   const lastUsername = localStorage.getItem('last_username') || ''
   if (lastUsername) {
     formData.username = lastUsername
@@ -210,6 +248,24 @@ onMounted(() => {
   margin: 18px 0 0;
   font-size: 12px;
   color: #8a8a8a;
+}
+
+.login-error-alert {
+  margin-top: 14px;
+  border-radius: 12px;
+}
+
+.login-error-alert__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.login-error-alert__hint {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.56);
 }
 
 @media (max-width: 960px) {

@@ -42,6 +42,10 @@ type RequestLogListQuery struct {
 	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`
 }
 
+type DeleteRequestLogsRequest struct {
+	IDs []uint `json:"ids" binding:"required,min=1,dive,gt=0"`
+}
+
 // ListRequestLogs 获取请求日志列表（分页 + 筛选）
 func (h *RequestLogHandler) ListRequestLogs(c *gin.Context) {
 	var query RequestLogListQuery
@@ -129,11 +133,35 @@ func (h *RequestLogHandler) GetRequestLog(c *gin.Context) {
 	c.JSON(http.StatusOK, full)
 }
 
+// DeleteRequestLogs 批量删除请求日志，同时删除关联 detail / attempts。
+func (h *RequestLogHandler) DeleteRequestLogs(c *gin.Context) {
+	var req DeleteRequestLogsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	deleted, err := h.repo.DeleteByIDs(c.Request.Context(), req.IDs)
+	if err != nil {
+		h.logger.Warn("删除请求日志失败",
+			slog.Any("ids", req.IDs),
+			slog.String("error", err.Error()),
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除请求日志失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"deleted_count": deleted,
+	})
+}
+
 // RegisterRoutes 注册请求日志路由
 func (h *RequestLogHandler) RegisterRoutes(r *gin.RouterGroup) {
 	g := r.Group("/request-logs")
 	{
 		g.GET("", h.ListRequestLogs)
+		g.DELETE("", h.DeleteRequestLogs)
 		g.GET("/:trace_id", h.GetRequestLog)
 	}
 }

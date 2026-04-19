@@ -97,6 +97,10 @@ export interface RequestLogListResponse {
   items: RequestLog[]
 }
 
+export interface DeleteRequestLogsResponse {
+  deleted_count: number
+}
+
 class RequestLogService {
   async list(params?: RequestLogListParams): Promise<RequestLogListResponse> {
     const res = await apiClient.get<RequestLogListResponse>('/admin/api/request-logs', { params })
@@ -105,6 +109,13 @@ class RequestLogService {
 
   async get(traceID: string): Promise<RequestLogFull> {
     const res = await apiClient.get<RequestLogFull>(`/admin/api/request-logs/${traceID}`)
+    return res.data
+  }
+
+  async delete(ids: number[]): Promise<DeleteRequestLogsResponse> {
+    const res = await apiClient.delete<DeleteRequestLogsResponse>('/admin/api/request-logs', {
+      data: { ids },
+    })
     return res.data
   }
 }

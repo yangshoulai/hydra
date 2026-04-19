@@ -73,6 +73,10 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    function clearError() {
+        error.value = null
+    }
+
     return {
         // State
         token,
@@ -87,6 +91,7 @@ export const useAuthStore = defineStore('auth', () => {
         // Actions
         login,
         isTokenExpired,
-        setAuth
+        setAuth,
+        clearError
     }
 })

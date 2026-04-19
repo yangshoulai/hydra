@@ -28,13 +28,17 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as (RequestConfig & { _retry?: boolean }) | undefined
+    const requestUrl = originalRequest?.url || ''
+    const isAuthLoginRequest = requestUrl.includes('/auth/login')
+    const isAuthRefreshRequest = requestUrl.includes('/auth/refresh')
 
     // 401 刷新分支：保持原有行为
     if (
       originalRequest &&
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/auth/refresh')
+      !isAuthLoginRequest &&
+      !isAuthRefreshRequest
     ) {
       originalRequest._retry = true
 

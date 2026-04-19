@@ -185,6 +185,49 @@ func (r *RequestLogRepository) GetFull(ctx context.Context, traceID string) (*Re
 	return full, nil
 }
 
+// DeleteByIDs 按主键批量删除请求日志，并同步删除关联的 detail / attempts。
+// 返回删除的主记录条数。
+func (r *RequestLogRepository) DeleteByIDs(ctx context.Context, ids []uint) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	var deleted int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var logs []*models.RequestLog
+		if err := tx.Select("id", "trace_id").Where("id IN ?", ids).Find(&logs).Error; err != nil {
+			return err
+		}
+		if len(logs) == 0 {
+			deleted = 0
+			return nil
+		}
+
+		traceIDs := make([]string, 0, len(logs))
+		resolvedIDs := make([]uint, 0, len(logs))
+		for _, item := range logs {
+			traceIDs = append(traceIDs, item.TraceID)
+			resolvedIDs = append(resolvedIDs, item.ID)
+		}
+
+		if err := tx.Where("trace_id IN ?", traceIDs).Delete(&models.RequestLogAttempt{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("trace_id IN ?", traceIDs).Delete(&models.RequestLogDetail{}).Error; err != nil {
+			return err
+		}
+
+		res := tx.Where("id IN ?", resolvedIDs).Delete(&models.RequestLog{})
+		if res.Error != nil {
+			return res.Error
+		}
+		deleted = res.RowsAffected
+		return nil
+	})
+
+	return deleted, err
+}
+
 // DeleteOlderThan 删除 created_at 早于指定时间的所有日志（包含三张表）
 // 返回删除的主记录条数。
 func (r *RequestLogRepository) DeleteOlderThan(ctx context.Context, before time.Time) (int64, error) {

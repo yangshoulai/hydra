@@ -105,20 +105,15 @@ func seedDefaultProviders(db *gorm.DB) error {
 
 	now := time.Now()
 	providers := []models.Provider{
-		{ID: "openai", Name: "OpenAI", Icon: "https://openai.com/favicon.ico", Remark: "GPT 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "anthropic", Name: "Anthropic", Icon: "https://www.anthropic.com/favicon.ico", Remark: "Claude 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "google", Name: "Google", Icon: "https://ai.google.dev/favicon.ico", Remark: "Gemini 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "xai", Name: "xAI", Icon: "https://x.ai/favicon.ico", Remark: "Grok 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "meta", Name: "Meta", Icon: "https://ai.meta.com/favicon.ico", Remark: "Llama 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "mistral", Name: "Mistral AI", Icon: "https://mistral.ai/favicon.ico", Remark: "Mistral 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "cohere", Name: "Cohere", Icon: "https://cohere.com/favicon.ico", Remark: "Command 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "deepseek", Name: "DeepSeek", Icon: "https://www.deepseek.com/favicon.ico", Remark: "DeepSeek 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "alibaba", Name: "Alibaba Cloud", Icon: "https://www.aliyun.com/favicon.ico", Remark: "通义千问系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "baidu", Name: "Baidu", Icon: "https://www.baidu.com/favicon.ico", Remark: "文心大模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "zhipu", Name: "Zhipu AI", Icon: "https://www.zhipuai.cn/favicon.ico", Remark: "GLM 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "moonshot", Name: "Moonshot AI", Icon: "https://moonshot.cn/favicon.ico", Remark: "Kimi 系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "tencent", Name: "Tencent Cloud", Icon: "https://cloud.tencent.com/favicon.ico", Remark: "混元系列模型", CreatedAt: now, UpdatedAt: now},
-		{ID: "bytedance", Name: "ByteDance", Icon: "https://www.volcengine.com/favicon.ico", Remark: "豆包大模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "openai", Name: "OpenAI", Icon: "https://models.dev/logos/openai.svg", Remark: "GPT 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "anthropic", Name: "Anthropic", Icon: "https://models.dev/logos/anthropic.svg", Remark: "Claude 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "google", Name: "Google", Icon: "https://models.dev/logos/google.svg", Remark: "Gemini 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "xai", Name: "xAI", Icon: "https://models.dev/logos/xai.svg", Remark: "Grok 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "mistral", Name: "Mistral AI", Icon: "https://models.dev/logos/mistral.svg", Remark: "Mistral 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "deepseek", Name: "DeepSeek", Icon: "https://models.dev/logos/deepseek.svg", Remark: "DeepSeek 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "alibaba", Name: "Alibaba Cloud", Icon: "https://models.dev/logos/alibaba.svg", Remark: "通义千问系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "zai", Name: "Zhipu AI", Icon: "https://models.dev/logos/zai.svg", Remark: "GLM 系列模型", CreatedAt: now, UpdatedAt: now},
+		{ID: "moonshot", Name: "Moonshot AI", Icon: "https://models.dev/logos/moonshotai.svg", Remark: "Kimi 系列模型", CreatedAt: now, UpdatedAt: now},
 	}
 
 	return db.Create(&providers).Error

@@ -16,7 +16,7 @@
           <n-button size="small" type="primary" @click="showCreateDialog = true">
             <template #icon>
               <n-icon>
-                <AddOutline />
+                <AddOutline/>
               </n-icon>
             </template>
             添加模型
@@ -26,51 +26,53 @@
       <div class="panel-card__body">
         <div class="table-inline-search">
           <n-input
-            v-model:value="filters.name"
-            class="table-filter-input"
-            size="small"
-            clearable
-            placeholder="模型名称"
-            @keyup.enter="handleSearch"
+              v-model:value="filters.name"
+              class="table-filter-input"
+              size="small"
+              clearable
+              placeholder="模型名称"
+              @keyup.enter="handleSearch"
           >
             <template #prefix>
-              <n-icon><SearchOutline /></n-icon>
+              <n-icon>
+                <SearchOutline/>
+              </n-icon>
             </template>
           </n-input>
           <n-select
-            v-model:value="filters.provider_id"
-            class="table-filter-select"
-            size="small"
-            clearable
-            filterable
-            placeholder="厂商"
-            :options="providerOptions"
+              v-model:value="filters.provider_id"
+              class="table-filter-select"
+              size="small"
+              clearable
+              filterable
+              placeholder="厂商"
+              :options="providerOptions"
           />
           <n-button size="small" type="primary" @click="handleSearch">查询</n-button>
           <n-button size="small" quaternary @click="handleReset">重置</n-button>
         </div>
 
         <n-data-table
-          :columns="columns"
-          :data="models"
-          :pagination="false"
-          :loading="loading"
-          :locale="tableLocale"
-          :single-line="false"
-          :scroll-x="980"
-          :row-key="(row: Model) => row.id"
-          @update:sorter="handleSorterChange"
+            :columns="columns"
+            :data="models"
+            :pagination="false"
+            :loading="loading"
+            :locale="tableLocale"
+            :single-line="false"
+            :scroll-x="980"
+            :row-key="(row: Model) => row.id"
+            @update:sorter="handleSorterChange"
         />
 
         <div style="display: flex; justify-content: flex-end; margin-top: 16px">
           <n-pagination
-            :page="pagination.page"
-            :on-update-page="pagination.onChange"
-            :page-size="pagination.pageSize"
-            :on-update:page-size="pagination.onUpdatePageSize"
-            :item-count="pagination.total"
-            :page-sizes="pagination.pageSizes"
-            :show-size-picker="pagination.showSizePicker"
+              :page="pagination.page"
+              :on-update-page="pagination.onChange"
+              :page-size="pagination.pageSize"
+              :on-update:page-size="pagination.onUpdatePageSize"
+              :item-count="pagination.total"
+              :page-sizes="pagination.pageSizes"
+              :show-size-picker="pagination.showSizePicker"
           />
         </div>
       </div>
@@ -79,13 +81,13 @@
     <n-modal v-model:show="showCreateDialog" preset="card" title="添加模型" style="width: 520px">
       <n-form ref="createFormRef" :model="createForm" :rules="createRules" label-placement="top" size="medium">
         <n-form-item label="模型名称" path="name">
-          <n-input v-model:value="createForm.name" placeholder="例如：gpt-4o" @input="createForm.name = createForm.name.toLowerCase()" />
+          <n-input v-model:value="createForm.name" placeholder="例如：gpt-4o" @input="createForm.name = createForm.name.toLowerCase()"/>
         </n-form-item>
         <n-form-item label="所属厂商" path="provider_id">
-          <n-select v-model:value="createForm.provider_id" :options="providerOptions" filterable :loading="loadingProviders" placeholder="请选择厂商" />
+          <n-select v-model:value="createForm.provider_id" :options="providerOptions" filterable :loading="loadingProviders" placeholder="请选择厂商"/>
         </n-form-item>
         <n-form-item label="备注" path="remark">
-          <n-input v-model:value="createForm.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选备注" />
+          <n-input v-model:value="createForm.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选备注"/>
         </n-form-item>
       </n-form>
 
@@ -100,13 +102,13 @@
     <n-modal v-model:show="showEditDialog" preset="card" title="编辑模型" style="width: 520px">
       <n-form ref="editFormRef" :model="editForm" :rules="editRules" label-placement="top" size="medium">
         <n-form-item label="模型名称" path="name">
-          <n-input v-model:value="editForm.name" placeholder="请输入模型名称" @input="editForm.name = editForm.name?.toLowerCase()" />
+          <n-input v-model:value="editForm.name" placeholder="请输入模型名称" @input="editForm.name = editForm.name?.toLowerCase()"/>
         </n-form-item>
         <n-form-item label="所属厂商" path="provider_id">
-          <n-select v-model:value="editForm.provider_id" :options="providerOptions" filterable :loading="loadingProviders" placeholder="请选择厂商" />
+          <n-select v-model:value="editForm.provider_id" :options="providerOptions" filterable :loading="loadingProviders" placeholder="请选择厂商"/>
         </n-form-item>
         <n-form-item label="备注" path="remark">
-          <n-input v-model:value="editForm.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选备注" />
+          <n-input v-model:value="editForm.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选备注"/>
         </n-form-item>
       </n-form>
 
@@ -118,12 +120,12 @@
       </template>
     </n-modal>
 
-    <ModelChannelsDrawer :model-id="selectedModelId" :model-name="selectedModelName" v-model:show="showChannelsDrawer" />
+    <ModelChannelsDrawer :model-id="selectedModelId" :model-name="selectedModelName" v-model:show="showChannelsDrawer"/>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import {computed, h, onMounted, reactive, ref} from 'vue'
 import {
   type DataTableColumns,
   type FormInst,
@@ -143,12 +145,12 @@ import {
   NText,
   NTooltip,
 } from 'naive-ui'
-import { AddOutline, CopyOutline, LayersOutline, PencilOutline, SearchOutline, TrashOutline } from '@vicons/ionicons5'
-import { type CreateModelRequest, modelApi, type UpdateModelRequest } from '@/services/modelService'
-import type { Model, ModelListParams, Provider } from '@/types/model'
+import {AddOutline, CopyOutline, LayersOutline, PencilOutline, SearchOutline, TrashOutline} from '@vicons/ionicons5'
+import {type CreateModelRequest, modelApi, type UpdateModelRequest} from '@/services/modelService'
+import type {Model, ModelListParams, Provider} from '@/types/model'
 import providerApi from '@/services/providerService'
 import ModelChannelsDrawer from '@/components/ModelChannelsDrawer.vue'
-import { getErrorMessage, toastApiError } from '@/utils/error'
+import {getErrorMessage, toastApiError} from '@/utils/error'
 
 const loading = ref(false)
 const listError = ref('')
@@ -195,12 +197,12 @@ const editForm = reactive<UpdateModelRequest>({
 })
 
 const createRules: FormRules = {
-  name: { required: true, message: '请输入模型名称', trigger: ['blur', 'input'] },
-  provider_id: { required: true, type: 'string', message: '请选择厂商', trigger: ['blur', 'change'] },
+  name: {required: true, message: '请输入模型名称', trigger: ['blur', 'input']},
+  provider_id: {required: true, type: 'string', message: '请选择厂商', trigger: ['blur', 'change']},
 }
 
 const editRules: FormRules = {
-  name: { required: true, message: '请输入模型名称', trigger: ['blur', 'input'] },
+  name: {required: true, message: '请输入模型名称', trigger: ['blur', 'input']},
 }
 
 const tableLocale = computed(() => ({
@@ -243,52 +245,53 @@ const columns = computed<DataTableColumns<Model>>(() => [
   {
     title: '模型名称',
     key: 'name',
-    minWidth: 260,
+    width: 280,
     sortable: true,
     sorter: 'default',
     sortOrder: getSortOrder('name'),
     render: (row) =>
-      h(NSpace, { size: 8, align: 'center' }, {
-        default: () => [
-          h(NText, { code: true, style: 'max-width: 280px' }, { default: () => row.name }),
-          h(
-            NTooltip,
-            null,
-            {
-              trigger: () =>
-                h(
-                  NButton,
-                  {
-                    class: 'table-action-btn',
-                    quaternary: true,
-                    circle: true,
-                    size: 'tiny',
-                    'aria-label': `复制模型名 ${row.name}`,
-                    onClick: (event: MouseEvent) => handleCopyModelName(row, event),
-                  },
-                  { icon: () => h(NIcon, null, { default: () => h(CopyOutline) }) },
-                ),
-              default: () => '复制模型名',
-            },
-          ),
-        ],
-      }),
+        h(NSpace, {size: 8, align: 'center'}, {
+          default: () => [
+            h(NText, {code: true, style: 'max-width: 280px'}, {default: () => row.name}),
+            h(
+                NTooltip,
+                null,
+                {
+                  trigger: () =>
+                      h(
+                          NButton,
+                          {
+                            class: 'table-action-btn',
+                            quaternary: true,
+                            circle: true,
+                            size: 'tiny',
+                            'aria-label': `复制模型名 ${row.name}`,
+                            onClick: (event: MouseEvent) => handleCopyModelName(row, event),
+                          },
+                          {icon: () => h(NIcon, null, {default: () => h(CopyOutline)})},
+                      ),
+                  default: () => '复制模型名',
+                },
+            ),
+          ],
+        }),
   },
   {
     title: '厂商',
     key: 'provider',
-    width: 150,
+    width: 160,
+    align: 'center',
     render: (row) => {
       if (!row.provider) {
-        return h(NTag, { bordered: false, size: 'small' }, { default: () => '未设置' })
+        return h(NTag, {bordered: false, size: 'small'}, {default: () => '未设置'})
       }
-      return h(NTag, { type: 'info', bordered: false, size: 'small' }, { default: () => row.provider?.name })
+      return h(NTag, {type: 'info', bordered: false, size: 'small'}, {default: () => row.provider?.name})
     },
   },
   {
     title: '渠道数',
     key: 'channel_count',
-    width: 100,
+    width: 120,
     align: 'center',
     render: (row) => row.channel_count ?? 0,
   },
@@ -303,7 +306,7 @@ const columns = computed<DataTableColumns<Model>>(() => [
     title: '备注',
     key: 'remark',
     minWidth: 160,
-    ellipsis: { tooltip: true },
+    ellipsis: {tooltip: true},
   },
   {
     title: '操作',
@@ -312,31 +315,31 @@ const columns = computed<DataTableColumns<Model>>(() => [
     fixed: 'right',
     align: 'center',
     render: (row) =>
-      h(NSpace, { size: 4, justify: 'center', class: 'table-action-group' }, {
-        default: () => [
-          renderActionIcon({
-            tooltip: '关联渠道',
-            ariaLabel: `查看模型 ${row.name} 的关联渠道`,
-            icon: LayersOutline,
-            type: 'info',
-            onClick: () => handleViewChannels(row),
-          }),
-          renderActionIcon({
-            tooltip: '编辑',
-            ariaLabel: `编辑模型 ${row.name}`,
-            icon: PencilOutline,
-            type: 'warning',
-            onClick: () => handleEdit(row),
-          }),
-          renderActionIcon({
-            tooltip: '删除',
-            ariaLabel: `删除模型 ${row.name}`,
-            icon: TrashOutline,
-            type: 'error',
-            onClick: () => handleDelete(row),
-          }),
-        ],
-      }),
+        h(NSpace, {size: 4, justify: 'center', class: 'table-action-group'}, {
+          default: () => [
+            renderActionIcon({
+              tooltip: '关联渠道',
+              ariaLabel: `查看模型 ${row.name} 的关联渠道`,
+              icon: LayersOutline,
+              type: 'info',
+              onClick: () => handleViewChannels(row),
+            }),
+            renderActionIcon({
+              tooltip: '编辑',
+              ariaLabel: `编辑模型 ${row.name}`,
+              icon: PencilOutline,
+              type: 'warning',
+              onClick: () => handleEdit(row),
+            }),
+            renderActionIcon({
+              tooltip: '删除',
+              ariaLabel: `删除模型 ${row.name}`,
+              icon: TrashOutline,
+              type: 'error',
+              onClick: () => handleDelete(row),
+            }),
+          ],
+        }),
   },
 ])
 
@@ -348,27 +351,27 @@ function renderActionIcon(options: {
   onClick: () => void
 }) {
   return h(
-    NTooltip,
-    null,
-    {
-      trigger: () =>
-        h(
-          NButton,
-          {
-            class: 'table-action-btn',
-            size: 'tiny',
-            quaternary: true,
-            type: options.type,
-            circle: true,
-            'aria-label': options.ariaLabel,
-            onClick: options.onClick,
-          },
-          {
-            icon: () => h(NIcon, null, { default: () => h(options.icon) }),
-          },
-        ),
-      default: () => options.tooltip,
-    },
+      NTooltip,
+      null,
+      {
+        trigger: () =>
+            h(
+                NButton,
+                {
+                  class: 'table-action-btn',
+                  size: 'tiny',
+                  quaternary: true,
+                  type: options.type,
+                  circle: true,
+                  'aria-label': options.ariaLabel,
+                  onClick: options.onClick,
+                },
+                {
+                  icon: () => h(NIcon, null, {default: () => h(options.icon)}),
+                },
+            ),
+        default: () => options.tooltip,
+      },
   )
 }
 
@@ -524,9 +527,9 @@ function handleViewChannels(model: Model) {
 function handleCopyModelName(model: Model, event: MouseEvent) {
   event.stopPropagation()
   navigator.clipboard
-    .writeText(model.name)
-    .then(() => window.$message?.success(`已复制模型名：${model.name}`))
-    .catch(() => window.$message?.error('复制失败'))
+      .writeText(model.name)
+      .then(() => window.$message?.success(`已复制模型名：${model.name}`))
+      .catch(() => window.$message?.error('复制失败'))
 }
 
 onMounted(() => {

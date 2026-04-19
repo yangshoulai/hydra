@@ -347,17 +347,17 @@ const columns = computed<DataTableColumns<Token>>(() => [
   {
     title: '名称',
     key: 'name',
-    width: 160,
+    width: 180,
     ellipsis: { tooltip: true },
   },
   {
-    title: '令牌预览',
+    title: '令牌',
     key: 'token_preview',
     width: 240,
     render: (row) => h(NText, { code: true, style: 'font-size: 12px' }, { default: () => row.token_preview }),
   },
   {
-    title: '模型权限',
+    title: '模型',
     key: 'allowed_models',
     minWidth: 200,
     render: (row) => {
@@ -381,14 +381,14 @@ const columns = computed<DataTableColumns<Token>>(() => [
   {
     title: 'Token 用量',
     key: 'token_usage',
-    width: 160,
+    width: 180,
     align: 'right',
     render: (row) => `${row.prompt_tokens.toLocaleString()} / ${row.completion_tokens.toLocaleString()}`,
   },
   {
     title: '状态',
     key: 'status',
-    width: 100,
+    width: 120,
     align: 'center',
     sortable: true,
     sorter: 'default',
@@ -410,14 +410,14 @@ const columns = computed<DataTableColumns<Token>>(() => [
   {
     title: '过期时间',
     key: 'expires_at',
-    width: 160,
+    width: 180,
     align: 'center',
     render: (row) => row.expires_at || '永不过期',
   },
   {
     title: '创建时间',
     key: 'created_at',
-    width: 170,
+    width: 180,
     align: 'center',
     sortable: true,
     sorter: 'default',
@@ -426,7 +426,7 @@ const columns = computed<DataTableColumns<Token>>(() => [
   {
     title: '最后使用',
     key: 'last_used_at',
-    width: 170,
+    width: 180,
     align: 'center',
     sortable: true,
     sorter: 'default',
@@ -436,7 +436,7 @@ const columns = computed<DataTableColumns<Token>>(() => [
   {
     title: '操作',
     key: 'actions',
-    width: 170,
+    width: 180,
     fixed: 'right',
     align: 'center',
     render: (row) =>

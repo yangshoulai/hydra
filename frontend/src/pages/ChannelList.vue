@@ -206,7 +206,7 @@ const columns = computed<DataTableColumns<Channel>>(() => [
   {
     title: '状态',
     key: 'status',
-    width: 90,
+    width: 120,
     align: 'center',
     sortable: true,
     sorter: 'default',
@@ -221,7 +221,7 @@ const columns = computed<DataTableColumns<Channel>>(() => [
   {
     title: '权重',
     key: 'weight',
-    width: 110,
+    width: 120,
     align: 'right',
     sortable: true,
     sorter: 'default',
@@ -230,28 +230,28 @@ const columns = computed<DataTableColumns<Channel>>(() => [
   {
     title: '模型数',
     key: 'model_count',
-    width: 100,
+    width: 120,
     align: 'right',
     render: (row) => `${row.model_stats?.active || 0} / ${row.model_stats?.inactive || 0}`,
   },
   {
     title: '密钥数',
     key: 'key_stats',
-    width: 100,
+    width: 120,
     align: 'right',
     render: (row) => `${row.key_stats?.active || 0} / ${row.key_stats?.inactive || 0}`,
   },
   {
     title: '更新时间',
     key: 'updated_at',
-    width: 170,
+    width: 180,
     align: 'center',
     render: (row) => new Date(row.updated_at).toLocaleString('zh-CN'),
   },
   {
     title: '操作',
     key: 'actions',
-    width: 172,
+    width: 180,
     fixed: 'right',
     align: 'center',
     render: (row) =>
