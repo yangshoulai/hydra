@@ -365,7 +365,7 @@ async function handleTestChannelKey(channelKeyId: number) {
 
     testResults.value.set(channelKeyId, {
       status: 'error',
-      message: error.response?.data?.error || '测试失败',
+      message: (err as any)?.response?.data?.error || '测试失败',
       latency: '-',
     })
   } finally {

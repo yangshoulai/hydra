@@ -50,6 +50,7 @@ export interface RequestLogAttempt {
   channel_name: string
   channel_model: string
   key_id: number
+  key_name: string
   key_masked: string
   upstream_url: string
   duration_ms: number

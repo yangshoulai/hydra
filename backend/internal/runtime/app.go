@@ -303,7 +303,7 @@ func registerStaticRoutes(router *gin.Engine, logger *slog.Logger) {
 	router.Static("/static", staticDir)
 	router.Static("/assets", staticDir+"/assets")
 	router.StaticFile("/", staticDir+"/index.html")
-	router.StaticFile("/favicon.svg", staticDir+"/vite.svg")
+	router.StaticFile("/favicon.svg", staticDir+"/favicon.svg")
 
 	router.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path

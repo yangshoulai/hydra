@@ -140,8 +140,8 @@ const filters = reactive<ChannelListParams>({
 })
 
 const sortState = reactive({
-  columnKey: '' as 'id' | 'name' | 'weight' | 'status' | '',
-  order: false as boolean | 'asc' | 'desc',
+  columnKey: 'id' as 'id' | 'name' | 'weight' | 'status' | '',
+  order: 'asc' as boolean | 'asc' | 'desc',
 })
 
 const statusOptions = [
@@ -344,10 +344,8 @@ async function fetchChannels() {
       status: filters.status || undefined,
     }
 
-    if (sortState.columnKey && sortState.order) {
-      params.sort_by = sortState.columnKey
-      params.sort_order = sortState.order as 'asc' | 'desc'
-    }
+    params.sort_by = (sortState.columnKey || 'id') as 'id' | 'name' | 'weight' | 'status'
+    params.sort_order = (sortState.order || 'asc') as 'asc' | 'desc'
 
     const result = await channelApi.list(params)
     channels.value = result.items
@@ -369,6 +367,8 @@ function handleReset() {
   filters.name = ''
   filters.base_url = ''
   filters.status = null
+  sortState.columnKey = 'id'
+  sortState.order = 'asc'
   pagination.page = 1
   fetchChannels()
 }
@@ -376,10 +376,10 @@ function handleReset() {
 function handleSorterChange(sorter: { columnKey: string; order: 'ascend' | 'descend' | false }) {
   if (sorter.columnKey) {
     sortState.columnKey = sorter.columnKey as 'id' | 'name' | 'weight' | 'status'
-    sortState.order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : false
+    sortState.order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : 'asc'
   } else {
-    sortState.columnKey = ''
-    sortState.order = false
+    sortState.columnKey = 'id'
+    sortState.order = 'asc'
   }
 
   pagination.page = 1

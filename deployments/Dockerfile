@@ -30,7 +30,12 @@ COPY backend/ ./
 COPY --from=frontend-builder /app/frontend/dist ./static
 
 # Build Go binary
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o hydra ./cmd/hydra
+# buildTime 通过 ldflags 注入：main.buildTime 默认是 "unknown"，这里写入构建当日 UTC 时间
+RUN BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" && \
+    CGO_ENABLED=1 GOOS=linux go build \
+      -ldflags "-X main.buildTime=${BUILD_TIME}" \
+      -a -installsuffix cgo \
+      -o hydra ./cmd/hydra
 
 # Stage 3: Production Image
 FROM alpine:3.20
@@ -48,11 +53,15 @@ ENV TZ=Asia/Shanghai
 # Create non-root user (uid 1000 matches common host users for bind-mount friendliness)
 RUN adduser -D -u 1000 hydra
 
+# 预先创建数据目录并 chown 到 hydra，避免 VOLUME 自动建出的匿名卷属主是 root、
+# 导致非 root 进程无法写入 /app/data/logs
+RUN mkdir -p /app/data && chown -R hydra:hydra /app/data
+
 # Copy binary and static files with correct ownership
 COPY --from=backend-builder --chown=hydra:hydra /app/hydra ./
 COPY --from=backend-builder --chown=hydra:hydra /app/static ./static
 
-# Data directory; ensureDataDir 会在启动时自行创建，这里仅声明挂载点
+# Data directory; VOLUME 必须在 chown 之后声明，否则属主仍是 root
 VOLUME /app/data
 
 USER hydra

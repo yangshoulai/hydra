@@ -8,8 +8,7 @@ import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import { LinearGradient } from 'echarts/lib/util/graphic'
-import type { ECharts, ComposeOption } from 'echarts/core'
+import { graphic, type ECharts, type ComposeOption } from 'echarts/core'
 import type { LineSeriesOption } from 'echarts/charts'
 import type { GridComponentOption, TooltipComponentOption } from 'echarts/components'
 import type { QPSDataPoint } from '@/services/dashboardService'
@@ -97,7 +96,7 @@ const updateChart = () => {
         smooth: true,
         data: qpsValues,
         areaStyle: {
-          color: new LinearGradient(0, 0, 0, 1, [
+          color: new graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(64, 64, 64, 0.28)' },
             { offset: 1, color: 'rgba(64, 64, 64, 0.04)' },
           ]),

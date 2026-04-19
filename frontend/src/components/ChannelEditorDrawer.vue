@@ -411,6 +411,25 @@ const rules: FormRules = {
 const isEdit = computed(() => !!props.channel)
 const drawerTitle = computed(() => (isEdit.value ? `编辑渠道 · ${props.channel?.name}` : '新建渠道'))
 
+function resetCreateState() {
+  currentChannelId.value = 0
+  formData.name = ''
+  formData.base_url = ''
+  formData.weight = 100
+  formData.status = 'active'
+  formData.description = ''
+  channelKeys.value = []
+  pendingKeys.value = []
+  manualGroups.value = ['Default']
+  showAddGroupDialog.value = false
+  addGroupName.value = ''
+  showAddKeyDialog.value = false
+  addKeyForm.group = 'Default'
+  addKeyForm.keyLines = ''
+  addKeyForm.remark = ''
+  formRef.value?.restoreValidation()
+}
+
 const keyGroups = computed<KeyGroupPanel[]>(() => {
   const groupMap = new Map<string, KeyGroupPanel>()
 
@@ -634,15 +653,7 @@ watch(
   () => props.channel,
   (channel) => {
     if (!channel) {
-      currentChannelId.value = 0
-      formData.name = ''
-      formData.base_url = ''
-      formData.weight = 100
-      formData.status = 'active'
-      formData.description = ''
-      channelKeys.value = []
-      pendingKeys.value = []
-      manualGroups.value = ['Default']
+      resetCreateState()
       return
     }
 
@@ -662,6 +673,18 @@ watch(
 watch(
   () => props.modelValue,
   (show) => {
+    if (!show) {
+      if (!props.channel) {
+        resetCreateState()
+      }
+      return
+    }
+
+    if (!props.channel) {
+      resetCreateState()
+      return
+    }
+
     if (show && props.channel?.id) {
       currentChannelId.value = props.channel.id
       refreshChannelKeys()
@@ -837,6 +860,9 @@ async function handleToggleChannelKeyStatus(channelKeyId: number, targetStatus: 
 }
 
 function handleCancel() {
+  if (!isEdit.value) {
+    resetCreateState()
+  }
   visible.value = false
 }
 </script>
