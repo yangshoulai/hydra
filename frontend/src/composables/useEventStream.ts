@@ -32,6 +32,7 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
   let controller: AbortController | null = null
   let closedByUser = false
   let connecting = false
+  let connectionVersion = 0
 
   const clearReconnectTimer = () => {
     if (reconnectTimer !== null) {
@@ -76,13 +77,23 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
     retryDelay = Math.min(maxRetryDelay, retryDelay * 2)
   }
 
-  const connect = async () => {
-    if (closedByUser || connecting) return
+  const connect = async (force = false) => {
+    if (closedByUser) return
+    if (force) {
+      clearReconnectTimer()
+      connectionVersion += 1
+      controller?.abort()
+      controller = null
+      isConnected.value = false
+      connecting = false
+    }
+    if (connecting) return
+
     connecting = true
     clearReconnectTimer()
-
-    controller?.abort()
-    controller = new AbortController()
+    const currentVersion = ++connectionVersion
+    const currentController = new AbortController()
+    controller = currentController
 
     const targetURL = typeof options.url === 'function' ? options.url() : options.url
 
@@ -99,8 +110,12 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
       const response = await fetch(resolveURL(targetURL), {
         method: 'GET',
         headers,
-        signal: controller.signal,
+        signal: currentController.signal,
       })
+
+      if (currentVersion !== connectionVersion) {
+        return
+      }
 
       if (!response.ok || !response.body) {
         throw new Error(`stream request failed: ${response.status}`)
@@ -117,6 +132,9 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+        if (currentVersion !== connectionVersion) {
+          return
+        }
 
         buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
         let splitIndex = buffer.indexOf('\n\n')
@@ -127,6 +145,9 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
           const frame = parseFrame(block)
           if (frame && frame.eventName === targetEvent) {
             try {
+              if (currentVersion !== connectionVersion) {
+                return
+              }
               const parsed = options.parse
                 ? options.parse(frame.payload, frame.eventName)
                 : (JSON.parse(frame.payload) as T)
@@ -141,11 +162,19 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
         }
       }
 
+      if (currentVersion !== connectionVersion) {
+        return
+      }
+
       isConnected.value = false
       if (!closedByUser) {
         scheduleReconnect()
       }
     } catch (streamError) {
+      if (currentVersion !== connectionVersion) {
+        return
+      }
+
       isConnected.value = false
 
       if (streamError instanceof Error && streamError.name === 'AbortError') {
@@ -155,22 +184,30 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
       error.value = streamError instanceof Error ? streamError : new Error(String(streamError))
       scheduleReconnect()
     } finally {
-      connecting = false
+      if (currentVersion === connectionVersion) {
+        connecting = false
+        if (controller === currentController) {
+          controller = null
+        }
+      }
     }
   }
 
   const close = () => {
     closedByUser = true
     clearReconnectTimer()
+    connectionVersion += 1
     controller?.abort()
     controller = null
     isConnected.value = false
+    connecting = false
   }
 
   const reconnect = () => {
     closedByUser = false
     retryDelay = initialRetryDelay
-    void connect()
+    error.value = null
+    void connect(true)
   }
 
   if (autoStart) {

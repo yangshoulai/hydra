@@ -544,8 +544,8 @@ async function handleRefresh() {
 async function handleQPSRangeChange(value: DashboardQPSRange) {
   if (qpsRange.value === value) return
   qpsRange.value = value
-  await loadFallbackData()
   reconnect()
+  await loadFallbackData()
 }
 
 function formatRemainingSeconds(totalSeconds: number): string {
