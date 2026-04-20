@@ -235,6 +235,7 @@ import {
 import tokensService, { type CreateTokenResponse, type Token, type TokenListParams } from '@/services/tokensService'
 import { modelApi } from '@/services/modelService'
 import { toastApiError } from '@/utils/error'
+import { formatCompactNumber } from '@/utils/number'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -383,7 +384,7 @@ const columns = computed<DataTableColumns<Token>>(() => [
     key: 'token_usage',
     width: 180,
     align: 'right',
-    render: (row) => `${row.prompt_tokens.toLocaleString()} / ${row.completion_tokens.toLocaleString()}`,
+    render: (row) => `${formatCompactNumber(row.prompt_tokens)} / ${formatCompactNumber(row.completion_tokens)}`,
   },
   {
     title: '状态',

@@ -24,12 +24,13 @@ func NewResponseSniffer(logger *slog.Logger) *ResponseSniffer {
 
 // SniffResult 嗅探结果
 type SniffResult struct {
-	IsFake200   bool   // 是否为假 200
-	MatchedRule string // 匹配的规则名称
-	Body        []byte // 响应 Body
-	ContentType string // Content-Type
-	StatusCode  int    // HTTP 状态码
-	IsStream    bool   // 是否流式响应
+	IsFake200     bool   // 是否为假 200
+	MatchedRule   string // 匹配的规则名称
+	MatchedReason string // 命中的详细原因
+	Body          []byte // 响应 Body
+	ContentType   string // Content-Type
+	StatusCode    int    // HTTP 状态码
+	IsStream      bool   // 是否流式响应
 }
 
 // Sniff 根据响应元信息与探测报文执行嗅探
@@ -41,12 +42,13 @@ func (s *ResponseSniffer) Sniff(resp *http.Response, isStream bool, payload []by
 	}
 	contentType := resp.Header.Get("Content-Type")
 	result := &SniffResult{
-		IsFake200:   false,
-		MatchedRule: "",
-		Body:        payload,
-		ContentType: contentType,
-		StatusCode:  resp.StatusCode,
-		IsStream:    isStream,
+		IsFake200:     false,
+		MatchedRule:   "",
+		MatchedReason: "",
+		Body:          payload,
+		ContentType:   contentType,
+		StatusCode:    resp.StatusCode,
+		IsStream:      isStream,
 	}
 
 	// 只检查 HTTP 200 响应
@@ -59,14 +61,17 @@ func (s *ResponseSniffer) Sniff(resp *http.Response, isStream bool, payload []by
 		if rule.Check(payload, contentType) {
 			result.IsFake200 = true
 			result.MatchedRule = rule.Name()
+			result.MatchedReason = rule.Explain(payload, contentType)
 
-			s.logger.Debug("Fake 200 response detected",
+			logAttrs := []any{
 				"trace_id", traceID,
-				"rule", rule.Name(),
+				"rule", result.MatchedRule,
+				"reason", result.MatchedReason,
 				"is_stream", isStream,
 				"content_type", contentType,
 				"body_preview", truncateString(string(payload), 200),
-			)
+			}
+			s.logger.Warn("命中假 200 嗅探规则，响应被判定为异常", logAttrs...)
 			break
 		}
 	}

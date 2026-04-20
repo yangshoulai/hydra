@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -23,6 +24,11 @@ type dashboardStreamFrame struct {
 
 type dashboardMetricsQuery struct {
 	QPSRange string `form:"qps_range" binding:"omitempty,oneof=1h 6h 24h"`
+}
+
+type clearCircuitRequest struct {
+	Kind string `json:"kind" binding:"required,oneof=key model"`
+	ID   uint   `json:"id" binding:"required,min=1"`
 }
 
 // NewDashboardHandler 创建仪表盘处理器
@@ -131,6 +137,46 @@ func (h *DashboardHandler) GetCircuitStatus(c *gin.Context) {
 	})
 }
 
+// ClearCircuit 手动清除熔断状态
+// POST /admin/api/dashboard/circuits/clear
+func (h *DashboardHandler) ClearCircuit(c *gin.Context) {
+	var req clearCircuitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	result, err := h.dashboardService.ClearCircuit(c.Request.Context(), req.Kind, req.ID)
+	if err != nil {
+		switch {
+		case errors.Is(err, admin.ErrInvalidCircuitKind):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Invalid circuit kind",
+				"message": err.Error(),
+			})
+		case errors.Is(err, admin.ErrCircuitTargetNotFound):
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Circuit target not found",
+				"message": err.Error(),
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to clear circuit status",
+				"message": err.Error(),
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "circuit status cleared",
+		"data":    result,
+	})
+}
+
 // StreamMetrics SSE 推送仪表盘指标
 // GET /admin/api/dashboard/metrics/stream
 func (h *DashboardHandler) StreamMetrics(c *gin.Context) {
@@ -211,6 +257,7 @@ func (h *DashboardHandler) RegisterRoutes(router *gin.RouterGroup) {
 	dashboard := router.Group("/dashboard")
 	{
 		dashboard.GET("/circuits", h.GetCircuitStatus)
+		dashboard.POST("/circuits/clear", h.ClearCircuit)
 		metrics := dashboard.Group("/metrics")
 		{
 			metrics.GET("", h.GetMetrics)

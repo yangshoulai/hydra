@@ -165,6 +165,13 @@ class DashboardService {
     return response.data.data || []
   }
 
+  async clearCircuit(kind: CircuitSnapshot['kind'], id: number): Promise<void> {
+    await apiClient.post('/admin/api/dashboard/circuits/clear', {
+      kind,
+      id,
+    })
+  }
+
   openMetricsStream(
     onMessage: (frame: DashboardFrame) => void,
     qpsRange: DashboardQPSRange = '1h',

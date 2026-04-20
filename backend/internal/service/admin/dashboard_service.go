@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sort"
 	"time"
@@ -13,13 +14,14 @@ import (
 
 // DashboardService 仪表盘服务
 type DashboardService struct {
-	logger         *slog.Logger
-	channelRepo    *repository.ChannelRepository
-	channelKeyRepo *repository.ChannelKeyRepository
-	modelRepo      *repository.ModelRepository
-	requestLogRepo *repository.RequestLogRepository
-	circuitManager *circuit.CircuitManager
-	runtimeMetrics *metricsService.RuntimeMetrics
+	logger          *slog.Logger
+	channelRepo     *repository.ChannelRepository
+	channelKeyRepo  *repository.ChannelKeyRepository
+	modelConfigRepo *repository.ChannelModelConfigRepository
+	modelRepo       *repository.ModelRepository
+	requestLogRepo  *repository.RequestLogRepository
+	circuitManager  *circuit.CircuitManager
+	runtimeMetrics  *metricsService.RuntimeMetrics
 }
 
 // NewDashboardService 创建仪表盘服务
@@ -27,24 +29,31 @@ func NewDashboardService(
 	logger *slog.Logger,
 	channelRepo *repository.ChannelRepository,
 	channelKeyRepo *repository.ChannelKeyRepository,
+	modelConfigRepo *repository.ChannelModelConfigRepository,
 	modelRepo *repository.ModelRepository,
 	requestLogRepo *repository.RequestLogRepository,
 	circuitManager *circuit.CircuitManager,
 	runtimeMetrics *metricsService.RuntimeMetrics,
 ) *DashboardService {
 	return &DashboardService{
-		logger:         logger,
-		channelRepo:    channelRepo,
-		channelKeyRepo: channelKeyRepo,
-		modelRepo:      modelRepo,
-		requestLogRepo: requestLogRepo,
-		circuitManager: circuitManager,
-		runtimeMetrics: runtimeMetrics,
+		logger:          logger,
+		channelRepo:     channelRepo,
+		channelKeyRepo:  channelKeyRepo,
+		modelConfigRepo: modelConfigRepo,
+		modelRepo:       modelRepo,
+		requestLogRepo:  requestLogRepo,
+		circuitManager:  circuitManager,
+		runtimeMetrics:  runtimeMetrics,
 	}
 }
 
 const (
 	dashboardStatsWindow = 24 * time.Hour
+)
+
+var (
+	ErrInvalidCircuitKind    = errors.New("invalid circuit kind")
+	ErrCircuitTargetNotFound = errors.New("circuit target not found")
 )
 
 type QPSRange string
@@ -75,6 +84,12 @@ type DashboardSuccessRateMetrics struct {
 type DashboardChannelHealthMetrics struct {
 	OverallHealth     OverallHealthStatus    `json:"overall_health"`
 	ChannelHealthList []ChannelHealthMetrics `json:"channel_health_list"`
+}
+
+type ClearCircuitResult struct {
+	Kind           string `json:"kind"`
+	ID             uint   `json:"id"`
+	RestoredStatus bool   `json:"restored_status"`
 }
 
 type dashboardLogSnapshot struct {
@@ -221,6 +236,72 @@ func (s *DashboardService) GetChannelHealthMetrics(ctx context.Context) (*Dashbo
 // GetCircuitStatus 获取熔断状态快照
 func (s *DashboardService) GetCircuitStatus(_ context.Context) ([]circuit.BreakerSnapshot, error) {
 	return s.circuitManager.SnapshotBreakers(), nil
+}
+
+// ClearCircuit 手动清除熔断状态
+func (s *DashboardService) ClearCircuit(ctx context.Context, kind string, id uint) (*ClearCircuitResult, error) {
+	switch kind {
+	case "key":
+		channelKey, err := s.channelKeyRepo.FindByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if channelKey == nil {
+			return nil, ErrCircuitTargetNotFound
+		}
+
+		restoredStatus := false
+		if channelKey.Status == "inactive" {
+			channelKey.Status = "active"
+			if err := s.channelKeyRepo.Update(ctx, channelKey); err != nil {
+				return nil, err
+			}
+			restoredStatus = true
+		}
+
+		s.circuitManager.RemoveKeyBreaker(id)
+		s.logger.Info("手动清除密钥熔断状态",
+			slog.Uint64("key_id", uint64(id)),
+			slog.Bool("restored_status", restoredStatus),
+		)
+
+		return &ClearCircuitResult{
+			Kind:           kind,
+			ID:             id,
+			RestoredStatus: restoredStatus,
+		}, nil
+	case "model":
+		modelConfig, err := s.modelConfigRepo.FindByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if modelConfig == nil {
+			return nil, ErrCircuitTargetNotFound
+		}
+
+		restoredStatus := false
+		if modelConfig.Status == "inactive" {
+			modelConfig.Status = "active"
+			if err := s.modelConfigRepo.Update(ctx, modelConfig); err != nil {
+				return nil, err
+			}
+			restoredStatus = true
+		}
+
+		s.circuitManager.RemoveModelConfigBreaker(id)
+		s.logger.Info("手动清除模型配置熔断状态",
+			slog.Uint64("model_config_id", uint64(id)),
+			slog.Bool("restored_status", restoredStatus),
+		)
+
+		return &ClearCircuitResult{
+			Kind:           kind,
+			ID:             id,
+			RestoredStatus: restoredStatus,
+		}, nil
+	default:
+		return nil, ErrInvalidCircuitKind
+	}
 }
 
 func (s *DashboardService) buildChannelHealthMetrics(

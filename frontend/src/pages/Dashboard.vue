@@ -182,7 +182,7 @@
       <section class="panel-card">
         <header class="panel-card__header">
           <h3 class="panel-card__title">熔断状态</h3>
-          <n-tag :bordered="false" size="small">{{ circuits.length }} 项冷却中</n-tag>
+          <n-tag :bordered="false" size="small">{{ circuits.length }} 项异常</n-tag>
         </header>
         <div class="panel-card__body">
           <n-data-table
@@ -195,7 +195,7 @@
             :pagination="false"
             :single-line="false"
             striped
-            :scroll-x="860"
+            :scroll-x="980"
           />
         </div>
       </section>
@@ -234,6 +234,9 @@ import {
   NSpace,
   NTag,
   NText,
+  NTooltip,
+  useDialog,
+  useMessage,
 } from 'naive-ui'
 import {
   CheckmarkCircleOutline,
@@ -256,6 +259,8 @@ import type {
   ModelDetailInfo,
 } from '@/services/dashboardService'
 import dashboardService from '@/services/dashboardService'
+import { getErrorMessage } from '@/utils/error'
+import { formatCompactNumber } from '@/utils/number'
 import { useEventStream } from '@/composables/useEventStream'
 import QpsChart from '@/components/QpsChart.vue'
 
@@ -265,6 +270,9 @@ const isLoading = ref(false)
 const fallbackError = ref<Error | null>(null)
 const lastUpdatedAt = ref('')
 const qpsRange = ref<DashboardQPSRange>('1h')
+const clearingCircuitKeys = ref(new Set<string>())
+const dialog = useDialog()
+const message = useMessage()
 
 const qpsRangeOptions: Array<{ label: string; value: DashboardQPSRange }> = [
   { label: '1h', value: '1h' },
@@ -478,6 +486,38 @@ const circuitColumns: DataTableColumns<CircuitSnapshot> = [
     align: 'right',
     render: (row) => (row.state === 'cooling' ? formatRemainingSeconds(row.remaining_sec) : '-'),
   },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 90,
+    fixed: 'right',
+    align: 'center',
+    render: (row) =>
+      h(
+        NTooltip,
+        null,
+        {
+          trigger: () =>
+            h(
+              NButton,
+              {
+                class: 'table-action-btn',
+                size: 'tiny',
+                quaternary: true,
+                circle: true,
+                type: 'success',
+                loading: isClearingCircuit(row),
+                'aria-label': getClearCircuitTooltip(row),
+                onClick: () => handleClearCircuitConfirm(row),
+              },
+              {
+                icon: () => h(NIcon, null, { default: () => h(RefreshOutline) }),
+              },
+            ),
+          default: () => getClearCircuitTooltip(row),
+        },
+      ),
+  },
 ]
 
 const modelColumns: DataTableColumns<ModelDetailInfo> = [
@@ -541,6 +581,47 @@ async function handleRefresh() {
   reconnect()
 }
 
+async function handleClearCircuit(row: CircuitSnapshot) {
+  const actionKey = buildCircuitActionKey(row)
+  if (clearingCircuitKeys.value.has(actionKey)) {
+    return
+  }
+
+  clearingCircuitKeys.value.add(actionKey)
+  try {
+    await dashboardService.clearCircuit(row.kind, row.id)
+    message.success(row.kind === 'key' ? '已清除密钥熔断状态' : '已清除模型熔断状态')
+    await handleRefresh()
+  } catch (clearError) {
+    message.error(getErrorMessage(clearError, '清除熔断状态失败'))
+  } finally {
+    clearingCircuitKeys.value.delete(actionKey)
+  }
+}
+
+function handleClearCircuitConfirm(row: CircuitSnapshot) {
+  if (isClearingCircuit(row)) {
+    return
+  }
+
+  dialog.warning({
+    title: '确认清除熔断',
+    content:
+      row.state === 'inactive'
+        ? row.kind === 'key'
+          ? '确定清除该密钥熔断，并恢复为可用状态吗？'
+          : '确定清除该模型熔断，并恢复为可用状态吗？'
+        : row.kind === 'key'
+          ? '确定立即结束该密钥的冷却状态吗？'
+          : '确定立即结束该模型的冷却状态吗？',
+    positiveText: '确认',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await handleClearCircuit(row)
+    },
+  })
+}
+
 async function handleQPSRangeChange(value: DashboardQPSRange) {
   if (qpsRange.value === value) return
   qpsRange.value = value
@@ -555,30 +636,23 @@ function formatRemainingSeconds(totalSeconds: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function formatCompactNumber(value: number): string {
-  if (!Number.isFinite(value)) return '0'
-
-  const units = [
-    { value: 1e12, symbol: 'T' },
-    { value: 1e9, symbol: 'B' },
-    { value: 1e6, symbol: 'M' },
-    { value: 1e3, symbol: 'K' },
-  ]
-
-  const sign = value < 0 ? '-' : ''
-  const absValue = Math.abs(value)
-
-  for (const unit of units) {
-    if (absValue >= unit.value) {
-      return `${sign}${(absValue / unit.value).toFixed(2)}${unit.symbol}`
-    }
-  }
-
-  return `${sign}${Math.round(absValue)}`
-}
-
 function formatPercent(value: number): string {
   return `${Math.max(0, Math.min(100, value)).toFixed(1)}%`
+}
+
+function buildCircuitActionKey(row: CircuitSnapshot): string {
+  return `${row.kind}:${row.id}`
+}
+
+function isClearingCircuit(row: CircuitSnapshot): boolean {
+  return clearingCircuitKeys.value.has(buildCircuitActionKey(row))
+}
+
+function getClearCircuitTooltip(row: CircuitSnapshot): string {
+  if (row.state === 'inactive') {
+    return row.kind === 'key' ? '清除熔断并恢复密钥可用' : '清除熔断并恢复模型可用'
+  }
+  return row.kind === 'key' ? '立即结束密钥冷却' : '立即结束模型冷却'
 }
 
 watch(isConnected, (connected) => {
