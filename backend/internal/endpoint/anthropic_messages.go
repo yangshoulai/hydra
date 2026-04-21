@@ -33,7 +33,8 @@ func (e *MessagesEndpoint) GetColor() string {
 
 func (e *MessagesEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
 	payload := map[string]any{
-		"model": modelName,
+		"model":      modelName,
+		"max_tokens": 1024,
 		"messages": []map[string]any{
 			{
 				"role":    "user",

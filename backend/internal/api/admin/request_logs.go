@@ -37,6 +37,7 @@ type RequestLogListQuery struct {
 	Status        string `form:"status" binding:"omitempty,oneof=success failed"`
 	HasRetry      string `form:"has_retry" binding:"omitempty,oneof=true false"`
 	TraceID       string `form:"trace_id" binding:"omitempty,max=64"`
+	ClientIP      string `form:"client_ip" binding:"omitempty,max=64"`
 
 	SortBy    string `form:"sort_by" binding:"omitempty,oneof=created_at duration_ms"`
 	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`
@@ -63,6 +64,7 @@ func (h *RequestLogHandler) ListRequestLogs(c *gin.Context) {
 		EndpointType:  query.EndpointType,
 		Status:        query.Status,
 		TraceID:       query.TraceID,
+		ClientIP:      query.ClientIP,
 		SortBy:        query.SortBy,
 		SortOrder:     query.SortOrder,
 	}

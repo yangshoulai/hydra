@@ -59,7 +59,7 @@
             :loading="loading"
             :locale="tableLocale"
             :single-line="false"
-            :scroll-x="980"
+            :scroll-x="1040"
             :row-key="(row: Model) => row.id"
             @update:sorter="handleSorterChange"
         />
@@ -141,7 +141,6 @@ import {
   NPagination,
   NSelect,
   NSpace,
-  NTag,
   NText,
   NTooltip,
 } from 'naive-ui'
@@ -149,6 +148,7 @@ import {AddOutline, CopyOutline, LayersOutline, PencilOutline, SearchOutline, Tr
 import {type CreateModelRequest, modelApi, type UpdateModelRequest} from '@/services/modelService'
 import type {Model, ModelListParams, Provider} from '@/types/model'
 import providerApi from '@/services/providerService'
+import ProviderIcon from '@/components/ProviderIcon.vue'
 import ModelChannelsDrawer from '@/components/ModelChannelsDrawer.vue'
 import {getErrorMessage, toastApiError} from '@/utils/error'
 
@@ -279,13 +279,23 @@ const columns = computed<DataTableColumns<Model>>(() => [
   {
     title: '厂商',
     key: 'provider',
-    width: 160,
+    width: 90,
     align: 'center',
     render: (row) => {
-      if (!row.provider) {
-        return h(NTag, {bordered: false, size: 'small'}, {default: () => '未设置'})
-      }
-      return h(NTag, {type: 'info', bordered: false, size: 'small'}, {default: () => row.provider?.name})
+      const label = row.provider?.name || '未设置'
+      return h(
+          NTooltip,
+          null,
+          {
+            trigger: () =>
+                h(
+                    'span',
+                    {class: 'provider-cell'},
+                    [h(ProviderIcon, {iconURL: row.provider?.icon, alt: label, size: 22})],
+                ),
+            default: () => label,
+          },
+      )
     },
   },
   {
@@ -544,5 +554,12 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+.provider-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
 }
 </style>

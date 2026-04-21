@@ -49,7 +49,7 @@
             v-model:checked-row-keys="checkedKeys"
             :pagination="pagination"
             :single-line="false"
-            :scroll-x="1120"
+            :scroll-x="1240"
           />
         </div>
       </section>
@@ -244,13 +244,20 @@ import {
   NInput,
   NInputNumber,
   NModal,
+  NPopconfirm,
   NSelect,
   NSpace,
   NTag,
   NText,
   NTooltip,
 } from 'naive-ui'
-import { AddOutline, PlayOutline, SettingsOutline } from '@vicons/ionicons5'
+import {
+  AddOutline,
+  CheckmarkCircleOutline,
+  CloseCircleOutline,
+  PlayOutline,
+  SettingsOutline,
+} from '@vicons/ionicons5'
 import { channelApi } from '@/services/channelService'
 import { modelApi } from '@/services/modelService'
 import { endpointApi } from '@/services/endpointService'
@@ -510,7 +517,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '渠道模型',
     key: 'channel_model',
-    minWidth: 180,
+    width: 240,
     ellipsis: { tooltip: true },
     render: (row) =>
       h(
@@ -553,7 +560,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '统一模型',
     key: 'model',
-    width: 240,
+    minWidth: 240,
     render: (row) =>
       h(NSelect, {
         value: modelEditMap.value[row.key] || row.model,
@@ -570,14 +577,15 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '权重',
     key: 'weight',
-    width: 126,
+    width: 150,
+    align: 'center',
     render: (row) =>
       h(NInputNumber, {
         value: weightEditMap.value[row.key] || row.weight,
         size: 'small',
         min: 1,
         max: 1000,
-        style: { width: '108px' },
+        style: { width: '100%' },
         onUpdateValue: (value: number | null) => {
           weightEditMap.value[row.key] = value && value > 0 ? value : row.weight
         },
@@ -586,7 +594,7 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '配置状态',
     key: 'status',
-    width: 100,
+    width: 110,
     align: 'center',
     render: (row) => {
       const map = {
@@ -598,9 +606,26 @@ const columns: DataTableColumns<ModelDisplayType> = [
     },
   },
   {
+    title: '状态',
+    key: 'channel_status',
+    width: 110,
+    align: 'center',
+    render: (row) => {
+      if (!row.config_id) {
+        return h(NText, { depth: 3, style: 'font-size: 12px' }, { default: () => '—' })
+      }
+      const isActive = row.channel_status === 'active'
+      return h(
+        NTag,
+        { size: 'small', type: isActive ? 'success' : 'default', bordered: false },
+        { default: () => (isActive ? '启用' : '停用') },
+      )
+    },
+  },
+  {
     title: '端点 / 分组',
     key: 'config',
-    width: 160,
+    width: 120,
     align: 'center',
     render: (row) => {
       const endpointCount = (endpointTypesEditMap.value[row.key] || row.endpoint_types).length
@@ -630,17 +655,65 @@ const columns: DataTableColumns<ModelDisplayType> = [
   {
     title: '操作',
     key: 'actions',
-    width: 66,
+    width: 100,
     align: 'center',
-    render: (row) =>
-      renderActionIcon({
-        tooltip: '测试当前配置',
-        ariaLabel: `测试模型 ${row.channel_model} 的当前配置`,
-        icon: PlayOutline,
-        type: 'info',
-        loading: isRowTesting(row.key),
-        onClick: () => handleTest(row),
-      }),
+    render: (row) => {
+      const children: any[] = [
+        renderActionIcon({
+          tooltip: '测试当前配置',
+          ariaLabel: `测试模型 ${row.channel_model} 的当前配置`,
+          icon: PlayOutline,
+          type: 'info',
+          loading: isRowTesting(row.key),
+          onClick: () => handleTest(row),
+        }),
+      ]
+
+      if (row.config_id) {
+        const isActive = row.channel_status === 'active'
+        children.push(
+          h(
+            NPopconfirm,
+            { onPositiveClick: () => handleToggleModelStatus(row) },
+            {
+              default: () => `确定要${isActive ? '停用' : '启用'}该模型配置吗？`,
+              trigger: () =>
+                h(
+                  NTooltip,
+                  null,
+                  {
+                    trigger: () =>
+                      h(
+                        NButton,
+                        {
+                          class: 'table-action-btn',
+                          size: 'tiny',
+                          quaternary: true,
+                          circle: true,
+                          type: isActive ? 'warning' : 'success',
+                          'aria-label': `${isActive ? '停用' : '启用'}配置 ${row.config_id}`,
+                        },
+                        {
+                          icon: () =>
+                            h(NIcon, null, {
+                              default: () => h(isActive ? CloseCircleOutline : CheckmarkCircleOutline),
+                            }),
+                        },
+                      ),
+                    default: () => (isActive ? '停用' : '启用'),
+                  },
+                ),
+            },
+          ),
+        )
+      }
+
+      return h(
+        NSpace,
+        { size: 4, justify: 'center', align: 'center', class: 'table-action-group', wrap: false },
+        { default: () => children },
+      )
+    },
   },
 ]
 
@@ -972,6 +1045,37 @@ async function handleTest(row: ModelDisplayType) {
     return
   }
   await executeModelTest(row)
+}
+
+async function handleToggleModelStatus(row: ModelDisplayType) {
+  if (!row.config_id) {
+    window.$message?.warning('尚未保存的模型配置，请先保存')
+    return
+  }
+  try {
+    const updated = await channelApi.toggleChannelModelStatus(row.config_id)
+    const targetStatus = updated.status
+
+    const localIdx = localConfigs.value.findIndex((c) => c.id === row.config_id)
+    const localConfig = localIdx !== -1 ? localConfigs.value[localIdx] : undefined
+    if (localConfig) {
+      localConfig.status = targetStatus
+    }
+
+    if (syncResult.value) {
+      syncResult.value.diff.diffs.forEach((item) => {
+        const existing = item.existing_config
+        if (existing && existing.id === row.config_id) {
+          existing.status = targetStatus
+        }
+      })
+    }
+
+    window.$message?.success(`已${targetStatus === 'active' ? '启用' : '停用'}该模型配置`)
+    emit('refresh')
+  } catch (err) {
+    toastApiError(err, '切换状态失败')
+  }
 }
 
 async function handleImageTestSubmit(payload: { prompt: string; imageData: string }) {

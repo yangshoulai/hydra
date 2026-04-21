@@ -86,6 +86,7 @@ export interface RequestLogListParams {
   status?: 'success' | 'failed' | ''
   has_retry?: 'true' | 'false' | ''
   trace_id?: string
+  client_ip?: string
   sort_by?: 'created_at' | 'duration_ms'
   sort_order?: 'asc' | 'desc'
 }

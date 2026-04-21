@@ -58,7 +58,7 @@
           :locale="tableLocale"
           :pagination="false"
           :single-line="false"
-          :scroll-x="1240"
+          :scroll-x="1720"
           :row-key="(row: Token) => row.id"
           @update:sorter="handleSorterChange"
         />
@@ -341,6 +341,7 @@ const columns = computed<DataTableColumns<Token>>(() => [
     title: 'ID',
     key: 'id',
     width: 70,
+    fixed: 'left',
     sortable: true,
     sorter: 'default',
     sortOrder: getSortOrder('id'),
@@ -349,6 +350,7 @@ const columns = computed<DataTableColumns<Token>>(() => [
     title: '名称',
     key: 'name',
     width: 180,
+    fixed: 'left',
     ellipsis: { tooltip: true },
   },
   {

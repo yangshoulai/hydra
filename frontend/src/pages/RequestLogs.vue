@@ -84,6 +84,20 @@
               </n-icon>
             </template>
           </n-input>
+          <n-input
+              v-model:value="filters.clientIP"
+              class="table-filter-input"
+              size="small"
+              clearable
+              placeholder="客户端 IP 前缀"
+              @keyup.enter="handleSearch"
+          >
+            <template #prefix>
+              <n-icon>
+                <SearchOutline/>
+              </n-icon>
+            </template>
+          </n-input>
           <n-button size="small" type="primary" @click="handleSearch">查询</n-button>
           <n-button
               size="small"
@@ -105,7 +119,7 @@
             :locale="tableLocale"
             :pagination="false"
             :single-line="false"
-            :scroll-x="1688"
+            :scroll-x="1620"
             :row-key="(row: RequestLog) => row.id"
             v-model:checked-row-keys="checkedRowKeys"
             :row-props="rowProps"
@@ -173,6 +187,7 @@ interface FilterState {
   model: string | null
   channelID: number | null
   traceID: string
+  clientIP: string
 }
 
 const filters = reactive<FilterState>({
@@ -182,6 +197,7 @@ const filters = reactive<FilterState>({
   model: null,
   channelID: null,
   traceID: '',
+  clientIP: '',
 })
 
 const pagination = reactive({
@@ -218,16 +234,15 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(2)} s`
 }
 
-function renderStatusCode(row: RequestLog) {
+function renderStatusResult(row: RequestLog) {
   const type = row.success ? 'success' : row.status_code === 499 ? 'warning' : 'error'
-  const text = row.status_code || (row.success ? '200' : '—')
-  return h(NTag, {type, bordered: false, size: 'small'}, {default: () => text})
-}
-
-function renderResultText(row: RequestLog) {
-  if (row.success) return h('span', {class: 'status-text status-text--success'}, '成功')
-  if (row.status_code === 499) return h('span', {class: 'status-text status-text--warning'}, '客户端取消')
-  return h('span', {class: 'status-text status-text--error'}, '失败')
+  const code = row.status_code || (row.success ? 200 : '—')
+  const label = row.success ? '成功' : row.status_code === 499 ? '客户端取消' : '失败'
+  return h(
+      NTag,
+      {type, bordered: false, size: 'small', class: 'status-tag'},
+      {default: () => `${code} · ${label}`},
+  )
 }
 
 function renderStreamType(row: RequestLog) {
@@ -279,10 +294,16 @@ const columns = computed<DataTableColumns<RequestLog>>(() => [
     width: 44,
     fixed: 'left',
   },
-  {title: '时间', key: 'created_at', width: COL_WIDTH.time, render: (row) => formatTime(row.created_at), align: 'center'},
-  {title: 'Trace', key: 'trace_id', width: 110, render: renderTraceID},
-  {title: '模型', key: 'model', width: COL_WIDTH.model, ellipsis: {tooltip: true}},
-  {title: '是否流式', key: 'is_stream', width: COL_WIDTH.stream, align: 'center', render: renderStreamType},
+  {title: 'Trace', key: 'trace_id', width: 110, fixed: 'left', render: renderTraceID},
+  {
+    title: '时间',
+    key: 'created_at',
+    width: COL_WIDTH.time,
+    fixed: 'left',
+    render: (row) => formatTime(row.created_at),
+    align: 'center',
+  },
+  {title: '模型', key: 'model', width: COL_WIDTH.model, fixed: 'left', ellipsis: {tooltip: true}},
   {
     title: '渠道',
     key: 'final_channel_name',
@@ -290,15 +311,15 @@ const columns = computed<DataTableColumns<RequestLog>>(() => [
     ellipsis: {tooltip: true},
     render: (row) => row.final_channel_name ? `${row.final_channel_name} · ${row.final_channel_model}` : '—',
   },
-  {title: '状态', key: 'status_code', width: COL_WIDTH.status, render: renderStatusCode, align: "center"},
-  {title: '结果', key: 'result', width: 80, render: renderResultText, align: "center"},
+  {title: '流式', key: 'is_stream', width: COL_WIDTH.stream, align: 'center', render: renderStreamType},
+  {title: '状态', key: 'status_code', width: 130, render: renderStatusResult, align: 'center'},
   {
     title: '耗时',
     key: 'duration_ms',
     width: COL_WIDTH.duration,
     render: (row) => formatDuration(row.duration_ms),
     sorter: 'default',
-    align: 'right'
+    align: 'right',
   },
   {
     title: '重试',
@@ -314,7 +335,14 @@ const columns = computed<DataTableColumns<RequestLog>>(() => [
     key: 'tokens',
     width: COL_WIDTH.tokens,
     render: (row) => `${row.prompt_tokens.toLocaleString('en-US')} / ${row.completion_tokens.toLocaleString('en-US')}`,
-    align: 'right'
+    align: 'right',
+  },
+  {
+    title: 'IP',
+    key: 'client_ip',
+    width: 140,
+    ellipsis: {tooltip: true},
+    render: (row) => row.client_ip || '—',
   },
   {
     title: '错误',
@@ -358,6 +386,7 @@ function buildQuery(): RequestLogListParams {
   if (filters.model) q.model = filters.model
   if (filters.channelID) q.channel_id = filters.channelID
   if (filters.traceID.trim()) q.trace_id = filters.traceID.trim()
+  if (filters.clientIP.trim()) q.client_ip = filters.clientIP.trim()
   return q
 }
 
@@ -414,6 +443,7 @@ function handleReset() {
   filters.model = null
   filters.channelID = null
   filters.traceID = ''
+  filters.clientIP = ''
   pagination.page = 1
   loadLogs()
 }
@@ -471,22 +501,6 @@ onMounted(() => {
 }
 
 .error-cell {
-  color: var(--n-color-error, #d03050);
-}
-
-.status-text {
-  font-size: 13px;
-}
-
-.status-text--success {
-  color: var(--n-color-success, #18a058);
-}
-
-.status-text--warning {
-  color: var(--n-color-warning, #f0a020);
-}
-
-.status-text--error {
   color: var(--n-color-error, #d03050);
 }
 

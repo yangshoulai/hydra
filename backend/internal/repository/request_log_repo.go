@@ -36,6 +36,7 @@ type RequestLogFilter struct {
 	Status    string
 	HasRetry  *bool
 	TraceID   string // 前缀匹配
+	ClientIP  string // 前缀匹配
 	SortBy    string // created_at / duration_ms
 	SortOrder string // asc / desc
 }
@@ -158,6 +159,9 @@ func (r *RequestLogRepository) List(ctx context.Context, filter *RequestLogFilte
 	}
 	if filter.TraceID != "" {
 		q = q.Where("trace_id LIKE ?", filter.TraceID+"%")
+	}
+	if filter.ClientIP != "" {
+		q = q.Where("client_ip LIKE ?", filter.ClientIP+"%")
 	}
 
 	var total int64

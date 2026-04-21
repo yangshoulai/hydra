@@ -1,5 +1,5 @@
 <template>
-  <n-layout has-sider class="app-shell">
+  <n-layout has-sider class="app-shell" :native-scrollbar="true">
     <n-layout-sider
       bordered
       collapse-mode="width"
@@ -7,44 +7,57 @@
       :width="siderWidth"
       :collapsed="collapsed"
       :show-trigger="false"
-      :native-scrollbar="false"
+      :native-scrollbar="true"
       class="app-sider"
       :class="{ 'app-sider--collapsed': collapsed }"
     >
-      <div
-        class="app-brand"
-        :class="{ 'app-brand--collapsed': collapsed }"
-        role="button"
-        tabindex="0"
-        @click="router.push({ name: 'Dashboard' })"
-        @keydown.enter.prevent="router.push({ name: 'Dashboard' })"
-      >
-        <div class="app-brand__logo">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5">
-            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+      <div class="app-sider-inner">
+        <div
+          class="app-brand"
+          :class="{ 'app-brand--collapsed': collapsed }"
+          role="button"
+          tabindex="0"
+          @click="router.push({ name: 'Dashboard' })"
+          @keydown.enter.prevent="router.push({ name: 'Dashboard' })"
+        >
+          <div class="app-brand__logo">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <div v-show="!collapsed" class="app-brand__meta">
+            <p class="app-brand__name">Hydra Console</p>
+            <p class="app-brand__desc">API Gateway</p>
+          </div>
         </div>
-        <div v-show="!collapsed" class="app-brand__meta">
-          <p class="app-brand__name">Hydra Console</p>
-          <p class="app-brand__desc">API Gateway</p>
+
+        <n-menu
+          :collapsed="collapsed"
+          :collapsed-width="siderCollapsedWidth"
+          :collapsed-icon-size="20"
+          :options="menuOptions"
+          :value="currentRoute"
+          class="app-menu custom-scrollbar"
+          @update:value="handleMenuSelect"
+        />
+
+        <div class="app-sider__footer" :class="{ 'app-sider__footer--collapsed': collapsed }">
+          <template v-if="!collapsed">
+            <div class="app-sider__footer-row">
+              <span class="app-sider__footer-badge">v{{ appVersion }}</span>
+              <span class="app-sider__footer-dot" aria-hidden="true" />
+              <span class="app-sider__footer-date">{{ buildDate }}</span>
+            </div>
+          </template>
+          <span v-else class="app-sider__footer-badge app-sider__footer-badge--mini">v{{ appVersion }}</span>
         </div>
       </div>
-
-      <n-menu
-        :collapsed="collapsed"
-        :collapsed-width="siderCollapsedWidth"
-        :collapsed-icon-size="20"
-        :options="menuOptions"
-        :value="currentRoute"
-        class="app-menu"
-        @update:value="handleMenuSelect"
-      />
     </n-layout-sider>
     <div v-if="isMobile && !collapsed" class="app-sider-mask" @click="collapsed = true" />
 
-    <n-layout class="app-main-layout">
+    <n-layout class="app-main-layout" :native-scrollbar="true">
       <n-layout-header bordered class="app-header" :style="{ zIndex: 1000 }">
         <div class="app-header__left">
           <n-button quaternary circle aria-label="展开或折叠菜单" @click="collapsed = !collapsed">
@@ -70,9 +83,9 @@
         </div>
       </n-layout-header>
 
-      <n-layout-content class="app-content custom-scrollbar">
+      <div class="app-content custom-scrollbar">
         <router-view />
-      </n-layout-content>
+      </div>
     </n-layout>
   </n-layout>
 
@@ -89,7 +102,6 @@ import {
   NDropdown,
   NIcon,
   NLayout,
-  NLayoutContent,
   NLayoutHeader,
   NLayoutSider,
   NMenu,
@@ -115,6 +127,9 @@ const route = useRoute()
 const collapsed = ref(false)
 const isMobile = ref(false)
 const showChangePasswordDialog = ref(false)
+
+const appVersion = __APP_VERSION__
+const buildDate = __BUILD_DATE__
 
 const currentRoute = computed(() => route.name as string)
 const siderCollapsedWidth = computed(() => (isMobile.value ? 0 : 64))
@@ -221,24 +236,28 @@ onUnmounted(() => {
 <style scoped>
 .app-shell {
   height: 100vh;
+  width: 100vw;
+  overflow: hidden;
   background: #f5f5f5;
 }
 
 .app-sider {
-  display: flex;
-  flex-direction: column;
   border-right: 1px solid #e5e5e5;
   background: #ffffff;
   position: relative;
   z-index: 1100;
 }
 
-.app-sider :deep(.n-layout-sider-scroll-container),
-.app-sider :deep(.n-layout-sider-children) {
+.app-sider :deep(.n-layout-sider-scroll-container) {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
 }
 
-.app-sider :deep(.n-layout-sider-children) {
+.app-sider-inner {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -301,10 +320,72 @@ onUnmounted(() => {
 }
 
 .app-menu {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   padding: 8px 6px;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.app-sider__footer {
+  flex-shrink: 0;
+  border-top: 1px solid #eaeaea;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  background: #fafafa;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.app-sider__footer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.app-sider__footer-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.app-sider__footer-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #c4c4c4;
+  flex-shrink: 0;
+}
+
+.app-sider__footer-date {
+  color: #737373;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sider__footer--collapsed {
+  padding: 10px 0;
+  justify-content: center;
+}
+
+.app-sider__footer-badge--mini {
+  padding: 2px 6px;
+  font-size: 9px;
 }
 
 .app-sider--collapsed .app-menu {
@@ -385,7 +466,10 @@ onUnmounted(() => {
 
 .app-main-layout {
   height: 100vh;
+  min-width: 0;
   overflow: hidden;
+  display: flex !important;
+  flex-direction: column;
 }
 
 .app-sider-mask {
@@ -397,6 +481,7 @@ onUnmounted(() => {
 
 .app-header {
   height: 64px;
+  flex-shrink: 0;
   padding: 0 16px;
   display: flex;
   align-items: center;
@@ -451,8 +536,9 @@ onUnmounted(() => {
 }
 
 .app-content {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 14px;
-  height: calc(100vh - 56px);
   overflow: auto;
 }
 
