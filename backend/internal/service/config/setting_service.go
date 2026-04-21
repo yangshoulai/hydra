@@ -228,7 +228,8 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingProxyNetworkURL ||
 		key == models.SettingProxyMaxRetry:
 		return "proxy"
-	case key == models.SettingModelTestPrompt:
+	case key == models.SettingModelTestPrompt ||
+		key == models.SettingModelTestUserAgent:
 		return "model_test"
 	case key == models.SettingSnifferPlainTextErrorRules:
 		return "sniffer"
@@ -282,6 +283,15 @@ func (s *SettingService) GetModelTestPrompt(ctx context.Context) string {
 		return value
 	}
 	return "Hi"
+}
+
+// GetModelTestUserAgent 获取模型测试相关请求统一使用的 User-Agent。
+func (s *SettingService) GetModelTestUserAgent(ctx context.Context) string {
+	value := strings.TrimSpace(s.GetString(ctx, models.SettingModelTestUserAgent, ""))
+	if value != "" {
+		return value
+	}
+	return models.DefaultModelTestUserAgent
 }
 
 // GetServerConfig 获取服务启动配置

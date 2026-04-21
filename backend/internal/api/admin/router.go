@@ -33,7 +33,7 @@ func RegisterRoutes(
 	channelHandler := NewChannelHandler(repos.ChannelRepo, repos.ModelConfigRepo, repos.ChannelKeyRepo, db, logger, circuitManager)
 	channelKeyHandler := NewChannelKeyHandler(repos.ChannelKeyRepo, repos.ChannelRepo, healthCheckService, circuitManager, logger)
 	modelConfigHandler := NewChannelModelHandler(repos.ModelConfigRepo, repos.ChannelRepo, logger, circuitManager)
-	modelSyncHandler := NewModelSyncHandler(syncService, repos.ModelConfigRepo, settingService, db, logger)
+	modelSyncHandler := NewModelSyncHandler(syncService, repos.ModelConfigRepo, settingService, services.ProxyService.GetHTTPClient(), db, logger)
 	dashboardHandler := NewDashboardHandler(dashboardService)
 	settingsHandler := NewSettingsHandler(logger, repos.SystemSettingRepo, settingService)
 	tokensHandler := NewTokensHandler(logger, repos.AccessTokenRepo)

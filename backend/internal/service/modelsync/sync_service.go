@@ -13,6 +13,8 @@ import (
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
+	configservice "github.com/yangshoulai/hydra/internal/service/config"
+	"github.com/yangshoulai/hydra/internal/service/upstreamhttp"
 )
 
 // SyncService 模型同步服务
@@ -21,8 +23,9 @@ type SyncService struct {
 	channelRepo     *repository.ChannelRepository
 	modelConfigRepo *repository.ChannelModelConfigRepository
 	channelKeyRepo  *repository.ChannelKeyRepository
+	settingService  *configservice.SettingService
 	diffCalculator  *DiffCalculator
-	httpClient      *http.Client
+	httpClient      *upstreamhttp.HTTPClient
 }
 
 // NewSyncService 创建模型同步服务
@@ -31,21 +34,20 @@ func NewSyncService(
 	channelRepo *repository.ChannelRepository,
 	modelConfigRepo *repository.ChannelModelConfigRepository,
 	channelKeyRepo *repository.ChannelKeyRepository,
+	settingService *configservice.SettingService,
+	httpClient *upstreamhttp.HTTPClient,
 ) *SyncService {
+	if httpClient == nil {
+		httpClient = upstreamhttp.NewHTTPClient(upstreamhttp.DefaultHTTPClientConfig(), logger)
+	}
 	return &SyncService{
 		logger:          logger,
 		channelRepo:     channelRepo,
 		modelConfigRepo: modelConfigRepo,
 		channelKeyRepo:  channelKeyRepo,
+		settingService:  settingService,
 		diffCalculator:  NewDiffCalculator(),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        10,
-				MaxIdleConnsPerHost: 2,
-				IdleConnTimeout:     30 * time.Second,
-			},
-		},
+		httpClient:      httpClient,
 	}
 }
 
@@ -215,15 +217,14 @@ func (s *SyncService) fetchUpstreamModelsByKey(ctx context.Context, channel *mod
 	}
 
 	// 设置请求头
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36")
+	upstreamhttp.ApplyJSONHeaders(req, s.getModelTestUserAgent(ctx))
 
 	if apiKey != "" {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	}
 
 	// 发送请求
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.httpClient.Do(req, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
@@ -250,6 +251,13 @@ func (s *SyncService) fetchUpstreamModelsByKey(ctx context.Context, channel *mod
 	}
 
 	return upstreamModels, nil
+}
+
+func (s *SyncService) getModelTestUserAgent(ctx context.Context) string {
+	if s.settingService == nil {
+		return models.DefaultModelTestUserAgent
+	}
+	return s.settingService.GetModelTestUserAgent(ctx)
 }
 
 // GetChannel 获取渠道信息

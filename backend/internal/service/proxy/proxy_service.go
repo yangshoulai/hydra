@@ -310,3 +310,7 @@ func (ps *ProxyService) getSnifferConfig() (enabled bool, streamPacketCount int)
 func (ps *ProxyService) isDebugModeEnabled() bool {
 	return ps.debugModeEnabled.Load()
 }
+
+func (ps *ProxyService) GetHTTPClient() *HTTPClient {
+	return ps.httpClient
+}

@@ -167,10 +167,10 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 		requestLogRecorder,
 	)
 
-	syncService := modelsyncService.NewSyncService(runtimeLogger, repos.ChannelRepo, repos.ModelConfigRepo, repos.ChannelKeyRepo)
+	syncService := modelsyncService.NewSyncService(runtimeLogger, repos.ChannelRepo, repos.ModelConfigRepo, repos.ChannelKeyRepo, settingService, proxySvc.GetHTTPClient())
 	jwtService := adminService.NewJWTService()
 	authService := adminService.NewAuthService(runtimeLogger, repos.AdminUserRepo, jwtService)
-	probeHandler := circuit.NewProbeHandler(runtimeLogger)
+	probeHandler := circuit.NewProbeHandler(runtimeLogger, settingService, proxySvc.GetHTTPClient())
 	healthCheckService := adminService.NewHealthCheckService(runtimeLogger, repos.ChannelRepo, probeHandler)
 	dashboardService := adminService.NewDashboardService(
 		runtimeLogger,

@@ -239,6 +239,22 @@
               />
             </div>
           </div>
+
+          <div class="setting-row setting-row--block">
+            <div class="setting-row__info">
+              <div class="setting-row__label">测试请求 User-Agent</div>
+              <div class="setting-row__desc">用于渠道模型测试、模型同步、渠道健康检查的统一请求头。</div>
+            </div>
+            <div class="setting-row__control setting-row__control--block">
+              <n-input
+                v-model:value="formData.model_test_user_agent"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 5 }"
+                placeholder="例如：Mozilla/5.0 ..."
+                style="width: 100%"
+              />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -301,7 +317,11 @@ interface SettingsData {
   log_retention_days: number
   log_debug_enabled: boolean
   model_test_prompt: string
+  model_test_user_agent: string
 }
+
+const DEFAULT_MODEL_TEST_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36'
 
 const isLoading = ref(false)
 const isSaving = ref(false)
@@ -325,6 +345,7 @@ const formData = ref<SettingsData>({
   log_retention_days: 30,
   log_debug_enabled: false,
   model_test_prompt: 'Hi',
+  model_test_user_agent: DEFAULT_MODEL_TEST_USER_AGENT,
 })
 
 const loadSettings = async () => {
@@ -357,6 +378,9 @@ const loadSettings = async () => {
     }
     if (settings.model_test_prompt !== undefined) {
       formData.value.model_test_prompt = settings.model_test_prompt || 'Hi'
+    }
+    if (settings.model_test_user_agent !== undefined) {
+      formData.value.model_test_user_agent = settings.model_test_user_agent || DEFAULT_MODEL_TEST_USER_AGENT
     }
 
     if (settings.sniffer_plain_text_error_rules) {
@@ -436,6 +460,7 @@ const handleSave = async () => {
         log_retention_days: formData.value.log_retention_days.toString(),
         log_debug_enabled: debugModeEnabled.value.toString(),
         model_test_prompt: formData.value.model_test_prompt.trim(),
+        model_test_user_agent: formData.value.model_test_user_agent.trim(),
         sniffer_plain_text_error_rules: JSON.stringify(keywords),
       },
     })

@@ -7,29 +7,28 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
+	configservice "github.com/yangshoulai/hydra/internal/service/config"
+	"github.com/yangshoulai/hydra/internal/service/upstreamhttp"
 )
 
 // ProbeHandler 探测请求处理器
 type ProbeHandler struct {
-	logger     *slog.Logger
-	httpClient *http.Client
+	logger         *slog.Logger
+	settingService *configservice.SettingService
+	httpClient     *upstreamhttp.HTTPClient
 }
 
 // NewProbeHandler 创建探测处理器
-func NewProbeHandler(logger *slog.Logger) *ProbeHandler {
+func NewProbeHandler(logger *slog.Logger, settingService *configservice.SettingService, httpClient *upstreamhttp.HTTPClient) *ProbeHandler {
+	if httpClient == nil {
+		httpClient = upstreamhttp.NewHTTPClient(upstreamhttp.DefaultHTTPClientConfig(), logger)
+	}
 	return &ProbeHandler{
-		logger: logger,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        10,
-				MaxIdleConnsPerHost: 2,
-				IdleConnTimeout:     30 * time.Second,
-			},
-		},
+		logger:         logger,
+		settingService: settingService,
+		httpClient:     httpClient,
 	}
 }
 
@@ -57,10 +56,10 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 
 	// 设置请求头（使用 OpenAI 格式的认证头）
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", channelKey.ChannelKeyValue))
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36")
+	upstreamhttp.ApplyJSONHeaders(req, ph.getModelTestUserAgent(ctx))
 
 	// 发送探测请求
-	resp, err := ph.httpClient.Do(req)
+	resp, err := ph.httpClient.Do(req, "")
 	if err != nil {
 		ph.logger.Warn("嗅探请求失败（网络错误）",
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
@@ -151,4 +150,11 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 		)
 		return false, false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
+}
+
+func (ph *ProbeHandler) getModelTestUserAgent(ctx context.Context) string {
+	if ph.settingService == nil {
+		return models.DefaultModelTestUserAgent
+	}
+	return ph.settingService.GetModelTestUserAgent(ctx)
 }

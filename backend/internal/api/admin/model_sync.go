@@ -3,7 +3,6 @@ package admin
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -17,10 +16,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/endpoint"
+	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
 	configservice "github.com/yangshoulai/hydra/internal/service/config"
 	"github.com/yangshoulai/hydra/internal/service/modelsync"
+	"github.com/yangshoulai/hydra/internal/service/upstreamhttp"
 	"gorm.io/gorm"
 )
 
@@ -29,6 +30,7 @@ type ModelSyncHandler struct {
 	syncService     *modelsync.SyncService
 	modelConfigRepo *repository.ChannelModelConfigRepository
 	settingService  *configservice.SettingService
+	httpClient      *upstreamhttp.HTTPClient
 	db              *gorm.DB
 	logger          *slog.Logger
 }
@@ -38,13 +40,18 @@ func NewModelSyncHandler(
 	syncService *modelsync.SyncService,
 	modelConfigRepo *repository.ChannelModelConfigRepository,
 	settingService *configservice.SettingService,
+	httpClient *upstreamhttp.HTTPClient,
 	db *gorm.DB,
 	logger *slog.Logger,
 ) *ModelSyncHandler {
+	if httpClient == nil {
+		httpClient = upstreamhttp.NewHTTPClient(upstreamhttp.DefaultHTTPClientConfig(), logger)
+	}
 	return &ModelSyncHandler{
 		syncService:     syncService,
 		modelConfigRepo: modelConfigRepo,
 		settingService:  settingService,
+		httpClient:      httpClient,
 		db:              db,
 		logger:          logger,
 	}
@@ -286,18 +293,17 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 
 	// 使用第一个可用的key
 	testKey := keys[0]
-
-	// 使用系统设置中的代理请求超时，保持与真实代理请求一致
-	requestTimeout, _, _ := h.settingService.GetProxyConfig(c.Request.Context())
+	traceID := middleware.GetTraceID(c)
 
 	nonStreamSuccess, nonStreamMessage, nonStreamLatency, err := h.testModelViaUpstream(
+		c.Request.Context(),
+		traceID,
 		channel,
 		testKey.ChannelKeyValue,
 		req.ChannelModel,
 		req.EndpointType,
 		false,
 		testInput,
-		requestTimeout,
 	)
 	if err != nil {
 		h.logger.Error("测试渠道模型异常",
@@ -322,13 +328,14 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 	if !nonStreamSuccess {
 		if supportsStreamTest(req.EndpointType) {
 			streamSuccess, streamMessage, streamLatency, streamErr := h.testModelViaUpstream(
+				c.Request.Context(),
+				traceID,
 				channel,
 				testKey.ChannelKeyValue,
 				req.ChannelModel,
 				req.EndpointType,
 				true,
 				testInput,
-				requestTimeout,
 			)
 			if streamErr != nil {
 				h.logger.Error("测试渠道模型异常",
@@ -410,13 +417,14 @@ type modelTestInput struct {
 
 // testModelViaUpstream 通过上游API测试模型
 func (h *ModelSyncHandler) testModelViaUpstream(
+	ctx context.Context,
+	traceID string,
 	channel *models.Channel,
 	apiKey,
 	upstreamModel,
 	endpointType string,
 	stream bool,
 	input modelTestInput,
-	timeout time.Duration,
 ) (bool, string, string, error) {
 	// 从端点注册中心获取端点
 	ep, err := endpoint.Get(endpointType)
@@ -428,7 +436,7 @@ func (h *ModelSyncHandler) testModelViaUpstream(
 	url := fmt.Sprintf("%s%s", channel.BaseURL, ep.GetPath())
 
 	// 创建HTTP请求
-	req, err := http.NewRequest("POST", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return false, "无法创建测试请求", "", err
 	}
@@ -454,23 +462,13 @@ func (h *ModelSyncHandler) testModelViaUpstream(
 		}
 	}
 
+	upstreamhttp.ApplyUserAgent(req, h.getModelTestUserAgent(ctx))
+
 	// 记录开始时间
 	startTime := time.Now()
 
-	if timeout <= 0 {
-		timeout = 30 * time.Second
-	}
-
 	// 发送请求
-	client := &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
-	}
-	resp, err := client.Do(req)
+	resp, err := h.httpClient.Do(req, traceID)
 	if err != nil {
 		return false, fmt.Sprintf("请求失败: %v", err), "", err
 	}
@@ -519,6 +517,13 @@ func (h *ModelSyncHandler) testModelViaUpstream(
 	}
 
 	return false, fmt.Sprintf("模型测试失败: %s (response: %s)", errMsg, string(body)), latency, nil
+}
+
+func (h *ModelSyncHandler) getModelTestUserAgent(ctx context.Context) string {
+	if h.settingService == nil {
+		return models.DefaultModelTestUserAgent
+	}
+	return h.settingService.GetModelTestUserAgent(ctx)
 }
 
 func resolveEffectiveTestPrompt(

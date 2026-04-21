@@ -137,6 +137,12 @@ var DefaultSettings = []models.SystemSetting{
 		ValueType: "string",
 		Remark:    "渠道模型测试默认提示词",
 	},
+	{
+		Key:       models.SettingModelTestUserAgent,
+		Value:     models.DefaultModelTestUserAgent,
+		ValueType: "string",
+		Remark:    "渠道模型测试/同步/健康检查统一使用的 User-Agent",
+	},
 	// 响应嗅探设置
 	{
 		Key:       models.SettingSnifferEnabled,
