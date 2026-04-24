@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const suppressProxyLoggingContextKey = "suppress_proxy_logging"
+
 // snapshotRequestBody 读出 req.Body 并用同样内容重新包装回去，返回快照字节
 func snapshotRequestBody(req *http.Request) ([]byte, *http.Request, error) {
 	if req.Body == nil {
@@ -43,6 +45,27 @@ func GetTraceIDFromContext(c *gin.Context) string {
 		return traceID.(string)
 	}
 	return ""
+}
+
+// MarkProxyLoggingSuppressed 标记当前请求应跳过代理层汇总日志与请求日志写入。
+func MarkProxyLoggingSuppressed(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set(suppressProxyLoggingContextKey, true)
+}
+
+// ShouldSuppressProxyLogging 判断当前请求是否应跳过代理层日志输出。
+func ShouldSuppressProxyLogging(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	value, exists := c.Get(suppressProxyLoggingContextKey)
+	if !exists {
+		return false
+	}
+	suppressed, ok := value.(bool)
+	return ok && suppressed
 }
 
 func getAccessTokenIDFromContext(c *gin.Context) uint {

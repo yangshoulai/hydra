@@ -100,6 +100,7 @@ type ProxyContext struct {
 	IsStreamRequest bool              // 是否流式请求
 	Endpoint        endpoint.Endpoint // 当前端点
 	RequestBody     []byte            // 原始请求体
+	SuppressLogging bool              // 是否跳过代理汇总日志与请求日志落库
 
 	// 客户端侧日志采集（仅调试模式使用 headers / response body）
 	RequestHeaders http.Header // 入口处客户端请求头快照（脱敏前原文）
@@ -132,6 +133,7 @@ func NewProxyContext(traceID, model string, isStreamRequest bool, ep endpoint.En
 		IsStreamRequest:  isStreamRequest,
 		Endpoint:         ep,
 		RequestBody:      requestBody,
+		SuppressLogging:  false,
 		AttemptCount:     0,
 		RouteAttempts:    0,
 		Attempts:         make([]*AttemptRecord, 0),

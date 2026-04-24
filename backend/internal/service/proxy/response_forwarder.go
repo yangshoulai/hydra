@@ -239,11 +239,13 @@ func (rf *ResponseForwarder) replaceModelInJSON(body []byte, channelModel string
 
 // ForwardErrorResponse 转发错误响应
 func (rf *ResponseForwarder) ForwardErrorResponse(c *gin.Context, statusCode int, message string, traceID string) {
-	rf.logger.Debug("转发错误响应",
-		slog.String("trace_id", traceID),
-		slog.Int("status_code", statusCode),
-		slog.String("message", message),
-	)
+	if !ShouldSuppressProxyLogging(c) {
+		rf.logger.Debug("转发错误响应",
+			slog.String("trace_id", traceID),
+			slog.Int("status_code", statusCode),
+			slog.String("message", message),
+		)
+	}
 
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{

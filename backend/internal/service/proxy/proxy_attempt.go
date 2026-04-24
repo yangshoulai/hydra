@@ -68,7 +68,9 @@ func (ps *ProxyService) prepareRequest(c *gin.Context, ep endpoint.Endpoint, pro
 		return err
 	}
 	if !supported {
-		ps.responseForwarder.ForwardErrorResponse(c, http.StatusServiceUnavailable, "model unavailable: "+model, traceID)
+		proxyCtx.SuppressLogging = true
+		MarkProxyLoggingSuppressed(c)
+		ps.responseForwarder.ForwardErrorResponse(c, http.StatusNotFound, "model not found: "+model, traceID)
 		ps.recordRequestMetrics(false, model, nil, 0, 0)
 		return ErrModelNotFound
 	}

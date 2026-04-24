@@ -34,11 +34,13 @@ func (h *GenericHandler) Handle(c *gin.Context) {
 	err := h.proxyService.ProxyRequest(c, h.endpoint)
 
 	if err != nil {
-		h.logger.Debug("代理处理返回错误",
-			slog.String("trace_id", traceID),
-			slog.String("endpoint", h.endpoint.GetName()),
-			slog.String("error", err.Error()),
-		)
+		if !proxy.ShouldSuppressProxyLogging(c) {
+			h.logger.Debug("代理处理返回错误",
+				slog.String("trace_id", traceID),
+				slog.String("endpoint", h.endpoint.GetName()),
+				slog.String("error", err.Error()),
+			)
+		}
 
 		// 如果响应还没有发送，返回错误
 		if !c.Writer.Written() {

@@ -201,6 +201,9 @@ func (ps *ProxyService) emitRequestSummary(s requestSummary, msg string, attrs [
 
 // logFinalRequestResult 在 ProxyRequest 退出时输出一条请求汇总日志
 func (ps *ProxyService) logFinalRequestResult(c *gin.Context, proxyCtx *ProxyContext, err error) {
+	if proxyCtx != nil && proxyCtx.SuppressLogging {
+		return
+	}
 	summary := buildRequestSummary(c, proxyCtx, err)
 	msg := formatRequestSummaryMessage(c, summary)
 	attrs := buildRequestSummaryAttrs(c, proxyCtx, err, summary)
@@ -212,6 +215,9 @@ func (ps *ProxyService) logFinalRequestResult(c *gin.Context, proxyCtx *ProxyCon
 // 主表始终写；详情 / 尝试明细仅在调试模式开启时写。
 func (ps *ProxyService) persistRequestLog(c *gin.Context, proxyCtx *ProxyContext, retErr error, summary requestSummary) {
 	if ps.requestLogRecorder == nil {
+		return
+	}
+	if proxyCtx != nil && proxyCtx.SuppressLogging {
 		return
 	}
 
