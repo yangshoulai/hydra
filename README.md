@@ -41,7 +41,7 @@ pnpm run dev
 
 ```bash
 # 修改版本号（前后端构建都会读取它）
-vim backend/cmd/hydra/VERSION
+vim VERSION
 
 make build
 make run
@@ -50,7 +50,10 @@ make run
 ## Docker 运行
 
 ```bash
-docker build --build-arg VERSION=$(cat backend/cmd/hydra/VERSION) -t hydra:local -f deployments/Dockerfile .
+docker buildx build --platform linux/amd64 --load \
+  --build-arg VERSION=$(cat VERSION) \
+  -t hydra:local \
+  -f deployments/Dockerfile .
 
 docker run -d --name hydra \
   -p 8080:8080 \
@@ -62,6 +65,18 @@ docker run -d --name hydra \
 
 ```bash
 make docker-build
+```
+
+如果要构建 `linux/arm64`：
+
+```bash
+make docker-build DOCKER_PLATFORM=linux/arm64
+```
+
+如果要构建多架构并推送到仓库：
+
+```bash
+make docker-build DOCKER_PLATFORM=linux/amd64,linux/arm64 DOCKER_OUTPUT=--push
 ```
 
 容器内的数据目录固定为 `/app/data`，挂载宿主机目录即可持久化。

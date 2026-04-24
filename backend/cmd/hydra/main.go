@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"flag"
 	"fmt"
 	"log"
@@ -10,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -18,23 +16,11 @@ import (
 	loggerService "github.com/yangshoulai/hydra/internal/service/logger"
 )
 
-//go:embed VERSION
-var embeddedVersion string
-
 var (
 	version   = "dev"
 	buildTime = "unknown"
 	dataDir   = flag.String("data-dir", "", "data directory for sqlite db & logs (default: <exe_dir>/data)")
 )
-
-func init() {
-	if strings.TrimSpace(version) != "" && version != "dev" {
-		return
-	}
-	if trimmed := strings.TrimSpace(embeddedVersion); trimmed != "" {
-		version = trimmed
-	}
-}
 
 func main() {
 	flag.Parse()

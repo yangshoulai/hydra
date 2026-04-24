@@ -39,7 +39,7 @@ pnpm run dev
 先修改版本号文件：
 
 ```bash
-vim backend/cmd/hydra/VERSION
+vim VERSION
 ```
 
 例如改成：
@@ -54,6 +54,20 @@ make build
 
 # 运行
 ./bin/hydra --data-dir ./data
+```
+
+## 4.1 构建 Linux 镜像（适用于 macOS M2）
+
+默认交叉构建 `linux/amd64` 并加载到本地 Docker：
+
+```bash
+make docker-build
+```
+
+如果要构建 `linux/arm64`：
+
+```bash
+make docker-build DOCKER_PLATFORM=linux/arm64
 ```
 
 ## 5. 验证

@@ -4,7 +4,7 @@ import { resolve } from 'path'
 import { readFileSync } from 'fs'
 
 const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8'))
-const versionFile = resolve(__dirname, '..', 'backend', 'cmd', 'hydra', 'VERSION')
+const versionFile = resolve(__dirname, '..', 'VERSION')
 const buildDate = new Date().toISOString().slice(0, 10)
 
 function resolveAppVersion(): string {

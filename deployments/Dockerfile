@@ -1,8 +1,9 @@
+# syntax=docker/dockerfile:1.7
 # Hydra - Multi-stage Dockerfile
 ARG VERSION=dev
 
 # Stage 1: Frontend Build
-FROM node:20-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
 ARG VERSION
 
 WORKDIR /app/frontend
@@ -13,11 +14,13 @@ COPY frontend/.npmrc ./
 RUN npm install -g pnpm && pnpm install --frozen-lockfile
 
 COPY frontend/ ./
-RUN pnpm run build
+RUN pnpm exec vue-tsc -b && pnpm exec vite build
 
 # Stage 2: Backend Build
-FROM golang:1.25.6-alpine AS backend-builder
+FROM --platform=$TARGETPLATFORM golang:1.25.6-alpine AS backend-builder
 ARG VERSION
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
@@ -37,13 +40,13 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 # Build Go binary
 # version / buildTime 通过 ldflags 注入
 RUN BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" && \
-    CGO_ENABLED=1 GOOS=linux go build \
+    CGO_ENABLED=1 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH}" go build \
       -ldflags "-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}" \
       -a -installsuffix cgo \
       -o hydra ./cmd/hydra
 
 # Stage 3: Production Image
-FROM alpine:3.20
+FROM --platform=$TARGETPLATFORM alpine:3.20
 
 WORKDIR /app
 

@@ -4,10 +4,12 @@
 APP_NAME=hydra
 BUILD_DIR=./bin
 CMD_DIR=./cmd/hydra
-VERSION_FILE=backend/cmd/hydra/VERSION
+VERSION_FILE=./VERSION
 VERSION?=$(shell VERSION="$$(tr -d '[:space:]' < $(VERSION_FILE) 2>/dev/null)"; if [ -n "$$VERSION" ]; then echo "$$VERSION"; else git describe --tags --always --dirty 2>/dev/null || echo "dev"; fi)
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)"
+DOCKER_PLATFORM?=linux/amd64
+DOCKER_OUTPUT?=--load
 
 # 默认目标
 help: ## 显示帮助信息
@@ -23,7 +25,8 @@ install-deps: ## 安装依赖
 
 build-frontend: ## 构建前端
 	@echo "==> Building frontend..."
-	cd frontend && APP_VERSION=$(VERSION) pnpm run build
+	@echo "==> Frontend app version: $(VERSION)"
+	cd frontend && APP_VERSION=$(VERSION) pnpm exec vue-tsc -b && APP_VERSION=$(VERSION) pnpm exec vite build
 	@mkdir -p backend/static
 	@cp -r frontend/dist/* backend/static/
 	@echo "==> Frontend build complete"
@@ -42,7 +45,7 @@ dev-frontend: ## 开发模式运行前端
 
 dev-backend: ## 开发模式运行后端
 	@echo "==> Running backend in development mode..."
-	cd backend && go run $(CMD_DIR) --data-dir ../data
+	cd backend && go run $(LDFLAGS) $(CMD_DIR) --data-dir ../data
 
 dev: ## 同时运行前后端开发模式
 	@echo "==> Starting development mode (frontend & backend)..."
@@ -81,9 +84,11 @@ lint: ## 运行 linter
 	@echo "==> Running linter..."
 	cd backend && golangci-lint run ./...
 
-docker-build: ## 构建 Docker 镜像
+docker-build: ## 使用 buildx 构建 Linux Docker 镜像（默认 linux/amd64）
 	@echo "==> Building Docker image..."
-	docker build --build-arg VERSION=$(VERSION) -t $(APP_NAME):$(VERSION) -f deployments/Dockerfile .
+	@echo "==> Version: $(VERSION)"
+	@echo "==> Platform: $(DOCKER_PLATFORM)"
+	docker buildx build --platform $(DOCKER_PLATFORM) $(DOCKER_OUTPUT) --build-arg VERSION=$(VERSION) -t $(APP_NAME):$(VERSION) -f deployments/Dockerfile .
 
 docker-run: ## 运行 Docker 容器
 	@echo "==> Running Docker container..."
