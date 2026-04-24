@@ -61,10 +61,20 @@
           <div class="setting-row">
             <div class="setting-row__info">
               <div class="setting-row__label">代理请求超时（秒）</div>
-              <div class="setting-row__desc">调用上游厂商接口的超时时间，超时后触发重试。</div>
+              <div class="setting-row__desc">调用上游厂商接口的超时时间，0 表示不超时；大于 0 时超时后触发重试。</div>
             </div>
             <div class="setting-row__control">
-              <n-input-number v-model:value="formData.proxy_request_timeout" :min="10" :max="300" style="width: 100%" placeholder="10-300" />
+              <n-input-number v-model:value="formData.proxy_request_timeout" :min="0" :max="300" style="width: 100%" placeholder="0-300" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">流式保活间隔（秒）</div>
+              <div class="setting-row__desc">0 表示禁用；大于 0 时仅对流式响应生效，间隔内未收到渠道数据则发送 <code>: keepalive</code> 注释帧。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.proxy_keepalive_interval" :min="0" :max="120" style="width: 100%" placeholder="0-120" />
             </div>
           </div>
 
@@ -134,14 +144,29 @@
 
           <div class="setting-row">
             <div class="setting-row__info">
-              <div class="setting-row__label">响应嗅探</div>
-              <div class="setting-row__desc">解析上游响应正文，识别 HTTP 200 但业务失败的情况，计入熔断。</div>
+              <div class="setting-row__label">非流式响应嗅探</div>
+              <div class="setting-row__desc">解析非流式响应正文，识别 HTTP 200 但业务失败的情况，计入熔断。</div>
             </div>
             <div class="setting-row__control">
               <n-space align="center">
-                <n-switch v-model:value="formData.sniffer_enabled" />
-                <n-tag :type="formData.sniffer_enabled ? 'success' : 'default'" :bordered="false" size="small">
-                  {{ formData.sniffer_enabled ? '已启用' : '已关闭' }}
+                <n-switch v-model:value="formData.sniffer_non_stream_enabled" />
+                <n-tag :type="formData.sniffer_non_stream_enabled ? 'success' : 'default'" :bordered="false" size="small">
+                  {{ formData.sniffer_non_stream_enabled ? '已启用' : '已关闭' }}
+                </n-tag>
+              </n-space>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">流式响应嗅探</div>
+              <div class="setting-row__desc">预读前几个流式数据包，识别空流、假 200 和业务错误。与流式保活互斥。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-space align="center">
+                <n-switch v-model:value="formData.sniffer_stream_enabled" />
+                <n-tag :type="formData.sniffer_stream_enabled ? 'success' : 'default'" :bordered="false" size="small">
+                  {{ formData.sniffer_stream_enabled ? '已启用' : '已关闭' }}
                 </n-tag>
               </n-space>
             </div>
@@ -157,7 +182,7 @@
                 v-model:value="formData.sniffer_stream_packet_count"
                 :min="1"
                 :max="20"
-                :disabled="!formData.sniffer_enabled"
+                :disabled="!formData.sniffer_stream_enabled"
                 style="width: 100%"
                 placeholder="1-20"
               />
@@ -175,7 +200,7 @@
               <n-input
                 v-model:value="snifferKeywords"
                 type="textarea"
-                :disabled="!formData.sniffer_enabled"
+                :disabled="!hasAnySnifferEnabled"
                 :autosize="{ minRows: 4, maxRows: 10 }"
                 placeholder="每行一个关键词，例如：&#10;rate limit&#10;insufficient quota&#10;invalid api key"
                 style="width: 100%"
@@ -283,7 +308,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   NAlert,
   NButton,
@@ -311,8 +336,10 @@ interface SettingsData {
   circuit_breaker_cooling_duration: number
   proxy_network_url: string
   proxy_request_timeout: number
+  proxy_keepalive_interval: number
   proxy_max_retry: number
-  sniffer_enabled: boolean
+  sniffer_non_stream_enabled: boolean
+  sniffer_stream_enabled: boolean
   sniffer_stream_packet_count: number
   log_retention_days: number
   log_debug_enabled: boolean
@@ -329,6 +356,7 @@ const loadError = ref('')
 const debugModeEnabled = ref(false)
 const showDebugModeConfirm = ref(false)
 const isConfirming = ref(false)
+const isConflictAdjusting = ref(false)
 const snifferKeywords = ref('')
 
 const formData = ref<SettingsData>({
@@ -339,14 +367,26 @@ const formData = ref<SettingsData>({
   circuit_breaker_cooling_duration: 60,
   proxy_network_url: '',
   proxy_request_timeout: 120,
+  proxy_keepalive_interval: 0,
   proxy_max_retry: 3,
-  sniffer_enabled: true,
+  sniffer_non_stream_enabled: true,
+  sniffer_stream_enabled: true,
   sniffer_stream_packet_count: 1,
   log_retention_days: 30,
   log_debug_enabled: false,
   model_test_prompt: 'Hi',
   model_test_user_agent: DEFAULT_MODEL_TEST_USER_AGENT,
 })
+
+const hasAnySnifferEnabled = computed(() => formData.value.sniffer_non_stream_enabled || formData.value.sniffer_stream_enabled)
+
+const runSilentFormUpdate = (updater: () => void) => {
+  isConflictAdjusting.value = true
+  updater()
+  setTimeout(() => {
+    isConflictAdjusting.value = false
+  }, 0)
+}
 
 const loadSettings = async () => {
   isLoading.value = true
@@ -366,9 +406,22 @@ const loadSettings = async () => {
       formData.value.circuit_breaker_cooling_duration = parseInt(settings.circuit_breaker_cooling_duration)
     }
     if (settings.proxy_request_timeout) formData.value.proxy_request_timeout = parseInt(settings.proxy_request_timeout)
+    if (settings.proxy_keepalive_interval !== undefined) {
+      formData.value.proxy_keepalive_interval = Math.min(120, Math.max(0, parseInt(settings.proxy_keepalive_interval) || 0))
+    }
     if (settings.proxy_network_url !== undefined) formData.value.proxy_network_url = settings.proxy_network_url || ''
     if (settings.proxy_max_retry) formData.value.proxy_max_retry = parseInt(settings.proxy_max_retry)
-    if (settings.sniffer_enabled !== undefined) formData.value.sniffer_enabled = settings.sniffer_enabled === 'true'
+    const legacySnifferEnabled = settings.sniffer_enabled !== undefined ? settings.sniffer_enabled === 'true' : true
+    if (settings.sniffer_non_stream_enabled !== undefined) {
+      formData.value.sniffer_non_stream_enabled = settings.sniffer_non_stream_enabled === 'true'
+    } else {
+      formData.value.sniffer_non_stream_enabled = legacySnifferEnabled
+    }
+    if (settings.sniffer_stream_enabled !== undefined) {
+      formData.value.sniffer_stream_enabled = settings.sniffer_stream_enabled === 'true'
+    } else {
+      formData.value.sniffer_stream_enabled = legacySnifferEnabled
+    }
     if (settings.sniffer_stream_packet_count) {
       formData.value.sniffer_stream_packet_count = Math.max(1, parseInt(settings.sniffer_stream_packet_count))
     }
@@ -419,6 +472,56 @@ watch(debugModeEnabled, (newValue, oldValue) => {
   }
 })
 
+watch(
+  () => formData.value.sniffer_stream_enabled,
+  (newValue, oldValue) => {
+    if (isConfirming.value || isConflictAdjusting.value) return
+    if (!newValue || oldValue === undefined || formData.value.proxy_keepalive_interval <= 0) return
+
+    dialog.warning({
+      title: '启用流式响应嗅探',
+      content: '流式响应嗅探需要在转发前预读上游数据，与流式保活互斥。继续后将自动把“流式保活间隔”设置为 0。',
+      positiveText: '继续启用',
+      negativeText: '取消',
+      onPositiveClick: () => {
+        runSilentFormUpdate(() => {
+          formData.value.proxy_keepalive_interval = 0
+        })
+      },
+      onNegativeClick: () => {
+        runSilentFormUpdate(() => {
+          formData.value.sniffer_stream_enabled = oldValue
+        })
+      },
+    })
+  },
+)
+
+watch(
+  () => formData.value.proxy_keepalive_interval,
+  (newValue, oldValue) => {
+    if (isConfirming.value || isConflictAdjusting.value) return
+    if (newValue <= 0 || !formData.value.sniffer_stream_enabled) return
+
+    dialog.warning({
+      title: '启用流式保活',
+      content: '流式保活会提前向客户端发送保活帧，这会影响流式响应嗅探的预读与错误判定。继续后将自动关闭“流式响应嗅探”。',
+      positiveText: '继续启用',
+      negativeText: '取消',
+      onPositiveClick: () => {
+        runSilentFormUpdate(() => {
+          formData.value.sniffer_stream_enabled = false
+        })
+      },
+      onNegativeClick: () => {
+        runSilentFormUpdate(() => {
+          formData.value.proxy_keepalive_interval = oldValue ?? 0
+        })
+      },
+    })
+  },
+)
+
 const confirmDebugMode = () => {
   isConfirming.value = true
   debugModeEnabled.value = true
@@ -454,8 +557,10 @@ const handleSave = async () => {
         circuit_breaker_cooling_duration: formData.value.circuit_breaker_cooling_duration.toString(),
         proxy_network_url: formData.value.proxy_network_url.trim(),
         proxy_request_timeout: formData.value.proxy_request_timeout.toString(),
+        proxy_keepalive_interval: formData.value.proxy_keepalive_interval.toString(),
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
-        sniffer_enabled: formData.value.sniffer_enabled.toString(),
+        sniffer_non_stream_enabled: formData.value.sniffer_non_stream_enabled.toString(),
+        sniffer_stream_enabled: formData.value.sniffer_stream_enabled.toString(),
         sniffer_stream_packet_count: Math.max(1, formData.value.sniffer_stream_packet_count).toString(),
         log_retention_days: formData.value.log_retention_days.toString(),
         log_debug_enabled: debugModeEnabled.value.toString(),

@@ -23,6 +23,29 @@ type SettingService struct {
 	notifier          *ConfigNotifier // 配置变更通知器
 }
 
+type SettingValidationError struct {
+	message string
+}
+
+func (e *SettingValidationError) Error() string {
+	return e.message
+}
+
+type SettingConflictError struct {
+	message string
+}
+
+func (e *SettingConflictError) Error() string {
+	return e.message
+}
+
+type SnifferConfig struct {
+	NonStreamEnabled  bool
+	StreamEnabled     bool
+	StreamPacketCount int
+	Keywords          []string
+}
+
 // NewSettingService 创建系统设置服务
 func NewSettingService(logger *slog.Logger, systemSettingRepo *repository.SystemSettingRepository) *SettingService {
 	return &SettingService{
@@ -136,6 +159,10 @@ func (s *SettingService) get(ctx context.Context, key string) (string, error) {
 
 // Set 设置配置值
 func (s *SettingService) Set(ctx context.Context, key string, value string) error {
+	if err := s.validateValue(key, value); err != nil {
+		return err
+	}
+
 	existing, err := s.systemSettingRepo.GetByKey(ctx, key)
 	if err != nil {
 		s.logger.Error("获取配置失败",
@@ -225,6 +252,7 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingLogFileCompress:
 		return "logging"
 	case key == models.SettingProxyRequestTimeout ||
+		key == models.SettingProxyKeepaliveInterval ||
 		key == models.SettingProxyNetworkURL ||
 		key == models.SettingProxyMaxRetry:
 		return "proxy"
@@ -234,6 +262,8 @@ func (s *SettingService) getDefaultCategory(key string) string {
 	case key == models.SettingSnifferPlainTextErrorRules:
 		return "sniffer"
 	case key == models.SettingSnifferEnabled ||
+		key == models.SettingSnifferNonStreamEnabled ||
+		key == models.SettingSnifferStreamEnabled ||
 		key == models.SettingSnifferStreamPacketCount:
 		return "sniffer"
 	default:
@@ -249,11 +279,119 @@ func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureTh
 }
 
 // GetProxyConfig 获取代理配置（超时/网络代理/重试）
-func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, networkProxyURL string, maxRetry int) {
-	requestTimeout = s.GetDuration(ctx, models.SettingProxyRequestTimeout, 120*time.Second)
+func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, keepaliveInterval time.Duration, networkProxyURL string, maxRetry int) {
+	requestTimeoutSeconds := s.GetInt(ctx, models.SettingProxyRequestTimeout, 120)
+	if requestTimeoutSeconds < 0 {
+		requestTimeoutSeconds = 0
+	}
+	requestTimeout = time.Duration(requestTimeoutSeconds) * time.Second
+
+	keepaliveSeconds := s.GetInt(ctx, models.SettingProxyKeepaliveInterval, 0)
+	if keepaliveSeconds < 0 {
+		keepaliveSeconds = 0
+	}
+	if keepaliveSeconds > 120 {
+		keepaliveSeconds = 120
+	}
+	keepaliveInterval = time.Duration(keepaliveSeconds) * time.Second
+
 	networkProxyURL = s.GetString(ctx, models.SettingProxyNetworkURL, "")
 	maxRetry = s.GetInt(ctx, models.SettingProxyMaxRetry, 3)
 	return
+}
+
+func (s *SettingService) validateValue(key string, value string) error {
+	trimmed := strings.TrimSpace(value)
+
+	switch key {
+	case models.SettingProxyRequestTimeout:
+		seconds, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "代理请求超时必须是 0-300 的整数秒数"}
+		}
+		if seconds < 0 || seconds > 300 {
+			return &SettingValidationError{message: "代理请求超时必须在 0-300 秒之间"}
+		}
+	case models.SettingProxyKeepaliveInterval:
+		seconds, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "保活间隔必须是 0-120 的整数秒数"}
+		}
+		if seconds < 0 || seconds > 120 {
+			return &SettingValidationError{message: "保活间隔必须在 0-120 秒之间"}
+		}
+	case models.SettingSnifferEnabled,
+		models.SettingSnifferNonStreamEnabled,
+		models.SettingSnifferStreamEnabled:
+		if _, err := strconv.ParseBool(trimmed); err != nil {
+			return &SettingValidationError{message: "嗅探开关必须是 true 或 false"}
+		}
+	}
+
+	return nil
+}
+
+func (s *SettingService) ValidateSettingsPatch(ctx context.Context, patch map[string]string) error {
+	if len(patch) == 0 {
+		return nil
+	}
+
+	for key, value := range patch {
+		if err := s.validateValue(key, value); err != nil {
+			return err
+		}
+	}
+
+	cfg := s.GetSnifferConfig(ctx)
+	keepaliveSeconds := s.GetInt(ctx, models.SettingProxyKeepaliveInterval, 0)
+	if keepaliveSeconds < 0 {
+		keepaliveSeconds = 0
+	}
+
+	parseBoolValue := func(key string, current bool) (bool, error) {
+		value, ok := patch[key]
+		if !ok {
+			return current, nil
+		}
+		parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+		if err != nil {
+			return false, &SettingValidationError{message: "嗅探开关必须是 true 或 false"}
+		}
+		return parsed, nil
+	}
+
+	var err error
+	cfg.NonStreamEnabled, err = parseBoolValue(models.SettingSnifferNonStreamEnabled, cfg.NonStreamEnabled)
+	if err != nil {
+		return err
+	}
+	cfg.StreamEnabled, err = parseBoolValue(models.SettingSnifferStreamEnabled, cfg.StreamEnabled)
+	if err != nil {
+		return err
+	}
+
+	if value, ok := patch[models.SettingSnifferEnabled]; ok {
+		legacyEnabled, parseErr := strconv.ParseBool(strings.TrimSpace(value))
+		if parseErr != nil {
+			return &SettingValidationError{message: "嗅探开关必须是 true 或 false"}
+		}
+		cfg.NonStreamEnabled = legacyEnabled
+		cfg.StreamEnabled = legacyEnabled
+	}
+
+	if value, ok := patch[models.SettingProxyKeepaliveInterval]; ok {
+		seconds, parseErr := strconv.Atoi(strings.TrimSpace(value))
+		if parseErr != nil {
+			return &SettingValidationError{message: "保活间隔必须是 0-120 的整数秒数"}
+		}
+		keepaliveSeconds = seconds
+	}
+
+	if cfg.StreamEnabled && keepaliveSeconds > 0 {
+		return &SettingConflictError{message: "流式响应嗅探与流式保活不能同时启用，请关闭流式响应嗅探或将流式保活间隔设置为 0"}
+	}
+
+	return nil
 }
 
 // GetEffectiveLogLevel 获取实际生效的日志级别
@@ -265,15 +403,20 @@ func (s *SettingService) GetEffectiveLogLevel(ctx context.Context) string {
 	return "info"
 }
 
-// GetSnifferConfig 获取响应嗅探配置（启用开关、流式探测包数量、错误关键词）
-func (s *SettingService) GetSnifferConfig(ctx context.Context) (enabled bool, streamPacketCount int, keywords []string) {
-	enabled = s.GetBool(ctx, models.SettingSnifferEnabled, true)
-	streamPacketCount = s.GetInt(ctx, models.SettingSnifferStreamPacketCount, 1)
+// GetSnifferConfig 获取响应嗅探配置（按流式/非流式拆分）。
+func (s *SettingService) GetSnifferConfig(ctx context.Context) SnifferConfig {
+	legacyEnabled := s.GetBool(ctx, models.SettingSnifferEnabled, true)
+	streamPacketCount := s.GetInt(ctx, models.SettingSnifferStreamPacketCount, 1)
 	if streamPacketCount <= 0 {
 		streamPacketCount = 1
 	}
-	keywords = s.GetPlainTextErrorRules(ctx)
-	return
+
+	return SnifferConfig{
+		NonStreamEnabled:  s.GetBool(ctx, models.SettingSnifferNonStreamEnabled, legacyEnabled),
+		StreamEnabled:     s.GetBool(ctx, models.SettingSnifferStreamEnabled, legacyEnabled),
+		StreamPacketCount: streamPacketCount,
+		Keywords:          s.GetPlainTextErrorRules(ctx),
+	}
 }
 
 // GetModelTestPrompt 获取模型测试默认提示词

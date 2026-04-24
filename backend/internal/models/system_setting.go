@@ -40,9 +40,12 @@ const (
 	SettingLogRetentionDays               = "log_retention_days"
 	SettingLogDebugEnabled                = "log_debug_enabled"
 	SettingProxyRequestTimeout            = "proxy_request_timeout"
+	SettingProxyKeepaliveInterval         = "proxy_keepalive_interval"
 	SettingProxyNetworkURL                = "proxy_network_url"
 	SettingProxyMaxRetry                  = "proxy_max_retry"
-	SettingSnifferEnabled                 = "sniffer_enabled"
+	SettingSnifferEnabled                 = "sniffer_enabled" // 旧版全局嗅探开关，仅用于迁移兼容
+	SettingSnifferNonStreamEnabled        = "sniffer_non_stream_enabled"
+	SettingSnifferStreamEnabled           = "sniffer_stream_enabled"
 	SettingSnifferStreamPacketCount       = "sniffer_stream_packet_count"
 	SettingSnifferPlainTextErrorRules     = "sniffer_plain_text_error_rules"
 	SettingModelTestPrompt                = "model_test_prompt"

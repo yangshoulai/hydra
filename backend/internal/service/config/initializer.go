@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strconv"
+	"strings"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
@@ -117,7 +119,13 @@ var DefaultSettings = []models.SystemSetting{
 		Key:       models.SettingProxyRequestTimeout,
 		Value:     "120",
 		ValueType: "int",
-		Remark:    "代理请求超时时间(秒)",
+		Remark:    "代理请求超时时间(秒，0 表示不超时)",
+	},
+	{
+		Key:       models.SettingProxyKeepaliveInterval,
+		Value:     "0",
+		ValueType: "int",
+		Remark:    "流式响应保活间隔(秒，0 表示禁用，仅对流式响应生效)",
 	},
 	{
 		Key:       models.SettingProxyNetworkURL,
@@ -145,10 +153,16 @@ var DefaultSettings = []models.SystemSetting{
 	},
 	// 响应嗅探设置
 	{
-		Key:       models.SettingSnifferEnabled,
+		Key:       models.SettingSnifferNonStreamEnabled,
 		Value:     "true",
 		ValueType: "bool",
-		Remark:    "是否启用响应嗅探",
+		Remark:    "是否启用非流式响应嗅探",
+	},
+	{
+		Key:       models.SettingSnifferStreamEnabled,
+		Value:     "true",
+		ValueType: "bool",
+		Remark:    "是否启用流式响应嗅探",
 	},
 	{
 		Key:       models.SettingSnifferStreamPacketCount,
@@ -206,10 +220,71 @@ var obsoleteSettingKeys = []string{
 	"proxy_max_concurrent", // 未实际接线的入站并发控制，已移除
 }
 
+func resolveSplitSnifferDefaults(legacyEnabled *bool, keepaliveSeconds int) (nonStreamEnabled string, streamEnabled string) {
+	if legacyEnabled == nil {
+		return "true", "true"
+	}
+
+	if !*legacyEnabled {
+		return "false", "false"
+	}
+
+	if keepaliveSeconds > 0 {
+		return "true", "false"
+	}
+
+	return "true", "true"
+}
+
 // Initialize 初始化系统设置
 // 如果设置不存在则创建,存在则跳过；同时清理已废弃的历史 key。
 func (i *Initializer) Initialize(ctx context.Context) error {
 	i.logger.Info("初始化系统设置")
+
+	legacySnifferSetting, err := i.systemSettingRepo.GetByKey(ctx, models.SettingSnifferEnabled)
+	if err != nil {
+		i.logger.Error("读取旧版嗅探设置失败",
+			slog.String("key", models.SettingSnifferEnabled),
+			slog.String("error", err.Error()),
+		)
+		return err
+	}
+
+	var legacySnifferEnabled *bool
+	if legacySnifferSetting != nil {
+		enabled := strings.EqualFold(strings.TrimSpace(legacySnifferSetting.Value), "true")
+		legacySnifferEnabled = &enabled
+	}
+
+	keepaliveSetting, err := i.systemSettingRepo.GetByKey(ctx, models.SettingProxyKeepaliveInterval)
+	if err != nil {
+		i.logger.Error("读取流式保活设置失败",
+			slog.String("key", models.SettingProxyKeepaliveInterval),
+			slog.String("error", err.Error()),
+		)
+		return err
+	}
+
+	keepaliveSeconds := 0
+	if keepaliveSetting != nil {
+		if parsed, parseErr := strconv.Atoi(strings.TrimSpace(keepaliveSetting.Value)); parseErr == nil && parsed > 0 {
+			keepaliveSeconds = parsed
+		}
+	}
+
+	defaultNonStreamEnabled, defaultStreamEnabled := resolveSplitSnifferDefaults(legacySnifferEnabled, keepaliveSeconds)
+
+	allSettings := make([]models.SystemSetting, 0, len(DefaultSettings)+1)
+	for _, setting := range DefaultSettings {
+		switch setting.Key {
+		case models.SettingSnifferNonStreamEnabled:
+			setting.Value = defaultNonStreamEnabled
+		case models.SettingSnifferStreamEnabled:
+			setting.Value = defaultStreamEnabled
+		}
+		allSettings = append(allSettings, setting)
+	}
+	allSettings = append(allSettings, GetDefaultPlainTextErrorRulesSetting())
 
 	// 清理历史残留设置（失败不阻塞初始化）
 	for _, key := range obsoleteSettingKeys {
@@ -220,9 +295,6 @@ func (i *Initializer) Initialize(ctx context.Context) error {
 			)
 		}
 	}
-
-	// 合并默认设置和明文错误规则设置
-	allSettings := append(DefaultSettings, GetDefaultPlainTextErrorRulesSetting())
 
 	for _, setting := range allSettings {
 		// 检查设置是否已存在
@@ -254,6 +326,32 @@ func (i *Initializer) Initialize(ctx context.Context) error {
 				slog.String("key", setting.Key),
 				slog.String("value", existing.Value),
 			)
+		}
+	}
+
+	if legacySnifferSetting != nil {
+		nonStreamSetting, err := i.systemSettingRepo.GetByKey(ctx, models.SettingSnifferNonStreamEnabled)
+		if err != nil {
+			return err
+		}
+		streamSetting, err := i.systemSettingRepo.GetByKey(ctx, models.SettingSnifferStreamEnabled)
+		if err != nil {
+			return err
+		}
+
+		if nonStreamSetting != nil && streamSetting != nil {
+			if err := i.systemSettingRepo.Delete(ctx, models.SettingSnifferEnabled); err != nil {
+				i.logger.Warn("清理旧版全局嗅探开关失败（可忽略）",
+					slog.String("key", models.SettingSnifferEnabled),
+					slog.String("error", err.Error()),
+				)
+			} else {
+				i.logger.Info("已迁移旧版全局嗅探开关到流式/非流式独立配置",
+					slog.String("legacy_key", models.SettingSnifferEnabled),
+					slog.String("non_stream_enabled", nonStreamSetting.Value),
+					slog.String("stream_enabled", streamSetting.Value),
+				)
+			}
 		}
 	}
 

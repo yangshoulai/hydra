@@ -108,11 +108,8 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 	c *gin.Context,
 	upstreamResp *http.Response,
 	traceID string,
+	keepaliveInterval time.Duration,
 ) (*StreamForwardResult, error) {
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(upstreamResp.Body)
-
 	startTime := time.Now()
 	firstChunkMS := 0
 	firstChunkSeen := false
@@ -143,17 +140,83 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 	c.Status(upstreamResp.StatusCode)
 	flusher.Flush()
 
-	chunkBuf := make([]byte, 1024)
-	for {
-		n, readErr := upstreamResp.Body.Read(chunkBuf)
-		if n > 0 {
-			if !firstChunkSeen {
-				firstChunkSeen = true
-				firstChunkMS = int(time.Since(startTime).Milliseconds())
+	type streamReadResult struct {
+		part []byte
+		err  error
+	}
+
+	resultCh := make(chan streamReadResult)
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+	defer func() {
+		_ = upstreamResp.Body.Close()
+	}()
+
+	go func(body io.ReadCloser) {
+		chunkBuf := make([]byte, 1024)
+		for {
+			n, readErr := body.Read(chunkBuf)
+			if n > 0 {
+				part := append([]byte(nil), chunkBuf[:n]...)
+				select {
+				case resultCh <- streamReadResult{part: part}:
+				case <-stopCh:
+					return
+				}
 			}
 
-			part := chunkBuf[:n]
-			if _, err := c.Writer.Write(part); err != nil {
+			if readErr != nil {
+				select {
+				case resultCh <- streamReadResult{err: readErr}:
+				case <-stopCh:
+				}
+				return
+			}
+		}
+	}(upstreamResp.Body)
+
+	var keepaliveTimer *time.Timer
+	var keepaliveC <-chan time.Time
+	resetKeepaliveTimer := func() {
+		if keepaliveInterval <= 0 {
+			return
+		}
+		if keepaliveTimer == nil {
+			keepaliveTimer = time.NewTimer(keepaliveInterval)
+			keepaliveC = keepaliveTimer.C
+			return
+		}
+		if !keepaliveTimer.Stop() {
+			select {
+			case <-keepaliveTimer.C:
+			default:
+			}
+		}
+		keepaliveTimer.Reset(keepaliveInterval)
+		keepaliveC = keepaliveTimer.C
+	}
+	defer func() {
+		if keepaliveTimer == nil {
+			return
+		}
+		if !keepaliveTimer.Stop() {
+			select {
+			case <-keepaliveTimer.C:
+			default:
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return &StreamForwardResult{
+				ResponseBody: captureBuffer.String(),
+				StreamChunks: streamChunks,
+				FirstChunkMS: firstChunkMS,
+			}, c.Request.Context().Err()
+		case <-keepaliveC:
+			if _, err := c.Writer.Write([]byte(": keepalive\n\n")); err != nil {
 				return &StreamForwardResult{
 					ResponseBody: captureBuffer.String(),
 					StreamChunks: streamChunks,
@@ -161,43 +224,55 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 				}, err
 			}
 			flusher.Flush()
-			captureBuffer.Write(part)
+			resetKeepaliveTimer()
+		case result := <-resultCh:
+			if len(result.part) > 0 {
+				if !firstChunkSeen {
+					firstChunkSeen = true
+					firstChunkMS = int(time.Since(startTime).Milliseconds())
+				}
 
-			for i := 0; i < len(part); i++ {
-				ch := part[i]
-				lineBuffer.WriteByte(ch)
-				if ch == '\n' {
-					line := strings.TrimSpace(lineBuffer.String())
-					if strings.HasPrefix(line, "data:") {
-						streamChunks++
+				part := result.part
+				resetKeepaliveTimer()
+
+				if _, err := c.Writer.Write(part); err != nil {
+					return &StreamForwardResult{
+						ResponseBody: captureBuffer.String(),
+						StreamChunks: streamChunks,
+						FirstChunkMS: firstChunkMS,
+					}, err
+				}
+				flusher.Flush()
+				captureBuffer.Write(part)
+
+				for i := 0; i < len(part); i++ {
+					ch := part[i]
+					lineBuffer.WriteByte(ch)
+					if ch == '\n' {
+						line := strings.TrimSpace(lineBuffer.String())
+						if strings.HasPrefix(line, "data:") {
+							streamChunks++
+						}
+						lineBuffer.Reset()
 					}
-					lineBuffer.Reset()
 				}
 			}
 
-			select {
-			case <-c.Request.Context().Done():
-				return &StreamForwardResult{
-					ResponseBody: captureBuffer.String(),
-					StreamChunks: streamChunks,
-					FirstChunkMS: firstChunkMS,
-				}, c.Request.Context().Err()
-			default:
+			if result.err == nil {
+				continue
 			}
-		}
-
-		if readErr == io.EOF {
-			break
-		}
-		if readErr != nil {
+			if result.err == io.EOF {
+				goto streamEnd
+			}
 			return &StreamForwardResult{
 				ResponseBody: captureBuffer.String(),
 				StreamChunks: streamChunks,
 				FirstChunkMS: firstChunkMS,
-			}, readErr
+			}, result.err
 		}
 	}
 
+streamEnd:
 	if captureBuffer.Len() == 0 {
 		return nil, &EmptySSEBodyError{
 			TraceID: traceID,

@@ -253,7 +253,7 @@ func (ps *ProxyService) handleStreamUpstream(
 		}
 	}()
 
-	snifferEnabled, streamPacketCount := ps.getSnifferConfig()
+	snifferEnabled, streamPacketCount := ps.getStreamSnifferConfig()
 	probeFirstChunkMS := 0
 	if snifferEnabled {
 		probePayload, firstChunkMS, probeErr := ps.readStreamSniffPayload(upstreamResp, streamPacketCount, proxyCtx.TraceID)
@@ -295,7 +295,12 @@ func (ps *ProxyService) handleStreamUpstream(
 
 	// 转发接管 body，其内部 defer Close 会触发 multiReadCloser.Close → 原始 body.Close
 	forwardStarted = true
-	forwardResult, forwardErr := ps.responseForwarder.ForwardStreamResponse(c, upstreamResp, proxyCtx.TraceID)
+	forwardResult, forwardErr := ps.responseForwarder.ForwardStreamResponse(
+		c,
+		upstreamResp,
+		proxyCtx.TraceID,
+		ps.getStreamKeepaliveInterval(),
+	)
 	if emptyErr, ok := forwardErr.(*EmptySSEBodyError); ok {
 		ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeNone, stageStreamForward, emptyErr.Error())
 		return NewRetryableProxyError(emptyErr, FailureTypeSoft, FailureScopeNone, "空流式响应")
@@ -371,8 +376,7 @@ func (ps *ProxyService) handleNonStreamUpstream(
 		attempt.UpstreamResponseBody = append([]byte(nil), body...)
 	}
 
-	snifferEnabled, _ := ps.getSnifferConfig()
-	if snifferEnabled {
+	if ps.isNonStreamSnifferEnabled() {
 		sniffResult, sniffErr := ps.responseSniffer.Sniff(upstreamResp, false, body, proxyCtx.TraceID)
 		if sniffErr != nil {
 			ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeNone, stageNonStreamRead, sniffErr.Error())

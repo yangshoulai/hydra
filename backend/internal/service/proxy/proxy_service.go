@@ -70,18 +70,21 @@ type ProxyService struct {
 	tokenUsageRecorder *TokenUsageRecorder
 	requestLogRecorder *RequestLogRecorder
 
-	snifferConfigMu        sync.RWMutex
-	snifferEnabled         bool
-	streamSniffPacketCount int
-	debugModeEnabled       atomic.Bool
+	snifferConfigMu         sync.RWMutex
+	streamSnifferEnabled    bool
+	nonStreamSnifferEnabled bool
+	streamSniffPacketCount  int
+	debugModeEnabled        atomic.Bool
+	streamKeepaliveNanos    atomic.Int64
 }
 
 // ProxyServiceConfig 代理服务配置
 type ProxyServiceConfig struct {
-	MaxRetries     int
-	RetryDelay     time.Duration
-	RequestTimeout time.Duration
-	NetworkProxy   string
+	MaxRetries              int
+	RetryDelay              time.Duration
+	RequestTimeout          time.Duration
+	StreamKeepaliveInterval time.Duration
+	NetworkProxy            string
 }
 
 // =============================================================================
@@ -102,9 +105,7 @@ func NewProxyService(
 	requestLogRecorder *RequestLogRecorder,
 ) *ProxyService {
 	httpClientConfig := DefaultHTTPClientConfig()
-	if config.RequestTimeout > 0 {
-		httpClientConfig.RequestTimeout = config.RequestTimeout
-	}
+	httpClientConfig.RequestTimeout = config.RequestTimeout
 	httpClientConfig.UpstreamProxyURL = config.NetworkProxy
 
 	retryDelay := 500 * time.Millisecond
@@ -117,30 +118,32 @@ func NewProxyService(
 	}
 
 	responseSniffer := NewResponseSniffer(logger)
-	snifferEnabled, streamSniffPacketCount, keywords := settingService.GetSnifferConfig(context.Background())
-	responseSniffer.UpdatePlainTextErrorKeywords(keywords)
+	snifferCfg := settingService.GetSnifferConfig(context.Background())
+	responseSniffer.UpdatePlainTextErrorKeywords(snifferCfg.Keywords)
 
 	svc := &ProxyService{
-		logger:                 logger,
-		loadBalancer:           NewLoadBalancer(logger, channelRepo, circuitManager),
-		requestBuilder:         NewRequestBuilder(),
-		httpClient:             NewHTTPClient(httpClientConfig, logger),
-		responseSniffer:        responseSniffer,
-		responseForwarder:      NewResponseForwarder(logger),
-		failureClassifier:      NewFailureClassifier(),
-		retryCoordinator:       NewRetryCoordinator(logger, maxRetries, retryDelay, nil),
-		circuitManager:         circuitManager,
-		channelKeyRepo:         channelKeyRepo,
-		modelConfigRepo:        modelConfigRepo,
-		accessTokenRepo:        accessTokenRepo,
-		settingService:         settingService,
-		runtimeMetrics:         runtimeMetrics,
-		tokenUsageRecorder:     NewTokenUsageRecorder(logger, modelConfigRepo, channelKeyRepo, accessTokenRepo, 1024, 4),
-		requestLogRecorder:     requestLogRecorder,
-		snifferEnabled:         snifferEnabled,
-		streamSniffPacketCount: normalizeStreamSniffPacketCount(streamSniffPacketCount),
+		logger:                  logger,
+		loadBalancer:            NewLoadBalancer(logger, channelRepo, circuitManager),
+		requestBuilder:          NewRequestBuilder(),
+		httpClient:              NewHTTPClient(httpClientConfig, logger),
+		responseSniffer:         responseSniffer,
+		responseForwarder:       NewResponseForwarder(logger),
+		failureClassifier:       NewFailureClassifier(),
+		retryCoordinator:        NewRetryCoordinator(logger, maxRetries, retryDelay, nil),
+		circuitManager:          circuitManager,
+		channelKeyRepo:          channelKeyRepo,
+		modelConfigRepo:         modelConfigRepo,
+		accessTokenRepo:         accessTokenRepo,
+		settingService:          settingService,
+		runtimeMetrics:          runtimeMetrics,
+		tokenUsageRecorder:      NewTokenUsageRecorder(logger, modelConfigRepo, channelKeyRepo, accessTokenRepo, 1024, 4),
+		requestLogRecorder:      requestLogRecorder,
+		streamSnifferEnabled:    snifferCfg.StreamEnabled,
+		nonStreamSnifferEnabled: snifferCfg.NonStreamEnabled,
+		streamSniffPacketCount:  normalizeStreamSniffPacketCount(snifferCfg.StreamPacketCount),
 	}
 	svc.debugModeEnabled.Store(settingService.GetBool(context.Background(), models.SettingLogDebugEnabled, false))
+	svc.updateStreamKeepaliveInterval(config.StreamKeepaliveInterval)
 	svc.retryCoordinator.SetDebugFn(svc.isDebugModeEnabled)
 	return svc
 }
@@ -268,15 +271,17 @@ func (ps *ProxyService) reloadLoggingConfig(ctx context.Context) {
 }
 
 func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
-	requestTimeout, networkProxyURL, maxRetry := ps.settingService.GetProxyConfig(ctx)
+	requestTimeout, keepaliveInterval, networkProxyURL, maxRetry := ps.settingService.GetProxyConfig(ctx)
 	retryDelay := 500 * time.Millisecond
 
 	ps.httpClient.UpdateRequestTimeout(requestTimeout)
 	ps.httpClient.UpdateUpstreamProxyURL(networkProxyURL)
 	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
+	ps.updateStreamKeepaliveInterval(keepaliveInterval)
 
 	ps.logger.Info("代理服务配置已更新",
 		slog.Duration("request_timeout", requestTimeout),
+		slog.Duration("stream_keepalive_interval", keepaliveInterval),
 		slog.String("network_proxy_url", networkProxyURL),
 		slog.Int("max_retry", maxRetry),
 		slog.Duration("retry_delay", retryDelay),
@@ -284,31 +289,47 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 }
 
 func (ps *ProxyService) reloadSnifferConfig(ctx context.Context) {
-	enabled, streamPacketCount, keywords := ps.settingService.GetSnifferConfig(ctx)
-	ps.updateSnifferConfig(enabled, streamPacketCount)
-	ps.responseSniffer.UpdatePlainTextErrorKeywords(keywords)
+	cfg := ps.settingService.GetSnifferConfig(ctx)
+	ps.updateSnifferConfig(cfg)
+	ps.responseSniffer.UpdatePlainTextErrorKeywords(cfg.Keywords)
 	ps.logger.Info("响应嗅探配置已更新",
-		slog.Bool("sniffer_enabled", enabled),
-		slog.Int("stream_packet_count", streamPacketCount),
-		slog.Int("keywords_count", len(keywords)),
+		slog.Bool("stream_sniffer_enabled", cfg.StreamEnabled),
+		slog.Bool("non_stream_sniffer_enabled", cfg.NonStreamEnabled),
+		slog.Int("stream_packet_count", cfg.StreamPacketCount),
+		slog.Int("keywords_count", len(cfg.Keywords)),
 	)
 }
 
-func (ps *ProxyService) updateSnifferConfig(enabled bool, streamPacketCount int) {
+func (ps *ProxyService) updateSnifferConfig(cfg configService.SnifferConfig) {
 	ps.snifferConfigMu.Lock()
-	ps.snifferEnabled = enabled
-	ps.streamSniffPacketCount = normalizeStreamSniffPacketCount(streamPacketCount)
+	ps.streamSnifferEnabled = cfg.StreamEnabled
+	ps.nonStreamSnifferEnabled = cfg.NonStreamEnabled
+	ps.streamSniffPacketCount = normalizeStreamSniffPacketCount(cfg.StreamPacketCount)
 	ps.snifferConfigMu.Unlock()
 }
 
-func (ps *ProxyService) getSnifferConfig() (enabled bool, streamPacketCount int) {
+func (ps *ProxyService) getStreamSnifferConfig() (enabled bool, streamPacketCount int) {
 	ps.snifferConfigMu.RLock()
 	defer ps.snifferConfigMu.RUnlock()
-	return ps.snifferEnabled, ps.streamSniffPacketCount
+	return ps.streamSnifferEnabled, ps.streamSniffPacketCount
+}
+
+func (ps *ProxyService) isNonStreamSnifferEnabled() bool {
+	ps.snifferConfigMu.RLock()
+	defer ps.snifferConfigMu.RUnlock()
+	return ps.nonStreamSnifferEnabled
 }
 
 func (ps *ProxyService) isDebugModeEnabled() bool {
 	return ps.debugModeEnabled.Load()
+}
+
+func (ps *ProxyService) updateStreamKeepaliveInterval(interval time.Duration) {
+	ps.streamKeepaliveNanos.Store(int64(normalizeStreamKeepaliveInterval(interval)))
+}
+
+func (ps *ProxyService) getStreamKeepaliveInterval() time.Duration {
+	return time.Duration(ps.streamKeepaliveNanos.Load())
 }
 
 func (ps *ProxyService) GetHTTPClient() *HTTPClient {

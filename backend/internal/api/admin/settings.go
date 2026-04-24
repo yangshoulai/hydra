@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
 
 	"log/slog"
@@ -70,9 +71,36 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
+	if err := h.settingService.ValidateSettingsPatch(c.Request.Context(), req.Settings); err != nil {
+		var validationErr *config.SettingValidationError
+		var conflictErr *config.SettingConflictError
+		switch {
+		case errors.As(err, &validationErr):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Invalid setting value",
+				"message": validationErr.Error(),
+			})
+			return
+		case errors.As(err, &conflictErr):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Conflicting settings",
+				"message": conflictErr.Error(),
+			})
+			return
+		}
+	}
+
 	// 批量更新设置
 	for key, value := range req.Settings {
 		if err := h.settingService.Set(c.Request.Context(), key, value); err != nil {
+			var validationErr *config.SettingValidationError
+			if errors.As(err, &validationErr) {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   "Invalid setting value",
+					"message": validationErr.Error(),
+				})
+				return
+			}
 			h.logger.Error("更新系统配置异常",
 				slog.String("key", key),
 				slog.String("value", value),
@@ -144,7 +172,42 @@ func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 		return
 	}
 
+	if err := h.settingService.ValidateSettingsPatch(c.Request.Context(), map[string]string{key: req.Value}); err != nil {
+		var validationErr *config.SettingValidationError
+		var conflictErr *config.SettingConflictError
+		switch {
+		case errors.As(err, &validationErr):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Invalid setting value",
+				"message": validationErr.Error(),
+			})
+			return
+		case errors.As(err, &conflictErr):
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Conflicting settings",
+				"message": conflictErr.Error(),
+			})
+			return
+		}
+	}
+
 	if err := h.settingService.Set(c.Request.Context(), key, req.Value); err != nil {
+		var validationErr *config.SettingValidationError
+		if errors.As(err, &validationErr) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Invalid setting value",
+				"message": validationErr.Error(),
+			})
+			return
+		}
+		var conflictErr *config.SettingConflictError
+		if errors.As(err, &conflictErr) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Conflicting settings",
+				"message": conflictErr.Error(),
+			})
+			return
+		}
 		h.logger.Error("更新系统配置异常",
 			slog.String("key", key),
 			slog.String("value", req.Value),

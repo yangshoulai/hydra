@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -160,6 +161,17 @@ func normalizeStreamSniffPacketCount(count int) int {
 		return 1
 	}
 	return count
+}
+
+func normalizeStreamKeepaliveInterval(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return 0
+	}
+	maxInterval := 120 * time.Second
+	if interval > maxInterval {
+		return maxInterval
+	}
+	return interval
 }
 
 // maskSecret 脱敏密钥字符串用于日志
