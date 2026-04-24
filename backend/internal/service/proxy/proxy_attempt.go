@@ -129,7 +129,7 @@ func (ps *ProxyService) attemptOnce(c *gin.Context, proxyCtx *ProxyContext, rout
 		}
 	}
 
-	upstreamResp, requestErr := ps.httpClient.Do(upstreamReq, proxyCtx.TraceID)
+	upstreamResp, requestErr := ps.httpClient.DoWithProxy(upstreamReq, proxyCtx.TraceID, routeResult.Channel.UseProxy)
 
 	// 客户端主动断开：不记熔断、不重试、不计失败指标
 	if isClientCancelled(c, requestErr) {

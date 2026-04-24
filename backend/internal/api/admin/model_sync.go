@@ -468,7 +468,7 @@ func (h *ModelSyncHandler) testModelViaUpstream(
 	startTime := time.Now()
 
 	// 发送请求
-	resp, err := h.httpClient.Do(req, traceID)
+	resp, err := h.httpClient.DoWithProxy(req, traceID, channel.UseProxy)
 	if err != nil {
 		return false, fmt.Sprintf("请求失败: %v", err), "", err
 	}

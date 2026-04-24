@@ -11,6 +11,7 @@ type Channel struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 	Name        string    `gorm:"type:varchar(100);not null;uniqueIndex" json:"name"`
 	BaseURL     string    `gorm:"type:varchar(500);not null" json:"base_url"`
+	UseProxy    bool      `gorm:"not null;default:false" json:"use_proxy"`
 	Weight      int       `gorm:"not null;default:100;index" json:"weight"`
 	Status      string    `gorm:"type:varchar(20);not null;default:'active'" json:"status"` // active, inactive
 	Description string    `gorm:"type:text" json:"description"`

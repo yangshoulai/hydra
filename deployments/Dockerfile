@@ -1,8 +1,12 @@
 # Hydra - Multi-stage Dockerfile
+ARG VERSION=dev
+
 # Stage 1: Frontend Build
 FROM node:20-alpine AS frontend-builder
+ARG VERSION
 
 WORKDIR /app/frontend
+ENV APP_VERSION=${VERSION}
 
 COPY frontend/package*.json frontend/pnpm-lock.yaml ./
 COPY frontend/.npmrc ./
@@ -13,6 +17,7 @@ RUN pnpm run build
 
 # Stage 2: Backend Build
 FROM golang:1.25.6-alpine AS backend-builder
+ARG VERSION
 
 WORKDIR /app
 
@@ -30,10 +35,10 @@ COPY backend/ ./
 COPY --from=frontend-builder /app/frontend/dist ./static
 
 # Build Go binary
-# buildTime 通过 ldflags 注入：main.buildTime 默认是 "unknown"，这里写入构建当日 UTC 时间
+# version / buildTime 通过 ldflags 注入
 RUN BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" && \
     CGO_ENABLED=1 GOOS=linux go build \
-      -ldflags "-X main.buildTime=${BUILD_TIME}" \
+      -ldflags "-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME}" \
       -a -installsuffix cgo \
       -o hydra ./cmd/hydra
 

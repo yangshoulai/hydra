@@ -224,7 +224,7 @@ func (s *SyncService) fetchUpstreamModelsByKey(ctx context.Context, channel *mod
 	}
 
 	// 发送请求
-	resp, err := s.httpClient.Do(req, "")
+	resp, err := s.httpClient.DoWithProxy(req, "", channel.UseProxy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}

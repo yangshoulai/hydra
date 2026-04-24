@@ -6,6 +6,7 @@ export interface Channel {
   id: number
   name: string
   base_url: string
+  use_proxy: boolean
   weight: number
   status: 'active' | 'inactive'
   description: string
@@ -58,6 +59,7 @@ export interface ChannelModelConfig {
 export interface CreateChannelRequest {
   name: string
   base_url: string
+  use_proxy?: boolean
   weight?: number
   status?: 'active' | 'inactive'
   description?: string
@@ -66,6 +68,7 @@ export interface CreateChannelRequest {
 export interface UpdateChannelRequest {
   name?: string
   base_url?: string
+  use_proxy?: boolean
   weight?: number
   status?: 'active' | 'inactive'
   description?: string

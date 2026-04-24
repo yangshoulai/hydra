@@ -59,7 +59,7 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 	upstreamhttp.ApplyJSONHeaders(req, ph.getModelTestUserAgent(ctx))
 
 	// 发送探测请求
-	resp, err := ph.httpClient.Do(req, "")
+	resp, err := ph.httpClient.DoWithProxy(req, "", channel.UseProxy)
 	if err != nil {
 		ph.logger.Warn("嗅探请求失败（网络错误）",
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),

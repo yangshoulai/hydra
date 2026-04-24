@@ -15,10 +15,11 @@ import (
 
 // HTTPClient 上游 HTTP 客户端
 type HTTPClient struct {
-	client   *http.Client
-	logger   *slog.Logger
-	config   *HTTPClientConfig
-	configMu sync.RWMutex // 保护配置的读写
+	directClient *http.Client
+	proxyClient  *http.Client
+	logger       *slog.Logger
+	config       *HTTPClientConfig
+	configMu     sync.RWMutex // 保护配置与底层客户端的读写
 }
 
 // HTTPClientConfig HTTP 客户端配置
@@ -58,17 +59,20 @@ func NewHTTPClient(config *HTTPClientConfig, logger *slog.Logger) *HTTPClient {
 	// 复制配置以避免外部修改
 	configCopy := *config
 
-	transport := buildTransport(configCopy, logger)
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   configCopy.RequestTimeout,
-	}
-
 	return &HTTPClient{
-		client:   client,
-		logger:   logger,
-		config:   &configCopy,
-		configMu: sync.RWMutex{},
+		directClient: newStdHTTPClient(configCopy, logger, ""),
+		proxyClient:  newStdHTTPClient(configCopy, logger, configCopy.UpstreamProxyURL),
+		logger:       logger,
+		config:       &configCopy,
+		configMu:     sync.RWMutex{},
+	}
+}
+
+func newStdHTTPClient(config HTTPClientConfig, logger *slog.Logger, proxyURL string) *http.Client {
+	config.UpstreamProxyURL = strings.TrimSpace(proxyURL)
+	return &http.Client{
+		Transport: buildTransport(config, logger),
+		Timeout:   config.RequestTimeout,
 	}
 }
 
@@ -132,21 +136,38 @@ func buildProxyFunc(proxyURL string, logger *slog.Logger) func(*http.Request) (*
 
 // Do 发送 HTTP 请求
 func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, error) {
+	return hc.DoWithProxy(req, traceID, true)
+}
+
+// DoWithProxy 根据渠道配置决定本次请求是否使用系统代理。
+func (hc *HTTPClient) DoWithProxy(req *http.Request, traceID string, useSystemProxy bool) (*http.Response, error) {
 	startTime := time.Now()
 
-	// 记录当前超时配置
+	// 记录当前配置快照
 	hc.configMu.RLock()
-	client := hc.client
+	client := hc.directClient
 	currentTimeout := hc.config.RequestTimeout
 	currentProxyURL := hc.config.UpstreamProxyURL
+	if useSystemProxy {
+		client = hc.proxyClient
+	}
 	hc.configMu.RUnlock()
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	effectiveProxyURL := ""
+	if useSystemProxy {
+		effectiveProxyURL = strings.TrimSpace(currentProxyURL)
+	}
 
 	hc.logger.Debug("渠道调用开始",
 		slog.String("trace_id", traceID),
 		slog.String("method", req.Method),
 		slog.String("url", req.URL.String()),
+		slog.Bool("use_system_proxy", useSystemProxy),
 		slog.Duration("request_timeout", currentTimeout),
-		slog.String("network_proxy_url", currentProxyURL),
+		slog.String("network_proxy_url", effectiveProxyURL),
 	)
 
 	resp, err := client.Do(req)
@@ -159,7 +180,9 @@ func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, err
 			slog.String("method", req.Method),
 			slog.String("url", req.URL.String()),
 			slog.Duration("duration", duration),
+			slog.Bool("use_system_proxy", useSystemProxy),
 			slog.Duration("request_timeout", currentTimeout),
+			slog.String("network_proxy_url", effectiveProxyURL),
 			slog.String("error", err.Error()),
 		)
 		return nil, err
@@ -171,6 +194,8 @@ func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, err
 		slog.String("url", req.URL.String()),
 		slog.Int("status_code", resp.StatusCode),
 		slog.Duration("duration", duration),
+		slog.Bool("use_system_proxy", useSystemProxy),
+		slog.String("network_proxy_url", effectiveProxyURL),
 	)
 
 	return resp, nil
@@ -179,10 +204,14 @@ func (hc *HTTPClient) Do(req *http.Request, traceID string) (*http.Response, err
 // Close 关闭客户端(清理连接池)
 func (hc *HTTPClient) Close() {
 	hc.configMu.RLock()
-	client := hc.client
+	directClient := hc.directClient
+	proxyClient := hc.proxyClient
 	hc.configMu.RUnlock()
-	if client != nil {
-		client.CloseIdleConnections()
+	if directClient != nil {
+		directClient.CloseIdleConnections()
+	}
+	if proxyClient != nil && proxyClient != directClient {
+		proxyClient.CloseIdleConnections()
 	}
 }
 
@@ -190,16 +219,18 @@ func (hc *HTTPClient) Close() {
 func (hc *HTTPClient) UpdateRequestTimeout(timeout time.Duration) {
 	hc.configMu.Lock()
 	oldTimeout := hc.config.RequestTimeout
-	oldClient := hc.client
+	oldDirectClient := hc.directClient
+	oldProxyClient := hc.proxyClient
 	hc.config.RequestTimeout = timeout
-	hc.client = &http.Client{
-		Transport: buildTransport(*hc.config, hc.logger),
-		Timeout:   hc.config.RequestTimeout,
-	}
+	hc.directClient = newStdHTTPClient(*hc.config, hc.logger, "")
+	hc.proxyClient = newStdHTTPClient(*hc.config, hc.logger, hc.config.UpstreamProxyURL)
 	hc.configMu.Unlock()
 
-	if oldClient != nil {
-		oldClient.CloseIdleConnections()
+	if oldDirectClient != nil {
+		oldDirectClient.CloseIdleConnections()
+	}
+	if oldProxyClient != nil && oldProxyClient != oldDirectClient {
+		oldProxyClient.CloseIdleConnections()
 	}
 
 	hc.logger.Info("HTTP客户端超时时间已更新",
@@ -212,16 +243,18 @@ func (hc *HTTPClient) UpdateRequestTimeout(timeout time.Duration) {
 func (hc *HTTPClient) UpdateUpstreamProxyURL(proxyURL string) {
 	hc.configMu.Lock()
 	oldProxyURL := hc.config.UpstreamProxyURL
-	oldClient := hc.client
+	oldDirectClient := hc.directClient
+	oldProxyClient := hc.proxyClient
 	hc.config.UpstreamProxyURL = strings.TrimSpace(proxyURL)
-	hc.client = &http.Client{
-		Transport: buildTransport(*hc.config, hc.logger),
-		Timeout:   hc.config.RequestTimeout,
-	}
+	hc.directClient = newStdHTTPClient(*hc.config, hc.logger, "")
+	hc.proxyClient = newStdHTTPClient(*hc.config, hc.logger, hc.config.UpstreamProxyURL)
 	hc.configMu.Unlock()
 
-	if oldClient != nil {
-		oldClient.CloseIdleConnections()
+	if oldDirectClient != nil {
+		oldDirectClient.CloseIdleConnections()
+	}
+	if oldProxyClient != nil && oldProxyClient != oldDirectClient {
+		oldProxyClient.CloseIdleConnections()
 	}
 
 	hc.logger.Info("HTTP客户端网络代理已更新",

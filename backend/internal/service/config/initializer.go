@@ -123,7 +123,7 @@ var DefaultSettings = []models.SystemSetting{
 		Key:       models.SettingProxyNetworkURL,
 		Value:     "",
 		ValueType: "string",
-		Remark:    "上游网络代理地址(支持 http/https/socks5，留空为禁用)",
+		Remark:    "系统级上游网络代理地址(支持 http/https/socks5，仅对启用系统代理的渠道生效)",
 	},
 	{
 		Key:       models.SettingProxyMaxRetry,

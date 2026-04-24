@@ -40,6 +40,9 @@ pnpm run dev
 ### 一键构建
 
 ```bash
+# 修改版本号（前后端构建都会读取它）
+vim backend/cmd/hydra/VERSION
+
 make build
 make run
 ```
@@ -47,12 +50,18 @@ make run
 ## Docker 运行
 
 ```bash
-docker build -t hydra:local -f deployments/Dockerfile .
+docker build --build-arg VERSION=$(cat backend/cmd/hydra/VERSION) -t hydra:local -f deployments/Dockerfile .
 
 docker run -d --name hydra \
   -p 8080:8080 \
   -v "$(pwd)/data:/app/data" \
   hydra:local
+```
+
+也可以直接使用：
+
+```bash
+make docker-build
 ```
 
 容器内的数据目录固定为 `/app/data`，挂载宿主机目录即可持久化。

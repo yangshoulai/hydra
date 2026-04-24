@@ -73,6 +73,7 @@ type ChannelWithModelCount struct {
 type CreateChannelRequest struct {
 	Name        string `json:"name" binding:"required,max=100"`
 	BaseURL     string `json:"base_url" binding:"required,url,max=500"`
+	UseProxy    bool   `json:"use_proxy"`
 	Weight      int    `json:"weight" binding:"omitempty,min=1,max=1000"`
 	Status      string `json:"status" binding:"omitempty,oneof=active inactive"`
 	Description string `json:"description" binding:"omitempty,max=500"`
@@ -82,6 +83,7 @@ type CreateChannelRequest struct {
 type UpdateChannelRequest struct {
 	Name        string `json:"name" binding:"omitempty,max=100"`
 	BaseURL     string `json:"base_url" binding:"omitempty,url,max=500"`
+	UseProxy    *bool  `json:"use_proxy"`
 	Weight      int    `json:"weight" binding:"omitempty,min=1,max=1000"`
 	Status      string `json:"status" binding:"omitempty,oneof=active inactive"`
 	Description string `json:"description" binding:"omitempty,max=500"`
@@ -220,6 +222,7 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 	channel := &models.Channel{
 		Name:        req.Name,
 		BaseURL:     req.BaseURL,
+		UseProxy:    req.UseProxy,
 		Weight:      req.Weight,
 		Status:      req.Status,
 		Description: req.Description,
@@ -358,6 +361,9 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 	}
 	if req.BaseURL != "" {
 		channel.BaseURL = req.BaseURL
+	}
+	if req.UseProxy != nil {
+		channel.UseProxy = *req.UseProxy
 	}
 	if req.Weight > 0 {
 		channel.Weight = req.Weight

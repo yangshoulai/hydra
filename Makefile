@@ -4,7 +4,8 @@
 APP_NAME=hydra
 BUILD_DIR=./bin
 CMD_DIR=./cmd/hydra
-VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION_FILE=backend/cmd/hydra/VERSION
+VERSION?=$(shell VERSION="$$(tr -d '[:space:]' < $(VERSION_FILE) 2>/dev/null)"; if [ -n "$$VERSION" ]; then echo "$$VERSION"; else git describe --tags --always --dirty 2>/dev/null || echo "dev"; fi)
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)"
 
@@ -22,7 +23,7 @@ install-deps: ## 安装依赖
 
 build-frontend: ## 构建前端
 	@echo "==> Building frontend..."
-	cd frontend && pnpm run build
+	cd frontend && APP_VERSION=$(VERSION) pnpm run build
 	@mkdir -p backend/static
 	@cp -r frontend/dist/* backend/static/
 	@echo "==> Frontend build complete"
@@ -82,7 +83,7 @@ lint: ## 运行 linter
 
 docker-build: ## 构建 Docker 镜像
 	@echo "==> Building Docker image..."
-	docker build -t $(APP_NAME):$(VERSION) -f deployments/Dockerfile .
+	docker build --build-arg VERSION=$(VERSION) -t $(APP_NAME):$(VERSION) -f deployments/Dockerfile .
 
 docker-run: ## 运行 Docker 容器
 	@echo "==> Running Docker container..."

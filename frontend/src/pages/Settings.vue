@@ -81,13 +81,13 @@
           <div class="setting-row">
             <div class="setting-row__info">
               <div class="setting-row__label">网络代理地址</div>
-              <div class="setting-row__desc">访问上游 API 使用的正向代理，支持 HTTP / HTTPS / SOCKS5，留空直连。</div>
+              <div class="setting-row__desc">系统级上游代理地址，支持 HTTP / HTTPS / SOCKS5。仅对渠道配置中启用了“系统代理”的渠道生效，留空则所有渠道直连。</div>
             </div>
             <div class="setting-row__control setting-row__control--wide">
               <n-input
                 v-model:value="formData.proxy_network_url"
                 clearable
-                placeholder="例如：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+                placeholder="例如：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080；仅作用于已启用系统代理的渠道"
                 style="width: 100%"
               />
             </div>

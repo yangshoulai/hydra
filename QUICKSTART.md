@@ -36,18 +36,24 @@ pnpm run dev
 
 ## 4. 构建生产包
 
-```bash
-# 构建前端
-cd frontend
-pnpm run build
+先修改版本号文件：
 
-# 嵌入静态文件并构建后端
-cd ../backend
-cp -r ../frontend/dist ./static
-go build -o hydra ./cmd/hydra
+```bash
+vim backend/cmd/hydra/VERSION
+```
+
+例如改成：
+
+```text
+2.1.0
+```
+
+```bash
+# 推荐：统一构建（前后端都会使用 VERSION 中的版本号）
+make build
 
 # 运行
-./hydra --data-dir ../data
+./bin/hydra --data-dir ./data
 ```
 
 ## 5. 验证

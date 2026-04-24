@@ -30,6 +30,21 @@
                   </n-form-item>
                 </n-grid-item>
                 <n-grid-item span="2 s:2 m:2 l:2">
+                  <n-form-item label="系统代理" path="use_proxy">
+                    <div class="form-stack">
+                      <n-space align="center">
+                        <n-switch v-model:value="formData.use_proxy" />
+                        <n-tag :type="formData.use_proxy ? 'success' : 'default'" :bordered="false" size="small">
+                          {{ formData.use_proxy ? '本渠道启用' : '本渠道直连' }}
+                        </n-tag>
+                      </n-space>
+                      <p class="form-hint">
+                        关闭时，本渠道的模型测试、Key 测试和 API 代理都不走系统设置中的网络代理；开启后，仅当系统已配置网络代理地址时才会生效。
+                      </p>
+                    </div>
+                  </n-form-item>
+                </n-grid-item>
+                <n-grid-item span="2 s:2 m:2 l:2">
                   <n-form-item label="描述" path="description">
                     <n-input v-model:value="formData.description" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" placeholder="可选描述" />
                   </n-form-item>
@@ -300,6 +315,7 @@ import {
   NModal,
   NSelect,
   NSpace,
+  NSwitch,
   NTag,
   NText,
   NTooltip,
@@ -335,6 +351,7 @@ const manualGroups = ref<string[]>(['Default'])
 const formData = reactive({
   name: '',
   base_url: '',
+  use_proxy: false,
   weight: 100,
   status: 'active' as 'active' | 'inactive',
   description: '',
@@ -415,6 +432,7 @@ function resetCreateState() {
   currentChannelId.value = 0
   formData.name = ''
   formData.base_url = ''
+  formData.use_proxy = false
   formData.weight = 100
   formData.status = 'active'
   formData.description = ''
@@ -660,6 +678,7 @@ watch(
     currentChannelId.value = channel.id
     formData.name = channel.name
     formData.base_url = channel.base_url
+    formData.use_proxy = !!channel.use_proxy
     formData.weight = channel.weight
     formData.status = channel.status
     formData.description = channel.description
@@ -750,6 +769,7 @@ async function handleSubmit() {
       const updatePayload: UpdateChannelRequest = {
         name: formData.name,
         base_url: formData.base_url,
+        use_proxy: formData.use_proxy,
         weight: formData.weight,
         status: formData.status,
         description: formData.description,
@@ -759,6 +779,7 @@ async function handleSubmit() {
       const createPayload: CreateChannelRequest = {
         name: formData.name,
         base_url: formData.base_url,
+        use_proxy: formData.use_proxy,
         weight: formData.weight,
         status: formData.status,
         description: formData.description,
