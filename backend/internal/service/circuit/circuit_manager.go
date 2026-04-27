@@ -310,8 +310,13 @@ func (m *CircuitManager) SnapshotBreakers() []BreakerSnapshot {
 		if state == KeyStateCooling && !breaker.lastFailure.IsZero() {
 			coolingWindow := breaker.coolingDuration + extraCoolingDuration(breaker.failureCount, breaker.failureThreshold)
 			coolingEndsAt := breaker.lastFailure.Add(coolingWindow)
+			remainingSec := remainingSeconds(now, coolingEndsAt)
+			if remainingSec == 0 {
+				breaker.mu.RUnlock()
+				continue
+			}
 			snapshot.CoolingEndsAt = coolingEndsAt
-			snapshot.RemainingSec = remainingSeconds(now, coolingEndsAt)
+			snapshot.RemainingSec = remainingSec
 		}
 		breaker.mu.RUnlock()
 		result = append(result, snapshot)
@@ -336,8 +341,13 @@ func (m *CircuitManager) SnapshotBreakers() []BreakerSnapshot {
 		if state == ModelConfigStateCooling && !breaker.lastFailure.IsZero() {
 			coolingWindow := breaker.coolingDuration + extraCoolingDuration(breaker.failureCount, breaker.failureThreshold)
 			coolingEndsAt := breaker.lastFailure.Add(coolingWindow)
+			remainingSec := remainingSeconds(now, coolingEndsAt)
+			if remainingSec == 0 {
+				breaker.mu.RUnlock()
+				continue
+			}
 			snapshot.CoolingEndsAt = coolingEndsAt
-			snapshot.RemainingSec = remainingSeconds(now, coolingEndsAt)
+			snapshot.RemainingSec = remainingSec
 		}
 		breaker.mu.RUnlock()
 		result = append(result, snapshot)
