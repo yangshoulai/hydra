@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -52,6 +53,18 @@ func (rf *ResponseForwarder) copyResponseHeaders(upstreamResp *http.Response, c 
 			c.Header(header, value)
 		}
 	}
+}
+
+func shouldSendSSEKeepalive(contentType string) bool {
+	trimmed := strings.TrimSpace(contentType)
+	if trimmed == "" {
+		return true
+	}
+	mediaType, _, err := mime.ParseMediaType(trimmed)
+	if err != nil {
+		mediaType = strings.TrimSpace(strings.Split(trimmed, ";")[0])
+	}
+	return strings.EqualFold(mediaType, "text/event-stream")
 }
 
 // ForwardNonStreamResponse 转发非流式响应
@@ -131,6 +144,7 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 		c.Header("Connection", "keep-alive")
 	}
 	c.Header("X-Accel-Buffering", "no")
+	enableSSEKeepalive := shouldSendSSEKeepalive(c.Writer.Header().Get("Content-Type"))
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
@@ -178,7 +192,11 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 	var keepaliveTimer *time.Timer
 	var keepaliveC <-chan time.Time
 	resetKeepaliveTimer := func() {
-		if keepaliveInterval <= 0 {
+		// 保活从首个上游 chunk 到达后才开始计时：在确认有可转发数据之前，
+		// 不主动向客户端注入额外字节，避免过早提交响应。
+		// 仅对 SSE 开启保活。NDJSON / JSONL / stream+json 也会走流式转发，
+		// 但注入 SSE 注释帧会破坏这些协议的载荷格式。
+		if keepaliveInterval <= 0 || !enableSSEKeepalive {
 			return
 		}
 		if keepaliveTimer == nil {
