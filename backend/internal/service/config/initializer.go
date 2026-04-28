@@ -140,6 +140,12 @@ var DefaultSettings = []models.SystemSetting{
 		Remark:    "最大重试次数",
 	},
 	{
+		Key:       models.SettingProxyLoadBalanceStrategy,
+		Value:     models.ProxyLoadBalanceStrategyWeightedRandom,
+		ValueType: "string",
+		Remark:    "渠道负载策略(weighted_random/round_robin)",
+	},
+	{
 		Key:       models.SettingModelTestPrompt,
 		Value:     "Hi",
 		ValueType: "string",

@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
@@ -31,6 +32,8 @@ type LoadBalancer struct {
 	channelSelector *ChannelSelector
 	keySelector     *KeySelector
 	modelRouter     *ModelRouter
+	strategyMu      sync.RWMutex
+	channelStrategy channelSelectionStrategy
 }
 
 // NewLoadBalancer 创建负载均衡器
@@ -38,16 +41,19 @@ func NewLoadBalancer(
 	logger *slog.Logger,
 	channelRepo *repository.ChannelRepository,
 	circuitManager *circuit.CircuitManager,
+	strategyName string,
 ) *LoadBalancer {
 	keySelector := NewKeySelector()
 	channelSelector := NewChannelSelector(channelRepo, circuitManager)
 	modelRouter := NewModelRouter(logger)
 
-	return &LoadBalancer{
+	loadBalancer := &LoadBalancer{
 		channelSelector: channelSelector,
 		keySelector:     keySelector,
 		modelRouter:     modelRouter,
 	}
+	loadBalancer.UpdateChannelSelectionStrategy(strategyName)
+	return loadBalancer
 }
 
 // Route 为请求路由到合适的 Channel 和 Key
@@ -65,6 +71,10 @@ func (lb *LoadBalancer) Route(ctx context.Context, proxyCtx *ProxyContext) (*Rou
 	for _, keyID := range proxyCtx.FailedKeyIDs {
 		excludeKeyMap[keyID] = true
 	}
+	lastChannelID := uint(0)
+	if proxyCtx.LastRoute != nil {
+		lastChannelID = proxyCtx.LastRoute.ChannelID
+	}
 
 	result, err := lb.routeWithExclusions(
 		ctx,
@@ -75,6 +85,7 @@ func (lb *LoadBalancer) Route(ctx context.Context, proxyCtx *ProxyContext) (*Rou
 		excludeModelMap,
 		excludeKeyMap,
 		proxyCtx.TraceID,
+		lastChannelID,
 	)
 	if err != nil {
 		return nil, err
@@ -92,6 +103,7 @@ func (lb *LoadBalancer) routeWithExclusions(
 	excludeModelConfigs map[uint]bool,
 	excludeKeys map[uint]bool,
 	traceID string,
+	lastChannelID uint,
 ) (*RouteResult, error) {
 	channels, err := lb.channelSelector.SelectChannels(ctx, model, endpointType, isStream, excludeChannels)
 	if err != nil {
@@ -110,7 +122,12 @@ func (lb *LoadBalancer) routeWithExclusions(
 		return nil, ErrNoAvailableRoute
 	}
 
-	selectedCandidate := selectWeightedChannelCandidate(candidates)
+	selectedCandidate := lb.selectChannelCandidate(candidates, channelSelectionContext{
+		Model:         model,
+		EndpointType:  endpointType,
+		IsStream:      isStream,
+		LastChannelID: lastChannelID,
+	})
 	if selectedCandidate == nil {
 		return nil, ErrNoAvailableRoute
 	}
@@ -170,24 +187,6 @@ func buildChannelRouteCandidate(
 	}, true
 }
 
-func selectWeightedChannelCandidate(candidates []*channelRouteCandidate) *channelRouteCandidate {
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	weights := make([]int64, 0, len(candidates))
-	for _, candidate := range candidates {
-		weights = append(weights, channelWeight(candidate.channel))
-	}
-
-	selectedIndex := weightedRandomIndex(weights)
-	if selectedIndex < 0 || selectedIndex >= len(candidates) {
-		return nil
-	}
-
-	return candidates[selectedIndex]
-}
-
 func (lb *LoadBalancer) selectRouteFromChannelCandidate(
 	candidate *channelRouteCandidate,
 	traceID string,
@@ -210,6 +209,34 @@ func (lb *LoadBalancer) selectRouteFromChannelCandidate(
 		KeyGroups:     selectedConfig.KeyGroups,
 	}
 	return result, true
+}
+
+func (lb *LoadBalancer) UpdateChannelSelectionStrategy(strategyName string) {
+	lb.strategyMu.Lock()
+	lb.channelStrategy = newChannelSelectionStrategy(strategyName)
+	lb.strategyMu.Unlock()
+}
+
+func (lb *LoadBalancer) CurrentChannelSelectionStrategyName() string {
+	lb.strategyMu.RLock()
+	defer lb.strategyMu.RUnlock()
+	if lb.channelStrategy == nil {
+		return models.ProxyLoadBalanceStrategyWeightedRandom
+	}
+	return lb.channelStrategy.Name()
+}
+
+func (lb *LoadBalancer) selectChannelCandidate(
+	candidates []*channelRouteCandidate,
+	ctx channelSelectionContext,
+) *channelRouteCandidate {
+	lb.strategyMu.RLock()
+	strategy := lb.channelStrategy
+	lb.strategyMu.RUnlock()
+	if strategy == nil {
+		strategy = newChannelSelectionStrategy(models.ProxyLoadBalanceStrategyWeightedRandom)
+	}
+	return strategy.Select(candidates, ctx)
 }
 
 func filterModelConfigs(configs []models.ChannelModelConfig, exclude map[uint]bool) []models.ChannelModelConfig {

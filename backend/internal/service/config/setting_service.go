@@ -254,7 +254,8 @@ func (s *SettingService) getDefaultCategory(key string) string {
 	case key == models.SettingProxyRequestTimeout ||
 		key == models.SettingProxyKeepaliveInterval ||
 		key == models.SettingProxyNetworkURL ||
-		key == models.SettingProxyMaxRetry:
+		key == models.SettingProxyMaxRetry ||
+		key == models.SettingProxyLoadBalanceStrategy:
 		return "proxy"
 	case key == models.SettingModelTestPrompt ||
 		key == models.SettingModelTestUserAgent:
@@ -278,8 +279,8 @@ func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureTh
 	return
 }
 
-// GetProxyConfig 获取代理配置（超时/网络代理/重试）
-func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, keepaliveInterval time.Duration, networkProxyURL string, maxRetry int) {
+// GetProxyConfig 获取代理配置（超时/网络代理/重试/负载策略）
+func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, keepaliveInterval time.Duration, networkProxyURL string, maxRetry int, loadBalanceStrategy string) {
 	requestTimeoutSeconds := s.GetInt(ctx, models.SettingProxyRequestTimeout, 120)
 	if requestTimeoutSeconds < 0 {
 		requestTimeoutSeconds = 0
@@ -297,6 +298,9 @@ func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout tim
 
 	networkProxyURL = s.GetString(ctx, models.SettingProxyNetworkURL, "")
 	maxRetry = s.GetInt(ctx, models.SettingProxyMaxRetry, 3)
+	loadBalanceStrategy = normalizeProxyLoadBalanceStrategy(
+		s.GetString(ctx, models.SettingProxyLoadBalanceStrategy, models.ProxyLoadBalanceStrategyWeightedRandom),
+	)
 	return
 }
 
@@ -326,9 +330,24 @@ func (s *SettingService) validateValue(key string, value string) error {
 		if _, err := strconv.ParseBool(trimmed); err != nil {
 			return &SettingValidationError{message: "嗅探开关必须是 true 或 false"}
 		}
+	case models.SettingProxyLoadBalanceStrategy:
+		switch trimmed {
+		case models.ProxyLoadBalanceStrategyWeightedRandom, models.ProxyLoadBalanceStrategyRoundRobin:
+		default:
+			return &SettingValidationError{message: "负载策略必须是 weighted_random 或 round_robin"}
+		}
 	}
 
 	return nil
+}
+
+func normalizeProxyLoadBalanceStrategy(value string) string {
+	switch strings.TrimSpace(value) {
+	case models.ProxyLoadBalanceStrategyRoundRobin:
+		return models.ProxyLoadBalanceStrategyRoundRobin
+	default:
+		return models.ProxyLoadBalanceStrategyWeightedRandom
+	}
 }
 
 func (s *SettingService) ValidateSettingsPatch(ctx context.Context, patch map[string]string) error {

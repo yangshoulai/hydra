@@ -43,6 +43,7 @@ const (
 	SettingProxyKeepaliveInterval         = "proxy_keepalive_interval"
 	SettingProxyNetworkURL                = "proxy_network_url"
 	SettingProxyMaxRetry                  = "proxy_max_retry"
+	SettingProxyLoadBalanceStrategy       = "proxy_load_balance_strategy"
 	SettingSnifferEnabled                 = "sniffer_enabled" // 旧版全局嗅探开关，仅用于迁移兼容
 	SettingSnifferNonStreamEnabled        = "sniffer_non_stream_enabled"
 	SettingSnifferStreamEnabled           = "sniffer_stream_enabled"
@@ -53,3 +54,8 @@ const (
 )
 
 const DefaultModelTestUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36"
+
+const (
+	ProxyLoadBalanceStrategyWeightedRandom = "weighted_random"
+	ProxyLoadBalanceStrategyRoundRobin     = "round_robin"
+)

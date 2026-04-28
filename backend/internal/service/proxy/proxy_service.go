@@ -85,6 +85,7 @@ type ProxyServiceConfig struct {
 	RequestTimeout          time.Duration
 	StreamKeepaliveInterval time.Duration
 	NetworkProxy            string
+	LoadBalanceStrategy     string
 }
 
 // =============================================================================
@@ -123,7 +124,7 @@ func NewProxyService(
 
 	svc := &ProxyService{
 		logger:                  logger,
-		loadBalancer:            NewLoadBalancer(logger, channelRepo, circuitManager),
+		loadBalancer:            NewLoadBalancer(logger, channelRepo, circuitManager, config.LoadBalanceStrategy),
 		requestBuilder:          NewRequestBuilder(),
 		httpClient:              NewHTTPClient(httpClientConfig, logger),
 		responseSniffer:         responseSniffer,
@@ -271,19 +272,21 @@ func (ps *ProxyService) reloadLoggingConfig(ctx context.Context) {
 }
 
 func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
-	requestTimeout, keepaliveInterval, networkProxyURL, maxRetry := ps.settingService.GetProxyConfig(ctx)
+	requestTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := ps.settingService.GetProxyConfig(ctx)
 	retryDelay := 500 * time.Millisecond
 
 	ps.httpClient.UpdateRequestTimeout(requestTimeout)
 	ps.httpClient.UpdateUpstreamProxyURL(networkProxyURL)
 	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
 	ps.updateStreamKeepaliveInterval(keepaliveInterval)
+	ps.loadBalancer.UpdateChannelSelectionStrategy(loadBalanceStrategy)
 
 	ps.logger.Info("代理服务配置已更新",
 		slog.Duration("request_timeout", requestTimeout),
 		slog.Duration("stream_keepalive_interval", keepaliveInterval),
 		slog.String("network_proxy_url", networkProxyURL),
 		slog.Int("max_retry", maxRetry),
+		slog.String("load_balance_strategy", ps.loadBalancer.CurrentChannelSelectionStrategyName()),
 		slog.Duration("retry_delay", retryDelay),
 	)
 }

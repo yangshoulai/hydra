@@ -90,6 +90,20 @@
 
           <div class="setting-row">
             <div class="setting-row__info">
+              <div class="setting-row__label">负载策略</div>
+              <div class="setting-row__desc">系统代理在多个可用渠道之间的分配方式。轮询会忽略渠道权重；加权随机会按渠道权重分配流量。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-select
+                v-model:value="formData.proxy_load_balance_strategy"
+                :options="loadBalanceStrategyOptions"
+                placeholder="请选择负载策略"
+              />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
               <div class="setting-row__label">网络代理地址</div>
               <div class="setting-row__desc">系统级上游代理地址，支持 HTTP / HTTPS / SOCKS5。仅对渠道配置中启用了“系统代理”的渠道生效，留空则所有渠道直连。</div>
             </div>
@@ -315,6 +329,7 @@ import {
   NInput,
   NInputNumber,
   NModal,
+  NSelect,
   NSkeleton,
   NSpace,
   NSwitch,
@@ -338,6 +353,7 @@ interface SettingsData {
   proxy_request_timeout: number
   proxy_keepalive_interval: number
   proxy_max_retry: number
+  proxy_load_balance_strategy: 'weighted_random' | 'round_robin'
   sniffer_non_stream_enabled: boolean
   sniffer_stream_enabled: boolean
   sniffer_stream_packet_count: number
@@ -369,6 +385,7 @@ const formData = ref<SettingsData>({
   proxy_request_timeout: 120,
   proxy_keepalive_interval: 0,
   proxy_max_retry: 3,
+  proxy_load_balance_strategy: 'weighted_random',
   sniffer_non_stream_enabled: true,
   sniffer_stream_enabled: true,
   sniffer_stream_packet_count: 1,
@@ -379,6 +396,11 @@ const formData = ref<SettingsData>({
 })
 
 const hasAnySnifferEnabled = computed(() => formData.value.sniffer_non_stream_enabled || formData.value.sniffer_stream_enabled)
+
+const loadBalanceStrategyOptions = [
+  { label: '加权随机', value: 'weighted_random' },
+  { label: '轮询', value: 'round_robin' },
+]
 
 const runSilentFormUpdate = (updater: () => void) => {
   isConflictAdjusting.value = true
@@ -405,12 +427,20 @@ const loadSettings = async () => {
     if (settings.circuit_breaker_cooling_duration) {
       formData.value.circuit_breaker_cooling_duration = parseInt(settings.circuit_breaker_cooling_duration)
     }
-    if (settings.proxy_request_timeout) formData.value.proxy_request_timeout = parseInt(settings.proxy_request_timeout)
+    if (settings.proxy_request_timeout !== undefined) {
+      formData.value.proxy_request_timeout = Math.max(0, parseInt(settings.proxy_request_timeout) || 0)
+    }
     if (settings.proxy_keepalive_interval !== undefined) {
       formData.value.proxy_keepalive_interval = Math.min(120, Math.max(0, parseInt(settings.proxy_keepalive_interval) || 0))
     }
     if (settings.proxy_network_url !== undefined) formData.value.proxy_network_url = settings.proxy_network_url || ''
-    if (settings.proxy_max_retry) formData.value.proxy_max_retry = parseInt(settings.proxy_max_retry)
+    if (settings.proxy_max_retry !== undefined) {
+      formData.value.proxy_max_retry = Math.max(0, parseInt(settings.proxy_max_retry) || 0)
+    }
+    if (settings.proxy_load_balance_strategy !== undefined) {
+      formData.value.proxy_load_balance_strategy =
+        settings.proxy_load_balance_strategy === 'round_robin' ? 'round_robin' : 'weighted_random'
+    }
     const legacySnifferEnabled = settings.sniffer_enabled !== undefined ? settings.sniffer_enabled === 'true' : true
     if (settings.sniffer_non_stream_enabled !== undefined) {
       formData.value.sniffer_non_stream_enabled = settings.sniffer_non_stream_enabled === 'true'
@@ -559,6 +589,7 @@ const handleSave = async () => {
         proxy_request_timeout: formData.value.proxy_request_timeout.toString(),
         proxy_keepalive_interval: formData.value.proxy_keepalive_interval.toString(),
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
+        proxy_load_balance_strategy: formData.value.proxy_load_balance_strategy,
         sniffer_non_stream_enabled: formData.value.sniffer_non_stream_enabled.toString(),
         sniffer_stream_enabled: formData.value.sniffer_stream_enabled.toString(),
         sniffer_stream_packet_count: Math.max(1, formData.value.sniffer_stream_packet_count).toString(),
