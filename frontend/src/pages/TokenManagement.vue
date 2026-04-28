@@ -346,7 +346,7 @@ function getTokenAvailableModels(row: Token) {
 
 function renderTokenModelsTooltip(row: Token) {
   const isUnrestricted = !row.allowed_models || row.allowed_models.length === 0
-  const models = getTokenAvailableModels(row)
+  const models = [...getTokenAvailableModels(row)].sort((a, b) => a.localeCompare(b))
 
   if (models.length === 0) {
     return isUnrestricted ? '不限制模型，当前暂无可展示的模型' : '当前未配置可用模型'
@@ -360,14 +360,12 @@ function renderTokenModelsTooltip(row: Token) {
     h(
       'div',
       { class: 'token-model-tooltip__list' },
-      models.map((model) =>
-        h(
-          'div',
-          {
-            class: 'token-model-item',
-          },
-          model,
-        ),
+      h(
+        'div',
+        {
+          class: 'token-model-tooltip__content',
+        },
+        models.join(', '),
       ),
     ),
   ])
@@ -784,7 +782,8 @@ onMounted(() => {
 }
 
 .token-model-tooltip {
-  width: 280px;
+  width: 420px;
+  max-width: min(420px, calc(100vw - 48px));
 }
 
 .token-model-tooltip__header {
@@ -811,24 +810,16 @@ onMounted(() => {
 }
 
 .token-model-tooltip__list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 220px;
+  max-height: 160px;
   overflow: auto;
+  padding-right: 4px;
 }
 
-.token-model-item {
-  display: flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 10px;
-  border-radius: 10px;
+.token-model-tooltip__content {
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.7;
   color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  word-break: break-all;
+  word-break: break-word;
+  white-space: normal;
 }
 </style>
