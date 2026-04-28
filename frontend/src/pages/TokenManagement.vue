@@ -353,21 +353,63 @@ function renderTokenModelsTooltip(row: Token) {
   }
 
   return h('div', { class: 'token-model-tooltip' }, [
-    h('div', { class: 'token-model-tooltip__header' }, [
-      h('span', { class: 'token-model-tooltip__title' }, isUnrestricted ? '全部模型' : '可用模型'),
-      h('span', { class: 'token-model-tooltip__count' }, `${models.length} 个`),
-    ]),
-    h(
-      'div',
-      { class: 'token-model-tooltip__list' },
+    h('div', {
+      style: {
+        width: '420px',
+        maxWidth: 'min(420px, calc(100vw - 48px))',
+      },
+    }, [
+      h('div', {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '8px',
+          gap: '12px',
+        },
+      }, [
+        h('span', {
+          style: {
+            fontSize: '12px',
+            color: 'rgba(255, 255, 255, 0.82)',
+          },
+        }, isUnrestricted ? '全部模型' : '可用模型'),
+        h('span', {
+          style: {
+            flexShrink: '0',
+            padding: '1px 8px',
+            borderRadius: '999px',
+            fontSize: '11px',
+            lineHeight: '18px',
+            color: 'rgba(255, 255, 255, 0.72)',
+            background: 'rgba(255, 255, 255, 0.08)',
+          },
+        }, `${models.length} 个`),
+      ]),
       h(
         'div',
         {
-          class: 'token-model-tooltip__content',
+          style: {
+            maxHeight: '160px',
+            overflow: 'auto',
+            paddingRight: '4px',
+          },
         },
-        models.join(', '),
+        h(
+          'div',
+          {
+            style: {
+              fontSize: '12px',
+              lineHeight: '1.7',
+              color: 'rgba(255, 255, 255, 0.92)',
+              wordBreak: 'break-word',
+              whiteSpace: 'normal',
+            },
+          },
+          models.join(', '),
+        ),
       ),
-    ),
+    ]),
   ])
 }
 
