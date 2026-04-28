@@ -355,8 +355,8 @@ function renderTokenModelsTooltip(row: Token) {
   return h('div', { class: 'token-model-tooltip' }, [
     h('div', {
       style: {
-        width: '420px',
-        maxWidth: 'min(420px, calc(100vw - 48px))',
+        width: '560px',
+        maxWidth: 'min(560px, calc(100vw - 48px))',
       },
     }, [
       h('div', {
@@ -390,9 +390,7 @@ function renderTokenModelsTooltip(row: Token) {
         'div',
         {
           style: {
-            maxHeight: '160px',
-            overflow: 'auto',
-            paddingRight: '4px',
+            overflow: 'visible',
           },
         },
         h(
@@ -824,8 +822,8 @@ onMounted(() => {
 }
 
 .token-model-tooltip {
-  width: 420px;
-  max-width: min(420px, calc(100vw - 48px));
+  width: 560px;
+  max-width: min(560px, calc(100vw - 48px));
 }
 
 .token-model-tooltip__header {
@@ -852,9 +850,7 @@ onMounted(() => {
 }
 
 .token-model-tooltip__list {
-  max-height: 160px;
-  overflow: auto;
-  padding-right: 4px;
+  overflow: visible;
 }
 
 .token-model-tooltip__content {
