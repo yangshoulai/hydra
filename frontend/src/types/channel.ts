@@ -56,6 +56,17 @@ export interface ChannelModelConfig {
   updated_at: string
 }
 
+export interface ModelRelatedChannelInfo {
+  config_id: number
+  config_status: 'active' | 'inactive'
+  weight: number
+  channel_id: number
+  channel_name: string
+  channel_status: 'active' | 'inactive'
+  channel_model: string
+  endpoint_types: string[]
+}
+
 export interface CreateChannelRequest {
   name: string
   base_url: string

@@ -1,5 +1,5 @@
 <template>
-  <n-drawer v-model:show="visible" :width="960" placement="right" class="model-channels-drawer">
+  <n-drawer v-model:show="visible" :width="drawerWidth" placement="right" class="model-channels-drawer">
     <n-drawer-content :title="title" closable>
       <template v-if="!loading">
         <n-space vertical :size="12">
@@ -31,7 +31,6 @@
                 :data="group.models"
                 :single-line="false"
                 :pagination="false"
-                :scroll-x="680"
                 :row-key="(row) => row.config_id"
               />
             </div>
@@ -62,18 +61,20 @@ import {
   NDrawerContent,
   NEmpty,
   NIcon,
+  NInputNumber,
   NPopconfirm,
   NSpace,
   NSpin,
   NTag,
   NTooltip,
-  useMessage
+  useMessage,
 } from 'naive-ui'
 import {CheckmarkCircleOutline, CloseCircleOutline, PlayCircleOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import ModelTestResultDialog from './ModelTestResultDialog.vue'
 import EndpointTags from './EndpointTags.vue'
 import type {ModelTestResultItem} from '../types/modelTest'
+import type {ModelRelatedChannelInfo} from '../types/channel'
 import {createModelTestResultItem} from '../utils/modelTest'
 import {getErrorMessage, toastApiError} from '@/utils/error'
 
@@ -81,19 +82,10 @@ interface ModelConfig {
   id: number
   config_id: number
   config_status: string
+  weight: number
   channel_model: string
   endpoint_types: string[]
   status: 'active' | 'inactive'
-}
-
-interface ChannelInfo {
-  config_id: number
-  config_status: 'active' | 'inactive'
-  channel_id: number
-  channel_name: string
-  channel_status: 'active' | 'inactive'
-  channel_model: string
-  endpoint_types: string[]
 }
 
 interface ChannelGroup {
@@ -118,12 +110,16 @@ const emit = defineEmits<Emits>()
 const message = useMessage()
 
 const loading = ref(false)
-const channels = ref<ChannelInfo[]>([])
+const channels = ref<ModelRelatedChannelInfo[]>([])
 const groupedChannels = ref<ChannelGroup[]>([])
 const testingConfigs = ref<Set<number>>(new Set())
+const savingWeightConfigs = ref<Set<number>>(new Set())
+const weightEditMap = ref<Record<number, number>>({})
 const showTestResultDialog = ref(false)
 const testResultTitle = ref('模型测试结果')
 const testResultItems = ref<ModelTestResultItem[]>([])
+const weightSaveTimers = new Map<number, number>()
+const drawerWidth = 'min(1080px, calc(100vw - 32px))'
 
 const visible = computed({
   get: () => props.show,
@@ -143,6 +139,7 @@ function groupChannelsByChannel() {
       id: channel.config_id,
       config_id: channel.config_id,
       config_status: channel.config_status,
+      weight: channel.weight,
       channel_model: channel.channel_model,
       endpoint_types: channel.endpoint_types,
       status: channel.config_status
@@ -160,6 +157,15 @@ function groupChannelsByChannel() {
     groupMap.get(groupId)!.models.push(modelConfig)
   })
 
+  groupMap.forEach((group) => {
+    group.models.sort((a, b) => {
+      if (b.weight !== a.weight) {
+        return b.weight - a.weight
+      }
+      return a.channel_model.localeCompare(b.channel_model)
+    })
+  })
+
   groupedChannels.value = Array.from(groupMap.values())
 }
 
@@ -170,11 +176,90 @@ async function loadChannels() {
   try {
     const channelsData = await channelApi.getChannelsByModel(props.modelId)
     channels.value = channelsData
+    weightEditMap.value = Object.fromEntries(channelsData.map((item) => [item.config_id, item.weight]))
     groupChannelsByChannel()
   } catch (err) {
     toastApiError(err, '加载渠道列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+function getEditableWeight(row: ModelConfig) {
+  return weightEditMap.value[row.config_id] ?? row.weight
+}
+
+function isWeightDirty(row: ModelConfig) {
+  const matchedChannel = channels.value.find((item) => item.config_id === row.config_id)
+  if (!matchedChannel) {
+    return false
+  }
+  return getEditableWeight(row) !== matchedChannel.weight
+}
+
+function clearWeightSaveTimer(configId: number) {
+  const timerId = weightSaveTimers.get(configId)
+  if (timerId) {
+    window.clearTimeout(timerId)
+    weightSaveTimers.delete(configId)
+  }
+}
+
+function scheduleWeightSave(configId: number) {
+  clearWeightSaveTimer(configId)
+  const timerId = window.setTimeout(() => {
+    weightSaveTimers.delete(configId)
+    void persistWeight(configId)
+  }, 450)
+  weightSaveTimers.set(configId, timerId)
+}
+
+function handleWeightDraftChange(row: ModelConfig, value: number | null) {
+  const matchedChannel = channels.value.find((item) => item.config_id === row.config_id)
+  const fallbackWeight = matchedChannel?.weight ?? row.weight
+  weightEditMap.value[row.config_id] = value && value > 0 ? value : fallbackWeight
+
+  if (weightEditMap.value[row.config_id] === fallbackWeight) {
+    clearWeightSaveTimer(row.config_id)
+    return
+  }
+
+  scheduleWeightSave(row.config_id)
+}
+
+function flushWeightSave(configId: number) {
+  clearWeightSaveTimer(configId)
+  void persistWeight(configId)
+}
+
+async function persistWeight(configId: number) {
+  const matchedChannel = channels.value.find((item) => item.config_id === configId)
+  const nextWeight = weightEditMap.value[configId]
+  if (!matchedChannel || !nextWeight || nextWeight === matchedChannel.weight) {
+    return
+  }
+
+  if (savingWeightConfigs.value.has(configId)) {
+    scheduleWeightSave(configId)
+    return
+  }
+
+  savingWeightConfigs.value.add(configId)
+  let saved = false
+  try {
+    await channelApi.updateModelConfig(configId, { weight: nextWeight })
+    matchedChannel.weight = nextWeight
+    weightEditMap.value[configId] = nextWeight
+    groupChannelsByChannel()
+    saved = true
+  } catch (err) {
+    toastApiError(err, '更新权重失败')
+  } finally {
+    savingWeightConfigs.value.delete(configId)
+    const latestWeight = weightEditMap.value[configId]
+    if (saved && latestWeight && latestWeight !== matchedChannel.weight) {
+      scheduleWeightSave(configId)
+    }
   }
 }
 
@@ -237,6 +322,10 @@ watch(() => props.show, (newVal) => {
 
   showTestResultDialog.value = false
   testResultItems.value = []
+  savingWeightConfigs.value.clear()
+  weightSaveTimers.forEach((timerId) => window.clearTimeout(timerId))
+  weightSaveTimers.clear()
+  weightEditMap.value = {}
 })
 
 function createColumns(channelId: number): DataTableColumns<ModelConfig> {
@@ -244,27 +333,52 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
     {
       title: '配置 ID',
       key: 'config_id',
-      width: 90,
+      width: 80,
       align: 'right',
     },
     {
       title: '渠道模型',
       key: 'channel_model',
-      minWidth: 200,
+      width: 160,
       ellipsis: {tooltip: true},
     },
     {
       title: '端点类型',
       key: 'endpoint_types',
-      minWidth: 200,
+      minWidth: 160,
       render: (row: ModelConfig) => {
         return h(EndpointTags, {types: row.endpoint_types})
       }
     },
     {
+      title: '权重',
+      key: 'weight',
+      width: 120,
+      align: 'center',
+      render: (row: ModelConfig) => {
+        const isSaving = savingWeightConfigs.value.has(row.config_id)
+
+        return h('div', {class: ['weight-editor', isSaving ? 'weight-editor--saving' : '', isWeightDirty(row) ? 'weight-editor--dirty' : '']}, [
+          h(NInputNumber, {
+            value: getEditableWeight(row),
+            size: 'small',
+            min: 1,
+            max: 1000,
+            disabled: isSaving,
+            class: 'weight-editor__input',
+            buttonPlacement: 'both',
+            style: {width: '100%'},
+            placeholder: '1-1000',
+            onUpdateValue: (value: number | null) => handleWeightDraftChange(row, value),
+            onBlur: () => flushWeightSave(row.config_id),
+          }),
+        ])
+      }
+    },
+    {
       title: '状态',
       key: 'status',
-      width: 84,
+      width: 100,
       align: 'center',
       render: (row: ModelConfig) => {
         const type = row.status === 'active' ? 'success' : 'default'
@@ -279,8 +393,7 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
     {
       title: '操作',
       key: 'actions',
-      width: 110,
-      fixed: 'right',
+      width: 100,
       align: 'center',
       render: (row: ModelConfig) => {
         const isTesting = testingConfigs.value.has(row.config_id)
@@ -372,5 +485,41 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
 .muted {
   font-size: 12px;
   color: var(--hydra-text-tertiary);
+}
+
+.weight-editor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  width: 100%;
+}
+
+.weight-editor__input {
+  width: 128px;
+}
+
+.weight-editor--saving :deep(.n-input-number) {
+  opacity: 0.72;
+}
+
+.weight-editor--dirty :deep(.n-input-number) {
+  box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.12);
+  border-radius: 999px;
+}
+
+.weight-editor :deep(.n-input-number) {
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.weight-editor :deep(.n-input-number .n-input__input-el) {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.weight-editor :deep(.n-input-number-button) {
+  width: 30px;
+  min-width: 30px;
 }
 </style>

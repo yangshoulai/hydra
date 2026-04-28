@@ -7,6 +7,7 @@ import type {
   Channel,
   ChannelKey,
   ChannelModelConfig,
+  ModelRelatedChannelInfo,
   CreateChannelRequest,
   UpdateChannelRequest,
   ChannelListResponse,
@@ -228,8 +229,8 @@ export const channelApi = {
   /**
    * 获取模型关联的渠道列表
    */
-  async getChannelsByModel(modelId: number): Promise<any[]> {
-    const response = await apiClient.get(`/admin/api/models/${modelId}/channels`)
+  async getChannelsByModel(modelId: number): Promise<ModelRelatedChannelInfo[]> {
+    const response = await apiClient.get<ModelRelatedChannelInfo[]>(`/admin/api/models/${modelId}/channels`)
     return response.data
   },
 

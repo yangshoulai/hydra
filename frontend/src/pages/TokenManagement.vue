@@ -256,6 +256,7 @@ const modelOptions = ref<Array<{ label: string; value: string }>>([])
 
 const modelEditingToken = ref<Token | null>(null)
 const editingAllowedModels = ref<string[]>([])
+const allModelNames = computed(() => modelOptions.value.map((item) => item.value))
 
 const sortState = reactive({
   columnKey: 'created_at' as 'id' | 'status' | 'created_at' | 'last_used_at',
@@ -336,6 +337,42 @@ function getSortOrder(key: string) {
   return false
 }
 
+function getTokenAvailableModels(row: Token) {
+  if (row.allowed_models?.length) {
+    return row.allowed_models
+  }
+  return allModelNames.value
+}
+
+function renderTokenModelsTooltip(row: Token) {
+  const isUnrestricted = !row.allowed_models || row.allowed_models.length === 0
+  const models = getTokenAvailableModels(row)
+
+  if (models.length === 0) {
+    return isUnrestricted ? '不限制模型，当前暂无可展示的模型' : '当前未配置可用模型'
+  }
+
+  return h('div', { class: 'token-model-tooltip' }, [
+    h('div', { class: 'token-model-tooltip__header' }, [
+      h('span', { class: 'token-model-tooltip__title' }, isUnrestricted ? '全部模型' : '可用模型'),
+      h('span', { class: 'token-model-tooltip__count' }, `${models.length} 个`),
+    ]),
+    h(
+      'div',
+      { class: 'token-model-tooltip__list' },
+      models.map((model) =>
+        h(
+          'div',
+          {
+            class: 'token-model-item',
+          },
+          model,
+        ),
+      ),
+    ),
+  ])
+}
+
 const columns = computed<DataTableColumns<Token>>(() => [
   {
     title: 'ID',
@@ -360,23 +397,31 @@ const columns = computed<DataTableColumns<Token>>(() => [
     render: (row) => h(NText, { code: true, style: 'font-size: 12px' }, { default: () => row.token_preview }),
   },
   {
-    title: '模型',
+    title: '可用模型',
     key: 'allowed_models',
-    minWidth: 200,
+    width: 120,
+    align: 'center',
     render: (row) => {
-      if (!row.allowed_models || row.allowed_models.length === 0) {
-        return h(NTag, { size: 'small', bordered: false }, { default: () => '全部模型' })
-      }
+      const isUnrestricted = !row.allowed_models || row.allowed_models.length === 0
+      const summary = isUnrestricted ? '全部' : `${row.allowed_models.length} 个`
+
       return h(
-        NSpace,
-        { size: 4, wrap: true },
+        NTooltip,
+        { placement: 'top' },
         {
-          default: () => row.allowed_models.slice(0, 4).map((model) => h(NTag, { size: 'small', type: 'info', bordered: false }, { default: () => model }))
-            .concat(
-              row.allowed_models.length > 4
-                ? [h(NTag, { size: 'small', bordered: false }, { default: () => `+${row.allowed_models.length - 4}` })]
-                : [],
+          trigger: () =>
+            h(
+              NTag,
+              {
+                size: 'small',
+                type: isUnrestricted ? 'success' : 'info',
+                bordered: false,
+                round: true,
+                style: 'cursor: help;',
+              },
+              { default: () => summary },
             ),
+          default: () => renderTokenModelsTooltip(row),
         },
       )
     },
@@ -539,7 +584,7 @@ async function loadModelOptions() {
   try {
     const result = await modelApi.list({ page: 1, page_size: 1000 })
     modelOptions.value = result.items.map((item) => ({
-      label: item.provider ? `${item.name} (${item.provider.name})` : item.name,
+      label: item.name,
       value: item.name,
     }))
   } catch {
@@ -736,5 +781,54 @@ onMounted(() => {
   align-items: flex-start;
   gap: 8px;
   max-width: 420px;
+}
+
+.token-model-tooltip {
+  width: 280px;
+}
+
+.token-model-tooltip__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.token-model-tooltip__title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.token-model-tooltip__count {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.token-model-tooltip__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.token-model-item {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  word-break: break-all;
 }
 </style>
