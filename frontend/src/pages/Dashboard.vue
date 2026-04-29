@@ -258,7 +258,7 @@ import type {
   DashboardQPSRange,
   ModelDetailInfo,
 } from '@/services/dashboardService'
-import dashboardService from '@/services/dashboardService'
+import { dashboardService } from '@/services/dashboardService'
 import { getErrorMessage } from '@/utils/error'
 import { formatCompactNumber } from '@/utils/number'
 import { useEventStream } from '@/composables/useEventStream'

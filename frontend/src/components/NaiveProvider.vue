@@ -30,6 +30,7 @@ import {
   useNotification,
   zhCN,
 } from 'naive-ui'
+import { setFeedbackApis } from '@/services/feedback'
 
 const GlobalHooks = defineComponent({
   name: 'GlobalHooks',
@@ -38,9 +39,7 @@ const GlobalHooks = defineComponent({
     const dialog = useDialog()
     const notification = useNotification()
 
-    window.$message = message
-    window.$dialog = dialog
-    window.$notification = notification
+    setFeedbackApis({ message, dialog, notification })
 
     return () => null
   },

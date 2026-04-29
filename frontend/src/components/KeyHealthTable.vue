@@ -20,6 +20,7 @@ import {ContrastOutline, CopyOutline, TrashOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import type {Channel, ChannelHealthCheckResult, ChannelKey} from '../types/channel'
 import {toastApiError} from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 interface Props {
   channelId: number
@@ -316,15 +317,15 @@ async function handleCopyKey(keyValue: string) {
 
   try {
     await navigator.clipboard.writeText(keyValue)
-    window.$message?.success('Key 已复制到剪贴板')
+    feedback.message?.success('Key 已复制到剪贴板')
   } catch (error) {
     console.error('Failed to copy key:', error)
-    window.$message?.error('复制失败，请手动复制')
+    feedback.message?.error('复制失败，请手动复制')
   }
 }
 
 async function handleDeleteChannelKey(channelKeyId: number) {
-  window.$dialog?.warning({
+  feedback.dialog?.warning({
     title: '确认删除',
     content: '确定要删除此渠道密钥吗？',
     positiveText: '删除',
@@ -332,7 +333,7 @@ async function handleDeleteChannelKey(channelKeyId: number) {
     onPositiveClick: async () => {
       try {
         await channelApi.deleteChannelKey(channelKeyId)
-        window.$message?.success('删除成功')
+        feedback.message?.success('删除成功')
         await fetchChannel()
         emit('refresh')
       } catch (err) {
@@ -355,9 +356,9 @@ async function handleTestChannelKey(channelKeyId: number) {
     })
 
     if (result.status === 'healthy') {
-      window.$message?.success(`测试成功: ${result.message}`)
+      feedback.message?.success(`测试成功: ${result.message}`)
     } else {
-      window.$message?.error(`测试失败: ${result.message}`)
+      feedback.message?.error(`测试失败: ${result.message}`)
     }
     await fetchChannel()
   } catch (err) {
@@ -376,7 +377,7 @@ async function handleTestChannelKey(channelKeyId: number) {
 async function handleToggleChannelKeyStatus(channelKeyId: number, targetStatus: 'active' | 'inactive') {
   const action = targetStatus === 'inactive' ? '停用' : '启用'
 
-  window.$dialog?.warning({
+  feedback.dialog?.warning({
     title: `确认${action}`,
     content: `确定要${action}此密钥吗？`,
     positiveText: '确定',
@@ -384,7 +385,7 @@ async function handleToggleChannelKeyStatus(channelKeyId: number, targetStatus: 
     onPositiveClick: async () => {
       try {
         await channelApi.resetChannelKeyStatus(channelKeyId, targetStatus)
-        window.$message?.success(`${action}成功`)
+        feedback.message?.success(`${action}成功`)
         await fetchChannel()
         emit('refresh')
       } catch (err) {

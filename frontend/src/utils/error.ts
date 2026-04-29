@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { feedback } from '@/services/feedback'
 
 export function getErrorMessage(err: unknown, fallback = '操作失败'): string {
   if (axios.isAxiosError(err)) {
@@ -14,5 +15,5 @@ export function getErrorMessage(err: unknown, fallback = '操作失败'): string
 
 export function toastApiError(err: unknown, prefix = ''): void {
   const msg = getErrorMessage(err)
-  window.$message?.error(prefix ? `${prefix}：${msg}` : msg)
+  feedback.message?.error(prefix ? `${prefix}：${msg}` : msg)
 }

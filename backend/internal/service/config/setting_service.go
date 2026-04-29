@@ -46,12 +46,20 @@ type SnifferConfig struct {
 	Keywords          []string
 }
 
+type ProxyRateLimitConfig struct {
+	Enabled     bool
+	GlobalRPS   int
+	GlobalBurst int
+	TokenRPS    int
+	TokenBurst  int
+}
+
 // NewSettingService 创建系统设置服务
 func NewSettingService(logger *slog.Logger, systemSettingRepo *repository.SystemSettingRepository) *SettingService {
 	return &SettingService{
 		logger:            logger,
 		systemSettingRepo: systemSettingRepo,
-		cacheTTL:          5 * time.Minute, // 缓存 5 分钟
+		cacheTTL:          0, // 0 表示无 TTL；配置变更由 Set 主动更新缓存并通知监听器
 		notifier:          NewConfigNotifier(),
 	}
 }
@@ -65,6 +73,13 @@ func (s *SettingService) RegisterListener(listener ConfigListener) {
 type cachedSetting struct {
 	value     string
 	expiresAt time.Time
+}
+
+func (s *SettingService) cacheExpiresAt() time.Time {
+	if s.cacheTTL <= 0 {
+		return time.Time{}
+	}
+	return time.Now().Add(s.cacheTTL)
 }
 
 // GetString 获取字符串类型的设置
@@ -127,7 +142,7 @@ func (s *SettingService) get(ctx context.Context, key string) (string, error) {
 	// 尝试从缓存获取
 	if cached, ok := s.cache.Load(key); ok {
 		cs := cached.(cachedSetting)
-		if time.Now().Before(cs.expiresAt) {
+		if cs.expiresAt.IsZero() || time.Now().Before(cs.expiresAt) {
 			return cs.value, nil
 		}
 		// 缓存过期,删除
@@ -151,7 +166,7 @@ func (s *SettingService) get(ctx context.Context, key string) (string, error) {
 	// 更新缓存
 	s.cache.Store(key, cachedSetting{
 		value:     setting.Value,
-		expiresAt: time.Now().Add(s.cacheTTL),
+		expiresAt: s.cacheExpiresAt(),
 	})
 
 	return setting.Value, nil
@@ -174,7 +189,7 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 	if existing != nil && existing.Value == value {
 		s.cache.Store(key, cachedSetting{
 			value:     value,
-			expiresAt: time.Now().Add(s.cacheTTL),
+			expiresAt: s.cacheExpiresAt(),
 		})
 		return nil
 	}
@@ -186,7 +201,7 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 	if err != nil {
 		s.logger.Error("设置配置失败",
 			slog.String("key", key),
-			slog.String("value", value),
+			slog.String("value", safeSettingValueForLog(key, value)),
 			slog.String("error", err.Error()),
 		)
 		return err
@@ -195,12 +210,12 @@ func (s *SettingService) Set(ctx context.Context, key string, value string) erro
 	// 更新缓存
 	s.cache.Store(key, cachedSetting{
 		value:     value,
-		expiresAt: time.Now().Add(s.cacheTTL),
+		expiresAt: s.cacheExpiresAt(),
 	})
 
 	s.logger.Info("设置已更新",
 		slog.String("key", key),
-		slog.String("value", value),
+		slog.String("value", safeSettingValueForLog(key, value)),
 		slog.String("category", category),
 	)
 
@@ -239,6 +254,8 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingServerWriteTimeout ||
 		key == models.SettingServerMaxHeaderBytes:
 		return "server"
+	case key == models.SettingSecurityJWTSecret:
+		return "security"
 	case key == models.SettingCircuitBreakerFailureThreshold ||
 		key == models.SettingCircuitBreakerCoolingDuration:
 		return "circuit_breaker"
@@ -255,7 +272,13 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingProxyKeepaliveInterval ||
 		key == models.SettingProxyNetworkURL ||
 		key == models.SettingProxyMaxRetry ||
-		key == models.SettingProxyLoadBalanceStrategy:
+		key == models.SettingProxyLoadBalanceStrategy ||
+		key == models.SettingProxyMaxBodyBytes ||
+		key == models.SettingProxyRateLimitEnabled ||
+		key == models.SettingProxyRateLimitGlobalRPS ||
+		key == models.SettingProxyRateLimitGlobalBurst ||
+		key == models.SettingProxyRateLimitTokenRPS ||
+		key == models.SettingProxyRateLimitTokenBurst:
 		return "proxy"
 	case key == models.SettingModelTestPrompt ||
 		key == models.SettingModelTestUserAgent:
@@ -304,10 +327,55 @@ func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout tim
 	return
 }
 
+func (s *SettingService) GetJWTSecret(ctx context.Context) string {
+	return strings.TrimSpace(s.GetString(ctx, models.SettingSecurityJWTSecret, ""))
+}
+
+func (s *SettingService) GetProxyMaxBodyBytes(ctx context.Context) int64 {
+	value := s.GetInt(ctx, models.SettingProxyMaxBodyBytes, models.DefaultProxyMaxBodyBytes)
+	if value < 0 {
+		return int64(models.DefaultProxyMaxBodyBytes)
+	}
+	return int64(value)
+}
+
+func (s *SettingService) GetProxyRateLimitConfig(ctx context.Context) ProxyRateLimitConfig {
+	cfg := ProxyRateLimitConfig{
+		Enabled:     s.GetBool(ctx, models.SettingProxyRateLimitEnabled, true),
+		GlobalRPS:   s.GetInt(ctx, models.SettingProxyRateLimitGlobalRPS, models.DefaultProxyRateLimitGlobalRPS),
+		GlobalBurst: s.GetInt(ctx, models.SettingProxyRateLimitGlobalBurst, models.DefaultProxyRateLimitGlobalBurst),
+		TokenRPS:    s.GetInt(ctx, models.SettingProxyRateLimitTokenRPS, models.DefaultProxyRateLimitTokenRPS),
+		TokenBurst:  s.GetInt(ctx, models.SettingProxyRateLimitTokenBurst, models.DefaultProxyRateLimitTokenBurst),
+	}
+	if cfg.GlobalRPS < 0 {
+		cfg.GlobalRPS = 0
+	}
+	if cfg.GlobalBurst < 0 {
+		cfg.GlobalBurst = 0
+	}
+	if cfg.TokenRPS < 0 {
+		cfg.TokenRPS = 0
+	}
+	if cfg.TokenBurst < 0 {
+		cfg.TokenBurst = 0
+	}
+	if cfg.GlobalBurst == 0 && cfg.GlobalRPS > 0 {
+		cfg.GlobalBurst = cfg.GlobalRPS
+	}
+	if cfg.TokenBurst == 0 && cfg.TokenRPS > 0 {
+		cfg.TokenBurst = cfg.TokenRPS
+	}
+	return cfg
+}
+
 func (s *SettingService) validateValue(key string, value string) error {
 	trimmed := strings.TrimSpace(value)
 
 	switch key {
+	case models.SettingSecurityJWTSecret:
+		if len(trimmed) < 32 {
+			return &SettingValidationError{message: "JWT 签名密钥至少需要 32 个字符"}
+		}
 	case models.SettingProxyRequestTimeout:
 		seconds, err := strconv.Atoi(trimmed)
 		if err != nil {
@@ -336,9 +404,44 @@ func (s *SettingService) validateValue(key string, value string) error {
 		default:
 			return &SettingValidationError{message: "负载策略必须是 weighted_random 或 round_robin"}
 		}
+	case models.SettingProxyMaxBodyBytes:
+		bytes, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "代理请求体大小限制必须是 0-1073741824 的整数"}
+		}
+		if bytes < 0 || bytes > 1<<30 {
+			return &SettingValidationError{message: "代理请求体大小限制必须在 0-1GB 之间，0 表示不限制"}
+		}
+	case models.SettingProxyRateLimitEnabled:
+		if _, err := strconv.ParseBool(trimmed); err != nil {
+			return &SettingValidationError{message: "限流开关必须是 true 或 false"}
+		}
+	case models.SettingProxyRateLimitGlobalRPS,
+		models.SettingProxyRateLimitGlobalBurst,
+		models.SettingProxyRateLimitTokenRPS,
+		models.SettingProxyRateLimitTokenBurst:
+		value, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "限流参数必须是 0-100000 的整数"}
+		}
+		if value < 0 || value > 100000 {
+			return &SettingValidationError{message: "限流参数必须在 0-100000 之间，0 表示不限制"}
+		}
 	}
 
 	return nil
+}
+
+func safeSettingValueForLog(key, value string) string {
+	switch key {
+	case models.SettingSecurityJWTSecret:
+		if strings.TrimSpace(value) == "" {
+			return ""
+		}
+		return "***"
+	default:
+		return value
+	}
 }
 
 func normalizeProxyLoadBalanceStrategy(value string) string {

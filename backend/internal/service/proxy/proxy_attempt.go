@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -28,6 +29,16 @@ func (ps *ProxyService) prepareRequest(c *gin.Context, ep endpoint.Endpoint, pro
 
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			ps.logTraceDebug(traceID, "请求体超过大小限制",
+				slog.Int64("limit", maxBytesErr.Limit),
+				slog.String("error", err.Error()),
+			)
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusRequestEntityTooLarge, ErrRequestBodyTooLarge.Error(), traceID)
+			ps.recordRequestMetrics(false, "", nil, 0, 0)
+			return ErrRequestBodyTooLarge
+		}
 		ps.logTraceDebug(traceID, "读取请求体失败", slog.String("error", err.Error()))
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadRequest, ErrReadRequestBodyFailed.Error(), traceID)
 		ps.recordRequestMetrics(false, "", nil, 0, 0)
@@ -189,6 +200,13 @@ func (ps *ProxyService) finalizeAttempt(attempt *AttemptRecord, resp *http.Respo
 	}
 }
 
+func attemptNumber(attempt *AttemptRecord) int {
+	if attempt == nil {
+		return 0
+	}
+	return attempt.AttemptNum
+}
+
 // captureUpstreamResponse 采集失败/客户端取消分支的上游响应信息
 // readBody=true 时读完整 body（供调试模式持久化）；readBody=false 时只快照头
 func (ps *ProxyService) captureUpstreamResponse(attempt *AttemptRecord, resp *http.Response, readBody bool) {
@@ -338,6 +356,7 @@ func (ps *ProxyService) handleStreamUpstream(
 		firstChunkMS = probeFirstChunkMS
 	}
 	ps.logTraceInfo(proxyCtx.TraceID, "上游响应处理完成（流式）",
+		slog.Int("attempt", attemptNumber(attempt)),
 		slog.Duration("duration", time.Since(proxyCtx.StartTime)),
 		slog.Int("stream_chunks", forwardResult.StreamChunks),
 		slog.Int("first_chunk_ms", firstChunkMS),
@@ -425,6 +444,7 @@ func (ps *ProxyService) handleNonStreamUpstream(
 
 	promptTokens, completionTokens := ps.recordAttemptSuccess(c, proxyCtx, routeResult, forwardResult.ResponseBody, false)
 	ps.logTraceInfo(proxyCtx.TraceID, "上游响应处理完成（非流式）",
+		slog.Int("attempt", attemptNumber(attempt)),
 		slog.Duration("duration", time.Since(proxyCtx.AttemptStartTime)),
 		slog.Int64("prompt_tokens", promptTokens),
 		slog.Int64("completion_tokens", completionTokens),

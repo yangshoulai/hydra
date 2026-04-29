@@ -103,7 +103,6 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 			}
 			h.logger.Error("更新系统配置异常",
 				slog.String("key", key),
-				slog.String("value", value),
 				slog.String("error", err.Error()),
 			)
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -210,7 +209,6 @@ func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 		}
 		h.logger.Error("更新系统配置异常",
 			slog.String("key", key),
-			slog.String("value", req.Value),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{

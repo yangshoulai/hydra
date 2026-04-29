@@ -16,7 +16,6 @@ import (
 	"github.com/yangshoulai/hydra/internal/api/admin"
 	"github.com/yangshoulai/hydra/internal/api/proxy"
 	"github.com/yangshoulai/hydra/internal/app"
-	_ "github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/middleware"
 	"github.com/yangshoulai/hydra/internal/migration"
 	"github.com/yangshoulai/hydra/internal/models"
@@ -39,6 +38,23 @@ const (
 	logsSubDir  = "logs"
 	logFileName = "hydra.log"
 )
+
+var buildInfo = struct {
+	Version   string
+	BuildTime string
+}{
+	Version:   "dev",
+	BuildTime: "unknown",
+}
+
+func SetBuildInfo(version, buildTime string) {
+	if strings.TrimSpace(version) != "" {
+		buildInfo.Version = version
+	}
+	if strings.TrimSpace(buildTime) != "" {
+		buildInfo.BuildTime = buildTime
+	}
+}
 
 // App 代表一个可运行的应用实例
 // 一个 App 包含完整的一套依赖（DB、服务、HTTP Server）。
@@ -170,7 +186,11 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 	)
 
 	syncService := modelsyncService.NewSyncService(runtimeLogger, repos.ChannelRepo, repos.ModelConfigRepo, repos.ChannelKeyRepo, settingService, proxySvc.GetHTTPClient())
-	jwtService := adminService.NewJWTService()
+	jwtService, err := adminService.NewJWTService(settingService.GetJWTSecret(ctx))
+	if err != nil {
+		_ = closeDatabase(db)
+		return nil, fmt.Errorf("初始化 JWT 服务失败: %w", err)
+	}
 	authService := adminService.NewAuthService(runtimeLogger, repos.AdminUserRepo, jwtService)
 	probeHandler := circuit.NewProbeHandler(runtimeLogger, settingService, proxySvc.GetHTTPClient())
 	healthCheckService := adminService.NewHealthCheckService(runtimeLogger, repos.ChannelRepo, probeHandler)
@@ -256,11 +276,15 @@ func (a *App) Stop(ctx context.Context) error {
 		a.Logger.Info("开始停止 App", slog.Int64("app_id", a.ID))
 
 		a.Components.Services.CronScheduler.Stop()
-		a.Components.Services.CircuitManager.Stop()
 
 		if err := a.Server.Shutdown(ctx); err != nil {
 			stopErr = err
 		}
+
+		if a.Components.Services.ProxyService != nil {
+			a.Components.Services.ProxyService.Close()
+		}
+		a.Components.Services.CircuitManager.Stop()
 
 		if err := closeDatabase(a.DB); err != nil && stopErr == nil {
 			stopErr = err
@@ -288,6 +312,39 @@ func setupRouter(logger *slog.Logger, components *app.Components) *gin.Engine {
 	}
 	router.GET("/health", healthHandler)
 	router.GET("/healthz", healthHandler)
+	router.GET("/ready", func(c *gin.Context) {
+		statusCode := http.StatusOK
+		dbStatus := "ok"
+		openBreakers := 0
+		if components == nil || components.DB == nil {
+			statusCode = http.StatusServiceUnavailable
+			dbStatus = "unavailable"
+		} else if sqlDB, err := components.DB.DB(); err != nil {
+			statusCode = http.StatusServiceUnavailable
+			dbStatus = err.Error()
+		} else {
+			pingCtx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
+			defer cancel()
+			if err := sqlDB.PingContext(pingCtx); err != nil {
+				statusCode = http.StatusServiceUnavailable
+				dbStatus = err.Error()
+			}
+		}
+		if components != nil && components.Services != nil && components.Services.CircuitManager != nil {
+			openBreakers = len(components.Services.CircuitManager.SnapshotBreakers())
+		}
+
+		c.JSON(statusCode, gin.H{
+			"status":     statusFromCode(statusCode),
+			"uptime_sec": int64(time.Since(startedAt).Seconds()),
+			"version":    buildInfo.Version,
+			"build_time": buildInfo.BuildTime,
+			"database":   dbStatus,
+			"circuit_breakers": gin.H{
+				"open_count": openBreakers,
+			},
+		})
+	})
 
 	proxy.RegisterRoutes(router, components)
 	admin.RegisterRoutes(router, components)
@@ -295,6 +352,13 @@ func setupRouter(logger *slog.Logger, components *app.Components) *gin.Engine {
 
 	logger.Info("路由注册成功")
 	return router
+}
+
+func statusFromCode(statusCode int) string {
+	if statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices {
+		return "ok"
+	}
+	return "unavailable"
 }
 
 func registerStaticRoutes(router *gin.Engine, logger *slog.Logger) {
@@ -337,7 +401,8 @@ func ensureDataDir(dataDir string) error {
 }
 
 func initSQLite(sqlitePath string) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(sqlitePath), &gorm.Config{
+	dsn := sqlitePath + "?_busy_timeout=5000&_journal_mode=WAL&_foreign_keys=on"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
@@ -352,9 +417,16 @@ func initSQLite(sqlitePath string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("获取数据库实例失败: %w", err)
 	}
 
-	// SQLite 单进程场景，保持连接池简单，避免锁冲突
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
+	if err := db.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
+		return nil, fmt.Errorf("启用 SQLite WAL 模式失败: %w", err)
+	}
+	if err := db.Exec("PRAGMA busy_timeout=5000").Error; err != nil {
+		return nil, fmt.Errorf("设置 SQLite busy_timeout 失败: %w", err)
+	}
+
+	// WAL 模式允许读写并发。连接数保持保守，避免 SQLite 写锁竞争过度放大。
+	sqlDB.SetMaxOpenConns(8)
+	sqlDB.SetMaxIdleConns(4)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(2 * time.Minute)
 

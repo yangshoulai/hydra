@@ -208,6 +208,7 @@ import {channelApi} from '../services/channelService'
 import KeyHealthTable from './KeyHealthTable.vue'
 import type {ChannelHealthCheckResult} from '../types/channel'
 import {toastApiError} from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 interface Props {
   channelId: number
@@ -296,7 +297,7 @@ async function handleTestKeys() {
     // 通知父组件刷新
     emit('refresh')
 
-    window.$message?.success(`测活完成: 健康 ${result.healthy_channel_keys}/${result.total_channel_keys}`)
+    feedback.message?.success(`测活完成: 健康 ${result.healthy_channel_keys}/${result.total_channel_keys}`)
   } catch (err) {
     toastApiError(err, '测试Keys失败')
   } finally {
@@ -307,7 +308,7 @@ async function handleTestKeys() {
 // 添加Key（支持批量添加）
 async function handleAddKey() {
   if (!keyForm.channel_key_value.trim()) {
-    window.$message?.error('请输入密钥值')
+    feedback.message?.error('请输入密钥值')
     return
   }
 
@@ -320,7 +321,7 @@ async function handleAddKey() {
       .filter(line => line.length > 0)
 
   if (channelKeys.length === 0) {
-    window.$message?.error('请输入有效的密钥值')
+    feedback.message?.error('请输入有效的密钥值')
     return
   }
 
@@ -337,7 +338,7 @@ async function handleAddKey() {
 
     // 显示结果
     if (result.failed_count === 0) {
-      window.$message?.success(`成功添加 ${result.success_count} 个密钥`)
+      feedback.message?.success(`成功添加 ${result.success_count} 个密钥`)
       showAddKeyDialog.value = false
       keyForm.channel_key_value = ''
       keyForm.remark = ''
@@ -349,9 +350,9 @@ async function handleAddKey() {
       // 通知父组件刷新
       emit('refresh')
     } else if (result.success_count === 0) {
-      window.$message?.error(`添加失败，请检查密钥格式`)
+      feedback.message?.error(`添加失败，请检查密钥格式`)
     } else {
-      window.$message?.warning(`添加完成：成功 ${result.success_count} 个，失败 ${result.failed_count} 个`)
+      feedback.message?.warning(`添加完成：成功 ${result.success_count} 个，失败 ${result.failed_count} 个`)
       // 如果有成功的，也关闭对话框并刷新
       showAddKeyDialog.value = false
       keyForm.channel_key_value = ''

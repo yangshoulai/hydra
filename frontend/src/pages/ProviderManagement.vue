@@ -160,11 +160,12 @@ import {
   NTooltip,
 } from 'naive-ui'
 import { AddOutline, CubeOutline, PencilOutline, TrashOutline } from '@vicons/ionicons5'
-import providerApi from '@/services/providerService'
+import { providerApi } from '@/services/providerService'
 import { modelApi } from '@/services/modelService'
 import type { CreateProviderRequest, Model, Provider, RemoteProvider, UpdateProviderRequest } from '@/types/model'
 import ProviderIcon from '@/components/ProviderIcon.vue'
 import { getErrorMessage, toastApiError } from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 const loading = ref(false)
 const listError = ref('')
@@ -455,7 +456,7 @@ async function loadProviders() {
     providers.value = await providerApi.list()
   } catch (err) {
     listError.value = getErrorMessage(err, '加载厂商列表失败')
-    window.$message?.error(listError.value)
+    feedback.message?.error(listError.value)
   } finally {
     loading.value = false
   }
@@ -470,7 +471,7 @@ async function handleCreate() {
 
     await providerApi.create(createForm)
 
-    window.$message?.success('厂商创建成功')
+    feedback.message?.success('厂商创建成功')
     showCreateDialog.value = false
 
     createForm.id = ''
@@ -505,7 +506,7 @@ async function handleUpdate() {
 
     await providerApi.update(currentEditProvider.value.id, editForm)
 
-    window.$message?.success('更新成功')
+    feedback.message?.success('更新成功')
     showEditDialog.value = false
     currentEditProvider.value = null
 
@@ -520,7 +521,7 @@ async function handleUpdate() {
 }
 
 async function handleDelete(provider: Provider) {
-  await window.$dialog?.warning({
+  await feedback.dialog?.warning({
     title: '确认删除',
     content: `确定删除厂商“${provider.name}”吗？`,
     positiveText: '确认删除',
@@ -528,7 +529,7 @@ async function handleDelete(provider: Provider) {
     onPositiveClick: async () => {
       try {
         await providerApi.delete(provider.id)
-        window.$message?.success('删除成功')
+        feedback.message?.success('删除成功')
         await loadProviders()
       } catch (err) {
         toastApiError(err, '删除失败')
@@ -548,7 +549,7 @@ async function handleSync() {
 
     await nextTick()
     showSyncDialog.value = true
-    window.$message?.success(`已拉取远程厂商 ${remoteData.length} 条`)
+    feedback.message?.success(`已拉取远程厂商 ${remoteData.length} 条`)
   } catch (err) {
     toastApiError(err, '同步失败')
   } finally {
@@ -558,7 +559,7 @@ async function handleSync() {
 
 async function handleAddSyncProviders() {
   if (!checkedProviderIds.value.length) {
-    window.$message?.warning('请先选择要导入的厂商')
+    feedback.message?.warning('请先选择要导入的厂商')
     return
   }
 
@@ -569,7 +570,7 @@ async function handleAddSyncProviders() {
     )
 
     if (selectedProviders.length === 0) {
-      window.$message?.info('当前选中项均已存在，本次无需导入')
+      feedback.message?.info('当前选中项均已存在，本次无需导入')
       return
     }
 
@@ -582,11 +583,11 @@ async function handleAddSyncProviders() {
 
     const result = await providerApi.batchCreate(payload)
     if (result.created > 0) {
-      window.$message?.success(`导入成功 ${result.created} 条${result.failed > 0 ? `，失败 ${result.failed} 条` : ''}`)
+      feedback.message?.success(`导入成功 ${result.created} 条${result.failed > 0 ? `，失败 ${result.failed} 条` : ''}`)
       showSyncDialog.value = false
       await loadProviders()
     } else {
-      window.$message?.error('没有可导入的厂商')
+      feedback.message?.error('没有可导入的厂商')
     }
   } catch (err) {
     toastApiError(err, '导入失败')

@@ -22,6 +22,9 @@ func (SystemSetting) TableName() string {
 
 // 预定义的系统设置 Key
 const (
+	// Security
+	SettingSecurityJWTSecret = "security_jwt_secret"
+
 	// Server
 	SettingServerPort           = "server_port"
 	SettingServerReadTimeout    = "server_read_timeout"
@@ -44,6 +47,12 @@ const (
 	SettingProxyNetworkURL                = "proxy_network_url"
 	SettingProxyMaxRetry                  = "proxy_max_retry"
 	SettingProxyLoadBalanceStrategy       = "proxy_load_balance_strategy"
+	SettingProxyMaxBodyBytes              = "proxy_max_body_bytes"
+	SettingProxyRateLimitEnabled          = "proxy_rate_limit_enabled"
+	SettingProxyRateLimitGlobalRPS        = "proxy_rate_limit_global_rps"
+	SettingProxyRateLimitGlobalBurst      = "proxy_rate_limit_global_burst"
+	SettingProxyRateLimitTokenRPS         = "proxy_rate_limit_token_rps"
+	SettingProxyRateLimitTokenBurst       = "proxy_rate_limit_token_burst"
 	SettingSnifferEnabled                 = "sniffer_enabled" // 旧版全局嗅探开关，仅用于迁移兼容
 	SettingSnifferNonStreamEnabled        = "sniffer_non_stream_enabled"
 	SettingSnifferStreamEnabled           = "sniffer_stream_enabled"
@@ -58,4 +67,12 @@ const DefaultModelTestUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_
 const (
 	ProxyLoadBalanceStrategyWeightedRandom = "weighted_random"
 	ProxyLoadBalanceStrategyRoundRobin     = "round_robin"
+)
+
+const (
+	DefaultProxyMaxBodyBytes         = 50 * 1024 * 1024
+	DefaultProxyRateLimitGlobalRPS   = 300
+	DefaultProxyRateLimitGlobalBurst = 600
+	DefaultProxyRateLimitTokenRPS    = 60
+	DefaultProxyRateLimitTokenBurst  = 120
 )

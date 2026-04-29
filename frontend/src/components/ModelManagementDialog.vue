@@ -261,7 +261,7 @@ import {
 import { channelApi } from '@/services/channelService'
 import { modelApi } from '@/services/modelService'
 import { endpointApi } from '@/services/endpointService'
-import providerApi from '@/services/providerService'
+import { providerApi } from '@/services/providerService'
 import ModelTestResultDialog from '@/components/ModelTestResultDialog.vue'
 import ImageTestDialog from '@/components/ImageTestDialog.vue'
 import type {
@@ -276,6 +276,7 @@ import type { Model, Provider } from '@/types/model'
 import type { EndpointInfo } from '@/types/endpoint'
 import { createModelTestResultItem, formatTestResultSummary } from '@/utils/modelTest'
 import { getErrorMessage, toastApiError } from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 interface Props {
   channelId: number
@@ -845,7 +846,7 @@ async function loadUnifiedModels() {
     const result = await modelApi.list({ page: 1, page_size: 1000 })
     unifiedModels.value = result.items
   } catch {
-    window.$message?.error('加载统一模型失败')
+    feedback.message?.error('加载统一模型失败')
   } finally {
     loadingModels.value = false
   }
@@ -856,7 +857,7 @@ async function loadProviders() {
   try {
     providers.value = await providerApi.list()
   } catch {
-    window.$message?.error('加载厂商列表失败')
+    feedback.message?.error('加载厂商列表失败')
   } finally {
     loadingProviders.value = false
   }
@@ -888,12 +889,12 @@ async function handleQuickCreateModel() {
 
   const name = quickCreateModelForm.name.trim()
   if (!name) {
-    window.$message?.warning('请输入模型名称')
+    feedback.message?.warning('请输入模型名称')
     return
   }
 
   if (hasLocalModel(name)) {
-    window.$message?.warning(`模型 ${name} 已存在`)
+    feedback.message?.warning(`模型 ${name} 已存在`)
     showQuickCreateModelDialog.value = false
     return
   }
@@ -909,7 +910,7 @@ async function handleQuickCreateModel() {
       modelEditMap.value[quickCreateTargetKey.value] = created.name
     }
     showQuickCreateModelDialog.value = false
-    window.$message?.success(`统一模型 ${created.name} 创建成功`)
+    feedback.message?.success(`统一模型 ${created.name} 创建成功`)
   } catch (err) {
     toastApiError(err, '创建统一模型失败')
   } finally {
@@ -921,7 +922,7 @@ async function loadEndpoints() {
   try {
     endpoints.value = await endpointApi.list()
   } catch {
-    window.$message?.error('加载端点类型失败')
+    feedback.message?.error('加载端点类型失败')
   }
 }
 
@@ -935,7 +936,7 @@ async function handleSyncModels() {
     syncResult.value = result
     hasSynced.value = true
     initEditState()
-    window.$message?.success('同步完成')
+    feedback.message?.success('同步完成')
   } catch (err) {
     syncFailed.value = true
     hasSynced.value = true
@@ -962,7 +963,7 @@ async function handleAddModel() {
       modelForm.test_prompt,
     )
 
-    window.$message?.success('模型配置已添加')
+    feedback.message?.success('模型配置已添加')
     showAddModelDialog.value = false
 
     modelForm.channel_model = ''
@@ -998,11 +999,11 @@ function applyConfigEditor() {
   if (!activeConfigKey.value) return
 
   if (!configEditor.endpoint_types.length) {
-    window.$message?.warning('请至少选择一个端点类型')
+    feedback.message?.warning('请至少选择一个端点类型')
     return
   }
   if (!configEditor.key_groups.length) {
-    window.$message?.warning('请至少选择一个密钥分组')
+    feedback.message?.warning('请至少选择一个密钥分组')
     return
   }
 
@@ -1018,11 +1019,11 @@ async function handleTestActiveConfig() {
   if (!row) return
 
   if (!configEditor.endpoint_types.length) {
-    window.$message?.warning('请至少选择一个端点类型')
+    feedback.message?.warning('请至少选择一个端点类型')
     return
   }
   if (!configEditor.key_groups.length) {
-    window.$message?.warning('请至少选择一个密钥分组')
+    feedback.message?.warning('请至少选择一个密钥分组')
     return
   }
 
@@ -1049,7 +1050,7 @@ async function handleTest(row: ModelDisplayType) {
 
 async function handleToggleModelStatus(row: ModelDisplayType) {
   if (!row.config_id) {
-    window.$message?.warning('尚未保存的模型配置，请先保存')
+    feedback.message?.warning('尚未保存的模型配置，请先保存')
     return
   }
   try {
@@ -1071,7 +1072,7 @@ async function handleToggleModelStatus(row: ModelDisplayType) {
       })
     }
 
-    window.$message?.success(`已${targetStatus === 'active' ? '启用' : '停用'}该模型配置`)
+    feedback.message?.success(`已${targetStatus === 'active' ? '启用' : '停用'}该模型配置`)
     emit('refresh')
   } catch (err) {
     toastApiError(err, '切换状态失败')
@@ -1103,11 +1104,11 @@ async function executeModelTest(
   const modelTestPrompt = (testPromptEditMap.value[key] ?? row.test_prompt ?? '').trim()
 
   if (!endpointTypes.length) {
-    window.$message?.warning('请先配置端点类型')
+    feedback.message?.warning('请先配置端点类型')
     return
   }
   if (!keyGroups.length) {
-    window.$message?.warning('请先配置密钥分组')
+    feedback.message?.warning('请先配置密钥分组')
     return
   }
 
@@ -1181,7 +1182,7 @@ async function executeModelTest(
   showTestResultDialog.value = true
 
   if (!allPass && !resultItems.length) {
-    window.$message?.error('测试失败')
+    feedback.message?.error('测试失败')
   }
 }
 
@@ -1207,7 +1208,7 @@ async function handleSave() {
         }
 
         if (!endpointTypes.length || !keyGroups.length) {
-          window.$message?.error(`模型 ${key} 必须配置端点与密钥分组`)
+          feedback.message?.error(`模型 ${key} 必须配置端点与密钥分组`)
           saving.value = false
           return
         }
@@ -1301,7 +1302,7 @@ async function handleSave() {
       })
     }
 
-    window.$message?.success('模型配置已保存')
+    feedback.message?.success('模型配置已保存')
     emit('refresh')
     handleClose()
   } catch (err) {

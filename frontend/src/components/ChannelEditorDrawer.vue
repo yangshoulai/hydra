@@ -323,6 +323,7 @@ import {
 import type { Channel, ChannelKey, CreateChannelRequest, UpdateChannelRequest } from '@/types/channel'
 import { channelApi } from '@/services/channelService'
 import { toastApiError } from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 interface Props {
   modelValue: boolean
@@ -571,14 +572,14 @@ function handleConfirmAddGroup() {
   const normalized = normalizeGroupName(addGroupName.value)
   const existing = findGroupName(normalized)
   if (existing) {
-    window.$message?.info(`分组“${existing}”已存在，已自动合并`)
+    feedback.message?.info(`分组“${existing}”已存在，已自动合并`)
     showAddGroupDialog.value = false
     return
   }
   manualGroups.value.push(normalized)
   dedupeManualGroups()
   showAddGroupDialog.value = false
-  window.$message?.success(`分组“${normalized}”已新增`)
+  feedback.message?.success(`分组“${normalized}”已新增`)
 }
 
 function openAddKeyDialog(group: string) {
@@ -617,14 +618,14 @@ async function handleConfirmAddKey() {
   const groupName = ensureGroup(addKeyForm.group)
   const keys = parseKeyLines(addKeyForm.keyLines)
   if (!keys.length) {
-    window.$message?.warning('请至少输入一个密钥')
+    feedback.message?.warning('请至少输入一个密钥')
     return
   }
 
   const toAdd = keys.filter((key) => !keyExistsInGroup(groupName, key))
   const skipped = keys.length - toAdd.length
   if (!toAdd.length) {
-    window.$message?.warning('输入的密钥已存在于该分组中')
+    feedback.message?.warning('输入的密钥已存在于该分组中')
     return
   }
 
@@ -634,9 +635,9 @@ async function handleConfirmAddKey() {
       await channelApi.batchAddChannelKeys(currentChannelId.value, toAdd, remark, groupName)
       await refreshChannelKeys()
       emit('saved')
-      window.$message?.success(`已新增 ${toAdd.length} 个密钥到分组“${groupName}”`)
+      feedback.message?.success(`已新增 ${toAdd.length} 个密钥到分组“${groupName}”`)
       if (skipped > 0) {
-        window.$message?.info(`${skipped} 个重复密钥已自动跳过`)
+        feedback.message?.info(`${skipped} 个重复密钥已自动跳过`)
       }
       showAddKeyDialog.value = false
       return
@@ -656,9 +657,9 @@ async function handleConfirmAddKey() {
       remark,
     })
   })
-  window.$message?.success(`已加入待保存密钥 ${toAdd.length} 个`)
+  feedback.message?.success(`已加入待保存密钥 ${toAdd.length} 个`)
   if (skipped > 0) {
-    window.$message?.info(`${skipped} 个重复密钥已自动跳过`)
+    feedback.message?.info(`${skipped} 个重复密钥已自动跳过`)
   }
   showAddKeyDialog.value = false
 }
@@ -802,7 +803,7 @@ async function handleSubmit() {
       pendingKeys.value = []
     }
 
-    window.$message?.success(isEdit.value ? '渠道更新成功' : '渠道创建成功')
+    feedback.message?.success(isEdit.value ? '渠道更新成功' : '渠道创建成功')
     await refreshChannelKeys()
 
     emit('saved')
@@ -823,7 +824,7 @@ async function handleBatchTestKeys() {
   testing.value = true
   try {
     const result = await channelApi.testChannelKeys(currentChannelId.value)
-    window.$message?.success(`批量测试完成：健康 ${result.healthy_channel_keys}/${result.total_channel_keys}`)
+    feedback.message?.success(`批量测试完成：健康 ${result.healthy_channel_keys}/${result.total_channel_keys}`)
   } catch (err) {
     toastApiError(err, '批量测试失败')
   } finally {
@@ -835,14 +836,14 @@ async function handleCopyKey(keyValue: string) {
   if (!keyValue) return
   try {
     await navigator.clipboard.writeText(keyValue)
-    window.$message?.success('密钥已复制到剪贴板')
+    feedback.message?.success('密钥已复制到剪贴板')
   } catch {
-    window.$message?.error('复制失败，请手动复制')
+    feedback.message?.error('复制失败，请手动复制')
   }
 }
 
 async function handleDeleteChannelKey(channelKeyId: number) {
-  window.$dialog?.warning({
+  feedback.dialog?.warning({
     title: '确认删除',
     content: '确定要删除此渠道密钥吗？',
     positiveText: '删除',
@@ -850,7 +851,7 @@ async function handleDeleteChannelKey(channelKeyId: number) {
     onPositiveClick: async () => {
       try {
         await channelApi.deleteChannelKey(channelKeyId)
-        window.$message?.success('删除成功')
+        feedback.message?.success('删除成功')
         await refreshChannelKeys()
         emit('saved')
       } catch (err) {
@@ -862,7 +863,7 @@ async function handleDeleteChannelKey(channelKeyId: number) {
 
 async function handleToggleChannelKeyStatus(channelKeyId: number, targetStatus: 'active' | 'inactive') {
   const action = targetStatus === 'active' ? '启用' : '停用'
-  window.$dialog?.warning({
+  feedback.dialog?.warning({
     title: `确认${action}`,
     content: `确定要${action}此密钥吗？`,
     positiveText: '确定',
@@ -870,7 +871,7 @@ async function handleToggleChannelKeyStatus(channelKeyId: number, targetStatus: 
     onPositiveClick: async () => {
       try {
         await channelApi.resetChannelKeyStatus(channelKeyId, targetStatus)
-        window.$message?.success(`${action}成功`)
+        feedback.message?.success(`${action}成功`)
         await refreshChannelKeys()
         emit('saved')
       } catch (err) {

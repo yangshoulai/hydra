@@ -6,7 +6,7 @@
           <template #header>
             <div class="login-card__header">
               <div class="login-brand__logo">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="login-brand__svg">
                   <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                   <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                   <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -228,6 +228,11 @@ onMounted(() => {
   color: #fff;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
   flex-shrink: 0;
+}
+
+.login-brand__svg {
+  width: 24px;
+  height: 24px;
 }
 
 .login-card__title {

@@ -72,4 +72,4 @@ class TokensService {
   }
 }
 
-export default new TokensService()
+export const tokensService = new TokensService()

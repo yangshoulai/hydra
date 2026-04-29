@@ -34,6 +34,10 @@ func RegisterRoutes(
 
 	// 创建通用 handlers
 	modelsHandler := NewModelsHandler(logger, repos.ModelRepo)
+	bodyLimitMiddleware := middleware.MaxBodyBytes(func() int64 {
+		return settingService.GetProxyMaxBodyBytes(context.Background())
+	})
+	rateLimiter := middleware.NewProxyRateLimiter(settingService, logger)
 
 	// 创建 v1 路由组
 	v1 := router.Group("/v1")
@@ -42,15 +46,18 @@ func RegisterRoutes(
 		// 应用中间件
 		v1.Use(middleware.TraceID())
 		v1.Use(middleware.RequestLogger(logger))
+		v1.Use(bodyLimitMiddleware)
 		v1.Use(middleware.Auth(repos.AccessTokenRepo, logger)) // 访问令牌认证
+		v1.Use(rateLimiter.Handle())
 
 		v1beta.Use(middleware.TraceID())
 		v1beta.Use(middleware.RequestLogger(logger))
+		v1beta.Use(bodyLimitMiddleware)
 		v1beta.Use(middleware.Auth(repos.AccessTokenRepo, logger)) // 访问令牌认证
+		v1beta.Use(rateLimiter.Handle())
 
-		// 从端点注册中心动态注册路由
-		registry := endpoint.GetGlobalRegistry()
-		for _, ep := range registry.GetAll() {
+		// 从显式端点列表注册路由
+		for _, ep := range endpoint.DefaultEndpoints() {
 			epPath := ep.GetPath()
 
 			// 创建通用 handler

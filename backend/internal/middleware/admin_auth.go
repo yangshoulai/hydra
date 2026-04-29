@@ -44,6 +44,11 @@ func (m *AdminAuthMiddleware) Handle() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if claims.Type != "access" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "access token required"})
+			c.Abort()
+			return
+		}
 
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)

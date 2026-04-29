@@ -43,6 +43,7 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
 import { NButton, NForm, NFormItem, NInput, NModal, NSpace, NText } from 'naive-ui'
+import { feedback } from '@/services/feedback'
 
 interface Props {
   show: boolean
@@ -102,18 +103,18 @@ function handleFileChange(event: Event) {
   reader.onerror = () => {
     form.imageData = ''
     form.fileName = ''
-    window.$message?.error('读取测试图片失败')
+    feedback.message?.error('读取测试图片失败')
   }
   reader.readAsDataURL(file)
 }
 
 function handleConfirm() {
   if (!form.prompt.trim()) {
-    window.$message?.warning('请输入图像编辑提示词')
+    feedback.message?.warning('请输入图像编辑提示词')
     return
   }
   if (!form.imageData) {
-    window.$message?.warning('请上传测试图片')
+    feedback.message?.warning('请上传测试图片')
     return
   }
   emit('submit', {

@@ -156,6 +156,7 @@ import {channelApi} from '@/services/channelService'
 import RequestLogDetailDrawer from '@/components/RequestLogDetailDrawer.vue'
 import {COL_WIDTH} from '@/constants/tableColumns'
 import {getErrorMessage, toastApiError} from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 const isLoading = ref(false)
 const listError = ref('')
@@ -452,7 +453,7 @@ async function handleDeleteSelected() {
   if (checkedRowKeys.value.length === 0) return
 
   const ids = [...checkedRowKeys.value]
-  await window.$dialog?.warning({
+  await feedback.dialog?.warning({
     title: '确认删除',
     content: `确定删除已选的 ${ids.length} 条请求日志吗？这会同时删除关联的请求详情和上游尝试记录。`,
     positiveText: '确认删除',
@@ -475,7 +476,7 @@ async function handleDeleteSelected() {
         pagination.page = Math.min(pagination.page, maxPage)
         checkedRowKeys.value = []
 
-        window.$message?.success(`已删除 ${res.deleted_count} 条请求日志`)
+        feedback.message?.success(`已删除 ${res.deleted_count} 条请求日志`)
         await loadLogs()
       } catch (err) {
         toastApiError(err, '删除失败')

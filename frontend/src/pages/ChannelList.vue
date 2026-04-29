@@ -123,6 +123,7 @@ import { channelApi } from '@/services/channelService'
 import ChannelEditorDrawer from '@/components/ChannelEditorDrawer.vue'
 import ModelManagementDialog from '@/components/ModelManagementDialog.vue'
 import { getErrorMessage, toastApiError } from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 const channels = ref<Channel[]>([])
 const loading = ref(false)
@@ -192,15 +193,17 @@ const columns = computed<DataTableColumns<Channel>>(() => [
     minWidth: 210,
     ellipsis: { tooltip: true },
     render: (row) =>
-      h('div', {}, [
-        h('div', { style: 'font-weight: 650; color: #111111' }, row.name),
-        h('a', {
-          href: buildBaseUrlLink(row.base_url),
-          target: '_blank',
-          rel: 'noopener noreferrer',
-          class: 'channel-base-url-link',
-          title: row.base_url,
-        }, row.base_url),
+      h('div', { class: 'channel-cell' }, [
+        h('div', { class: 'channel-cell__name', title: row.name }, row.name),
+        row.base_url
+          ? h('a', {
+              href: buildBaseUrlLink(row.base_url),
+              target: '_blank',
+              rel: 'noopener noreferrer',
+              class: 'channel-cell__url',
+              title: row.base_url,
+            }, row.base_url)
+          : h('span', { class: 'channel-cell__url channel-cell__url--empty' }, '—'),
       ]),
   },
   {
@@ -352,7 +355,7 @@ async function fetchChannels() {
     pagination.total = result.total
   } catch (err) {
     listError.value = getErrorMessage(err, '获取渠道列表失败')
-    window.$message?.error(listError.value)
+    feedback.message?.error(listError.value)
   } finally {
     loading.value = false
   }
@@ -405,7 +408,7 @@ async function handleToggleStatus(channel: Channel) {
   const nextStatus: 'active' | 'inactive' = channel.status === 'active' ? 'inactive' : 'active'
   const actionText = nextStatus === 'active' ? '启用' : '禁用'
 
-  await window.$dialog?.warning({
+  await feedback.dialog?.warning({
     title: '确认操作',
     content: `确定要${actionText}渠道“${channel.name}”吗？`,
     positiveText: '确认',
@@ -417,7 +420,7 @@ async function handleToggleStatus(channel: Channel) {
       }
       try {
         await channelApi.update(channel.id, { status: nextStatus })
-        window.$message?.success(`渠道已${actionText}`)
+        feedback.message?.success(`渠道已${actionText}`)
         await fetchChannels()
       } catch (err) {
         toastApiError(err, '更新渠道状态失败')
@@ -430,7 +433,7 @@ async function handleToggleStatus(channel: Channel) {
 }
 
 async function handleDelete(channel: Channel) {
-  await window.$dialog?.warning({
+  await feedback.dialog?.warning({
     title: '确认删除',
     content: `确定删除渠道“${channel.name}”吗？相关密钥和模型配置会一并删除。`,
     positiveText: '确认删除',
@@ -438,7 +441,7 @@ async function handleDelete(channel: Channel) {
     onPositiveClick: async () => {
       try {
         await channelApi.delete(channel.id)
-        window.$message?.success('删除成功')
+        feedback.message?.success('删除成功')
         await fetchChannels()
       } catch (err) {
         toastApiError(err, '删除失败')
@@ -464,20 +467,38 @@ onMounted(() => {
   margin-left: auto;
 }
 
-.channel-base-url-link {
+:deep(.channel-cell) {
+  min-width: 0;
+}
+
+:deep(.channel-cell__name) {
+  font-weight: 650;
+  color: #111111;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:deep(.channel-cell__url) {
   margin-top: 2px;
-  display: inline-block;
+  display: block;
   max-width: 300px;
   font-size: 12px;
   color: #525252;
+  line-height: 1.35;
   text-decoration: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.channel-base-url-link:hover {
+:deep(a.channel-cell__url:hover) {
   color: #111111;
-  text-decoration: underline;
+  text-decoration: none;
+}
+
+:deep(.channel-cell__url--empty) {
+  color: #a3a3a3;
 }
 </style>

@@ -232,7 +232,7 @@ import {
   SearchOutline,
   TrashOutline,
 } from '@vicons/ionicons5'
-import tokensService, { type CreateTokenResponse, type Token, type TokenListParams } from '@/services/tokensService'
+import { tokensService, type CreateTokenResponse, type Token, type TokenListParams } from '@/services/tokensService'
 import { modelApi } from '@/services/modelService'
 import { toastApiError } from '@/utils/error'
 import { formatCompactNumber } from '@/utils/number'

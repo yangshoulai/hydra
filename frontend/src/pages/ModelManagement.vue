@@ -147,10 +147,11 @@ import {
 import {AddOutline, CopyOutline, LayersOutline, PencilOutline, SearchOutline, TrashOutline} from '@vicons/ionicons5'
 import {type CreateModelRequest, modelApi, type UpdateModelRequest} from '@/services/modelService'
 import type {Model, ModelListParams, Provider} from '@/types/model'
-import providerApi from '@/services/providerService'
+import { providerApi } from '@/services/providerService'
 import ProviderIcon from '@/components/ProviderIcon.vue'
 import ModelChannelsDrawer from '@/components/ModelChannelsDrawer.vue'
 import {getErrorMessage, toastApiError} from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 const loading = ref(false)
 const listError = ref('')
@@ -431,7 +432,7 @@ async function loadModels() {
     pagination.total = result.total
   } catch (err) {
     listError.value = getErrorMessage(err, '加载模型列表失败')
-    window.$message?.error(listError.value)
+    feedback.message?.error(listError.value)
   } finally {
     loading.value = false
   }
@@ -462,7 +463,7 @@ async function handleCreate() {
 
     await modelApi.create(createForm)
 
-    window.$message?.success('模型创建成功')
+    feedback.message?.success('模型创建成功')
     showCreateDialog.value = false
 
     createForm.name = ''
@@ -496,7 +497,7 @@ async function handleUpdate() {
 
     await modelApi.update(currentEditModel.value.id, editForm)
 
-    window.$message?.success('更新成功')
+    feedback.message?.success('更新成功')
     showEditDialog.value = false
     currentEditModel.value = null
 
@@ -511,7 +512,7 @@ async function handleUpdate() {
 }
 
 async function handleDelete(model: Model) {
-  await window.$dialog?.warning({
+  await feedback.dialog?.warning({
     title: '确认删除',
     content: `确定删除模型“${model.name}”吗？`,
     positiveText: '确认删除',
@@ -519,7 +520,7 @@ async function handleDelete(model: Model) {
     onPositiveClick: async () => {
       try {
         await modelApi.delete(model.id)
-        window.$message?.success('删除成功')
+        feedback.message?.success('删除成功')
         await loadModels()
       } catch (err) {
         toastApiError(err, '删除失败')
@@ -538,8 +539,8 @@ function handleCopyModelName(model: Model, event: MouseEvent) {
   event.stopPropagation()
   navigator.clipboard
       .writeText(model.name)
-      .then(() => window.$message?.success(`已复制模型名：${model.name}`))
-      .catch(() => window.$message?.error('复制失败'))
+      .then(() => feedback.message?.success(`已复制模型名：${model.name}`))
+      .catch(() => feedback.message?.error('复制失败'))
 }
 
 onMounted(() => {

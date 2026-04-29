@@ -36,8 +36,9 @@ type AppManager struct {
 }
 
 var restartRequiredCategories = map[string]struct{}{
-	"server":  {},
-	"unknown": {},
+	"server":   {},
+	"security": {},
+	"unknown":  {},
 }
 
 // NewAppManager 创建 AppManager。

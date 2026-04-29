@@ -41,6 +41,7 @@ import { computed, reactive, ref } from 'vue'
 import { NButton, NForm, NFormItem, NInput, NModal, NSpace, type FormInst, type FormRules } from 'naive-ui'
 import { authApi } from '@/services/authService'
 import { toastApiError } from '@/utils/error'
+import { feedback } from '@/services/feedback'
 
 const props = defineProps<{
   show: boolean
@@ -105,7 +106,7 @@ async function handleSubmit() {
       new_password: formData.newPassword,
     })
 
-    window.$message?.success('密码修改成功')
+    feedback.message?.success('密码修改成功')
     showDialog.value = false
     resetForm()
   } catch (err) {

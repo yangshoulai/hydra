@@ -24,6 +24,7 @@ var (
 
 func main() {
 	flag.Parse()
+	runtime.SetBuildInfo(version, buildTime)
 	fmt.Printf("Hydra API Gateway v%s (build: %s)\n", version, buildTime)
 
 	resolvedDataDir, err := resolveDataDir(*dataDir)

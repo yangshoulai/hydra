@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { clearAuthTokens, getAccessToken, isAccessTokenExpired, refreshAuthSession } from '@/services/authSession'
 
 // 布局组件
 const Layout = () => import('@/layouts/DefaultLayout.vue')
@@ -123,14 +124,14 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   // 设置页面标题
   if (to.meta?.title) {
     document.title = `${to.meta.title} - Hydra API Gateway`
   }
 
   // 检查认证状态
-  const token = localStorage.getItem('access_token')
+  const token = getAccessToken()
   const requiresAuth = to.meta?.requiresAuth !== false
 
   if (requiresAuth && !token) {
@@ -139,7 +140,18 @@ router.beforeEach((to, _from, next) => {
       name: 'Login',
       query: { redirect: to.fullPath },
     })
-  } else if (to.name === 'Login' && token) {
+  } else if (requiresAuth && isAccessTokenExpired(token)) {
+    try {
+      await refreshAuthSession()
+      next()
+    } catch {
+      clearAuthTokens()
+      next({
+        name: 'Login',
+        query: { redirect: to.fullPath },
+      })
+    }
+  } else if (to.name === 'Login' && token && !isAccessTokenExpired(token)) {
     // 已登录用户访问登录页，重定向到仪表盘
     next({ name: 'Dashboard' })
   } else {

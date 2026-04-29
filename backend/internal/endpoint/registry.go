@@ -12,7 +12,7 @@ type Registry struct {
 }
 
 var (
-	globalRegistry = NewRegistry()
+	globalRegistry = NewDefaultRegistry()
 )
 
 // NewRegistry 创建端点注册中心
@@ -20,6 +20,15 @@ func NewRegistry() *Registry {
 	return &Registry{
 		endpoints: make(map[string]Endpoint),
 	}
+}
+
+// NewDefaultRegistry 创建包含系统内置端点的注册中心。
+func NewDefaultRegistry() *Registry {
+	registry := NewRegistry()
+	for _, ep := range DefaultEndpoints() {
+		registry.Register(ep)
+	}
+	return registry
 }
 
 // Register 注册端点

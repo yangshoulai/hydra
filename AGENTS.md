@@ -18,7 +18,7 @@ UI 框架为 **Naive UI 2.43+**，整体风格黑白极简。下面是几条在�
 
 - **所有表单只用 `placeholder` 进行输入提示**，不在 label 下放描述文字或 tooltip。
   - 原因：Naive UI 的 `n-form-item-feedback-wrapper` 会在校验触发时出现并抢占 14px 高度，引发整页"抖动"。
-  - 实现：已在 `src/style.css` 全局隐藏 `feedback-wrapper`（`display: none !important`）。校验失败的反馈通过 toast（`message.error` / `window.$message?.error`）而非行内文字。
+  - 实现：已在 `src/style.css` 全局隐藏 `feedback-wrapper`（`display: none !important`）。校验失败的反馈通过 toast（`message.error` / `feedback.message?.error`）而非行内文字。
   - **不要**在单个组件里把 feedback-wrapper 恢复显示。
 - 额外的字段说明需要显示时，使用 `.form-hint` class（定义在全局 `style.css`）放在输入控件之下作为静态说明。
 
@@ -56,7 +56,7 @@ UI 框架为 **Naive UI 2.43+**，整体风格黑白极简。下面是几条在�
 
 ## 后端（backend/）
 
-使用 Go + 标准 `net/http`，结构：
+使用 Go + Gin（底层由标准 `net/http` Server 承载），结构：
 - `api/` — 路由处理器
 - `middleware/` — 鉴权等中间件
 - `service/proxy/` — 代理核心

@@ -2,7 +2,10 @@ package config
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -146,6 +149,42 @@ var DefaultSettings = []models.SystemSetting{
 		Remark:    "渠道负载策略(weighted_random/round_robin)",
 	},
 	{
+		Key:       models.SettingProxyMaxBodyBytes,
+		Value:     strconv.Itoa(models.DefaultProxyMaxBodyBytes),
+		ValueType: "int",
+		Remark:    "代理请求体最大大小(字节，0 表示不限制)",
+	},
+	{
+		Key:       models.SettingProxyRateLimitEnabled,
+		Value:     "true",
+		ValueType: "bool",
+		Remark:    "是否启用代理请求限流",
+	},
+	{
+		Key:       models.SettingProxyRateLimitGlobalRPS,
+		Value:     strconv.Itoa(models.DefaultProxyRateLimitGlobalRPS),
+		ValueType: "int",
+		Remark:    "全局代理请求每秒限制(0 表示不限制)",
+	},
+	{
+		Key:       models.SettingProxyRateLimitGlobalBurst,
+		Value:     strconv.Itoa(models.DefaultProxyRateLimitGlobalBurst),
+		ValueType: "int",
+		Remark:    "全局代理请求突发容量",
+	},
+	{
+		Key:       models.SettingProxyRateLimitTokenRPS,
+		Value:     strconv.Itoa(models.DefaultProxyRateLimitTokenRPS),
+		ValueType: "int",
+		Remark:    "单访问令牌每秒限制(0 表示不限制)",
+	},
+	{
+		Key:       models.SettingProxyRateLimitTokenBurst,
+		Value:     strconv.Itoa(models.DefaultProxyRateLimitTokenBurst),
+		ValueType: "int",
+		Remark:    "单访问令牌突发容量",
+	},
+	{
 		Key:       models.SettingModelTestPrompt,
 		Value:     "Hi",
 		ValueType: "string",
@@ -215,6 +254,47 @@ func getDefaultPlainTextErrorKeywords() []string {
 		"insufficient quota",
 		"billing issue",
 	}
+}
+
+func generateJWTSecret() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("生成 JWT 随机密钥失败: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func (i *Initializer) ensureJWTSecret(ctx context.Context) error {
+	existing, err := i.systemSettingRepo.GetByKey(ctx, models.SettingSecurityJWTSecret)
+	if err != nil {
+		i.logger.Error("读取 JWT 密钥设置失败",
+			slog.String("key", models.SettingSecurityJWTSecret),
+			slog.String("error", err.Error()),
+		)
+		return err
+	}
+	if existing != nil {
+		value := strings.TrimSpace(existing.Value)
+		if value != "" {
+			return nil
+		}
+	}
+
+	secret, err := generateJWTSecret()
+	if err != nil {
+		return err
+	}
+	if err := i.systemSettingRepo.Set(ctx, models.SettingSecurityJWTSecret, secret); err != nil {
+		i.logger.Error("写入 JWT 自动生成密钥失败",
+			slog.String("key", models.SettingSecurityJWTSecret),
+			slog.String("error", err.Error()),
+		)
+		return err
+	}
+	i.logger.Info("已自动生成 JWT 签名密钥",
+		slog.String("key", models.SettingSecurityJWTSecret),
+	)
+	return nil
 }
 
 // obsoleteSettingKeys 早期版本存在、现已废弃的系统设置 key。
@@ -335,6 +415,10 @@ func (i *Initializer) Initialize(ctx context.Context) error {
 		}
 	}
 
+	if err := i.ensureJWTSecret(ctx); err != nil {
+		return err
+	}
+
 	if legacySnifferSetting != nil {
 		nonStreamSetting, err := i.systemSettingRepo.GetByKey(ctx, models.SettingSnifferNonStreamEnabled)
 		if err != nil {
@@ -362,7 +446,7 @@ func (i *Initializer) Initialize(ctx context.Context) error {
 	}
 
 	i.logger.Info("系统设置初始化成功",
-		slog.Int("total_settings", len(allSettings)),
+		slog.Int("total_settings", len(allSettings)+1),
 	)
 
 	return nil

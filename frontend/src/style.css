@@ -1,9 +1,6 @@
 /* ===================================
    Hydra 管理后台设计系统（黑白版）
    =================================== */
-
-@import "tailwindcss";
-
 :root {
   --hydra-bg: #f5f5f5;
   --hydra-bg-elevated: #ffffff;

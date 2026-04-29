@@ -5,6 +5,7 @@
 import {defineStore} from 'pinia'
 import {computed, ref} from 'vue'
 import {authApi} from '../services/authService'
+import {isAccessTokenExpired, saveAuthTokens} from '../services/authSession'
 import type {AdminUser} from '../types/auth'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -36,8 +37,7 @@ export const useAuthStore = defineStore('auth', () => {
 
             // 保存 access_token 和 refresh_token
             token.value = response.access_token
-            localStorage.setItem('access_token', response.access_token)
-            localStorage.setItem('refresh_token', response.refresh_token)
+            saveAuthTokens(response.access_token, response.refresh_token)
 
             // 保存用户信息
             user.value = response.user
@@ -56,11 +56,7 @@ export const useAuthStore = defineStore('auth', () => {
      * 检查token是否过期
      */
     function isTokenExpired(): boolean {
-        const expiresAt = localStorage.getItem('token_expires_at')
-        if (!expiresAt) {
-            return false
-        }
-        return Date.now() > parseInt(expiresAt)
+        return isAccessTokenExpired()
     }
 
     /**

@@ -273,6 +273,8 @@ func (ps *ProxyService) reloadLoggingConfig(ctx context.Context) {
 
 func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 	requestTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := ps.settingService.GetProxyConfig(ctx)
+	maxBodyBytes := ps.settingService.GetProxyMaxBodyBytes(ctx)
+	rateLimitConfig := ps.settingService.GetProxyRateLimitConfig(ctx)
 	retryDelay := 500 * time.Millisecond
 
 	ps.httpClient.UpdateRequestTimeout(requestTimeout)
@@ -287,6 +289,10 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 		slog.String("network_proxy_url", networkProxyURL),
 		slog.Int("max_retry", maxRetry),
 		slog.String("load_balance_strategy", ps.loadBalancer.CurrentChannelSelectionStrategyName()),
+		slog.Int64("max_body_bytes", maxBodyBytes),
+		slog.Bool("rate_limit_enabled", rateLimitConfig.Enabled),
+		slog.Int("rate_limit_global_rps", rateLimitConfig.GlobalRPS),
+		slog.Int("rate_limit_token_rps", rateLimitConfig.TokenRPS),
 		slog.Duration("retry_delay", retryDelay),
 	)
 }

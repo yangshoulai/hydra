@@ -121,6 +121,110 @@
 
       <section class="panel-card">
         <header class="panel-card__header">
+          <h3 class="panel-card__title">安全与流量控制</h3>
+        </header>
+        <div class="panel-card__body panel-card__body--flush">
+          <div class="setting-row setting-row--block">
+            <div class="setting-row__info">
+              <div class="setting-row__label">
+                JWT 签名密钥
+                <n-tag size="tiny" type="warning" :bordered="false">保存后自动重启</n-tag>
+              </div>
+              <div class="setting-row__desc">用于管理后台 JWT 签名。初始化时会自动生成；修改后当前登录状态会失效，需要重新登录。</div>
+            </div>
+            <div class="setting-row__control setting-row__control--block">
+              <div class="secret-row">
+                <n-input
+                  v-model:value="formData.security_jwt_secret"
+                  type="password"
+                  show-password-on="click"
+                  placeholder="至少 32 个字符"
+                  style="width: 100%"
+                />
+                <n-button @click="generateJWTSecret">重新生成</n-button>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">代理请求体上限（MB）</div>
+              <div class="setting-row__desc">限制代理入口读取的请求体大小，0 表示不限制。保存后对新请求立即生效。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.proxy_max_body_mb" :min="0" :max="1024" style="width: 100%" placeholder="0-1024" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">代理限流</div>
+              <div class="setting-row__desc">启用后按全局与访问令牌两个维度进行令牌桶限流；保存后立即生效。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-space align="center">
+                <n-switch v-model:value="formData.proxy_rate_limit_enabled" />
+                <n-tag :type="formData.proxy_rate_limit_enabled ? 'success' : 'default'" :bordered="false" size="small">
+                  {{ formData.proxy_rate_limit_enabled ? '已启用' : '已关闭' }}
+                </n-tag>
+              </n-space>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">全局限流（RPS / 突发）</div>
+              <div class="setting-row__desc">全站代理请求共享的速率限制；RPS 为 0 表示不限制全局维度。</div>
+            </div>
+            <div class="setting-row__control setting-row__control--wide">
+              <n-space style="width: 100%" :wrap="false">
+                <n-input-number
+                  v-model:value="formData.proxy_rate_limit_global_rps"
+                  :min="0"
+                  :max="100000"
+                  :disabled="!formData.proxy_rate_limit_enabled"
+                  placeholder="RPS"
+                />
+                <n-input-number
+                  v-model:value="formData.proxy_rate_limit_global_burst"
+                  :min="0"
+                  :max="100000"
+                  :disabled="!formData.proxy_rate_limit_enabled"
+                  placeholder="突发"
+                />
+              </n-space>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">单令牌限流（RPS / 突发）</div>
+              <div class="setting-row__desc">按访问令牌隔离请求速率；RPS 为 0 表示不限制单令牌维度。</div>
+            </div>
+            <div class="setting-row__control setting-row__control--wide">
+              <n-space style="width: 100%" :wrap="false">
+                <n-input-number
+                  v-model:value="formData.proxy_rate_limit_token_rps"
+                  :min="0"
+                  :max="100000"
+                  :disabled="!formData.proxy_rate_limit_enabled"
+                  placeholder="RPS"
+                />
+                <n-input-number
+                  v-model:value="formData.proxy_rate_limit_token_burst"
+                  :min="0"
+                  :max="100000"
+                  :disabled="!formData.proxy_rate_limit_enabled"
+                  placeholder="突发"
+                />
+              </n-space>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <header class="panel-card__header">
           <h3 class="panel-card__title">稳定性与嗅探</h3>
         </header>
         <div class="panel-card__body panel-card__body--flush">
@@ -338,12 +442,13 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui'
-import settingsService from '@/services/settingsService'
+import { settingsService } from '@/services/settingsService'
 
 const dialog = useDialog()
 const message = useMessage()
 
 interface SettingsData {
+  security_jwt_secret: string
   server_port: number
   server_read_timeout: number
   server_write_timeout: number
@@ -354,6 +459,12 @@ interface SettingsData {
   proxy_keepalive_interval: number
   proxy_max_retry: number
   proxy_load_balance_strategy: 'weighted_random' | 'round_robin'
+  proxy_max_body_mb: number
+  proxy_rate_limit_enabled: boolean
+  proxy_rate_limit_global_rps: number
+  proxy_rate_limit_global_burst: number
+  proxy_rate_limit_token_rps: number
+  proxy_rate_limit_token_burst: number
   sniffer_non_stream_enabled: boolean
   sniffer_stream_enabled: boolean
   sniffer_stream_packet_count: number
@@ -376,6 +487,7 @@ const isConflictAdjusting = ref(false)
 const snifferKeywords = ref('')
 
 const formData = ref<SettingsData>({
+  security_jwt_secret: '',
   server_port: 8080,
   server_read_timeout: 120,
   server_write_timeout: 0,
@@ -386,6 +498,12 @@ const formData = ref<SettingsData>({
   proxy_keepalive_interval: 0,
   proxy_max_retry: 3,
   proxy_load_balance_strategy: 'weighted_random',
+  proxy_max_body_mb: 50,
+  proxy_rate_limit_enabled: true,
+  proxy_rate_limit_global_rps: 300,
+  proxy_rate_limit_global_burst: 600,
+  proxy_rate_limit_token_rps: 60,
+  proxy_rate_limit_token_burst: 120,
   sniffer_non_stream_enabled: true,
   sniffer_stream_enabled: true,
   sniffer_stream_packet_count: 1,
@@ -418,6 +536,9 @@ const loadSettings = async () => {
 
     isConfirming.value = true
 
+    if (settings.security_jwt_secret !== undefined) {
+      formData.value.security_jwt_secret = settings.security_jwt_secret || ''
+    }
     if (settings.server_port) formData.value.server_port = parseInt(settings.server_port)
     if (settings.server_read_timeout) formData.value.server_read_timeout = parseInt(settings.server_read_timeout)
     if (settings.server_write_timeout !== undefined) formData.value.server_write_timeout = parseInt(settings.server_write_timeout)
@@ -440,6 +561,25 @@ const loadSettings = async () => {
     if (settings.proxy_load_balance_strategy !== undefined) {
       formData.value.proxy_load_balance_strategy =
         settings.proxy_load_balance_strategy === 'round_robin' ? 'round_robin' : 'weighted_random'
+    }
+    if (settings.proxy_max_body_bytes !== undefined) {
+      const bytes = Math.max(0, parseInt(settings.proxy_max_body_bytes) || 0)
+      formData.value.proxy_max_body_mb = Math.round(bytes / 1024 / 1024)
+    }
+    if (settings.proxy_rate_limit_enabled !== undefined) {
+      formData.value.proxy_rate_limit_enabled = settings.proxy_rate_limit_enabled === 'true'
+    }
+    if (settings.proxy_rate_limit_global_rps !== undefined) {
+      formData.value.proxy_rate_limit_global_rps = Math.max(0, parseInt(settings.proxy_rate_limit_global_rps) || 0)
+    }
+    if (settings.proxy_rate_limit_global_burst !== undefined) {
+      formData.value.proxy_rate_limit_global_burst = Math.max(0, parseInt(settings.proxy_rate_limit_global_burst) || 0)
+    }
+    if (settings.proxy_rate_limit_token_rps !== undefined) {
+      formData.value.proxy_rate_limit_token_rps = Math.max(0, parseInt(settings.proxy_rate_limit_token_rps) || 0)
+    }
+    if (settings.proxy_rate_limit_token_burst !== undefined) {
+      formData.value.proxy_rate_limit_token_burst = Math.max(0, parseInt(settings.proxy_rate_limit_token_burst) || 0)
     }
     const legacySnifferEnabled = settings.sniffer_enabled !== undefined ? settings.sniffer_enabled === 'true' : true
     if (settings.sniffer_non_stream_enabled !== undefined) {
@@ -565,7 +705,20 @@ const cancelDebugMode = () => {
   showDebugModeConfirm.value = false
 }
 
+const generateJWTSecret = () => {
+  const bytes = new Uint8Array(32)
+  window.crypto.getRandomValues(bytes)
+  formData.value.security_jwt_secret = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
+
 const handleSave = async () => {
+  if (formData.value.security_jwt_secret.trim().length < 32) {
+    message.error('JWT 签名密钥至少需要 32 个字符')
+    return
+  }
   if (!formData.value.log_retention_days || formData.value.log_retention_days < 1) {
     message.error('日志保留天数必须大于 0')
     return
@@ -580,6 +733,7 @@ const handleSave = async () => {
 
     await settingsService.updateSettings({
       settings: {
+        security_jwt_secret: formData.value.security_jwt_secret.trim(),
         server_port: formData.value.server_port.toString(),
         server_read_timeout: formData.value.server_read_timeout.toString(),
         server_write_timeout: formData.value.server_write_timeout.toString(),
@@ -590,6 +744,12 @@ const handleSave = async () => {
         proxy_keepalive_interval: formData.value.proxy_keepalive_interval.toString(),
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
         proxy_load_balance_strategy: formData.value.proxy_load_balance_strategy,
+        proxy_max_body_bytes: Math.round(Math.max(0, formData.value.proxy_max_body_mb) * 1024 * 1024).toString(),
+        proxy_rate_limit_enabled: formData.value.proxy_rate_limit_enabled.toString(),
+        proxy_rate_limit_global_rps: Math.max(0, formData.value.proxy_rate_limit_global_rps).toString(),
+        proxy_rate_limit_global_burst: Math.max(0, formData.value.proxy_rate_limit_global_burst).toString(),
+        proxy_rate_limit_token_rps: Math.max(0, formData.value.proxy_rate_limit_token_rps).toString(),
+        proxy_rate_limit_token_burst: Math.max(0, formData.value.proxy_rate_limit_token_burst).toString(),
         sniffer_non_stream_enabled: formData.value.sniffer_non_stream_enabled.toString(),
         sniffer_stream_enabled: formData.value.sniffer_stream_enabled.toString(),
         sniffer_stream_packet_count: Math.max(1, formData.value.sniffer_stream_packet_count).toString(),
@@ -703,6 +863,13 @@ onMounted(() => {
   width: 100%;
 }
 
+.secret-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
 @media (max-width: 820px) {
   .setting-row {
     grid-template-columns: 1fr;
@@ -712,6 +879,11 @@ onMounted(() => {
   .setting-row__control {
     justify-content: stretch;
     width: 100%;
+  }
+
+  .secret-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

@@ -41,4 +41,4 @@ class SettingsService {
   }
 }
 
-export default new SettingsService()
+export const settingsService = new SettingsService()

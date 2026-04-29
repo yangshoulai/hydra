@@ -2,7 +2,7 @@ package admin
 
 import (
 	"errors"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,14 +24,14 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func NewJWTService() *JWTService {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "hydra-default-secret-change-in-production"
+func NewJWTService(secret string) (*JWTService, error) {
+	secret = strings.TrimSpace(secret)
+	if len(secret) < 32 {
+		return nil, errors.New("jwt secret must be at least 32 characters")
 	}
 	return &JWTService{
 		secretKey: []byte(secret),
-	}
+	}, nil
 }
 
 // GenerateAccessToken 生成访问令牌（短有效期，2小时）
@@ -65,22 +65,6 @@ func (s *JWTService) generateTokenWithType(userID uint, username string, tokenTy
 		Type:     tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiration)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.secretKey)
-}
-
-// GenerateToken 生成访问令牌（兼容旧代码，默认24小时）
-func (s *JWTService) GenerateToken(userID uint, username string) (string, error) {
-	claims := Claims{
-		UserID:   userID,
-		Username: username,
-		Type:     "access",
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}

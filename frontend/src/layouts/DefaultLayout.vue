@@ -21,7 +21,7 @@
           @keydown.enter.prevent="router.push({ name: 'Dashboard' })"
         >
           <div class="app-brand__logo">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="app-brand__svg">
               <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
               <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
               <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
@@ -120,6 +120,7 @@ import {
   SettingsOutline,
 } from '@vicons/ionicons5'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
+import { clearAuthTokens } from '@/services/authSession'
 
 const router = useRouter()
 const route = useRoute()
@@ -199,8 +200,7 @@ const handleMenuSelect = (key: string) => {
 
 const handleUserMenuSelect = (key: string) => {
   if (key === 'logout') {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+    clearAuthTokens()
     router.push({ name: 'Login' })
     return
   }
@@ -293,6 +293,11 @@ onUnmounted(() => {
   color: #fff;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
   flex-shrink: 0;
+}
+
+.app-brand__svg {
+  width: 20px;
+  height: 20px;
 }
 
 .app-brand__meta {

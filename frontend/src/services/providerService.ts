@@ -48,5 +48,3 @@ export const providerApi = {
     return response.data
   },
 }
-
-export default providerApi

@@ -1,4 +1,5 @@
 import { apiClient } from './api'
+import { clearAuthTokens, getAccessToken, redirectToLogin, refreshAuthSession } from '@/services/authSession'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -178,7 +179,7 @@ class DashboardService {
   ): { close: () => void } {
     const controller = new AbortController()
     const url = resolveURL(`/admin/api/dashboard/metrics/stream?qps_range=${encodeURIComponent(qpsRange)}`)
-    const accessToken = localStorage.getItem('access_token') || ''
+    const accessToken = getAccessToken()
 
     const headers: Record<string, string> = {
       Accept: 'text/event-stream',
@@ -195,6 +196,16 @@ class DashboardService {
           headers,
           signal: controller.signal,
         })
+
+        if (response.status === 401) {
+          try {
+            await refreshAuthSession()
+          } catch {
+            clearAuthTokens()
+            redirectToLogin()
+          }
+          throw new Error('stream request failed: 401')
+        }
 
         if (!response.ok || !response.body) {
           throw new Error(`stream request failed: ${response.status}`)
@@ -241,4 +252,4 @@ class DashboardService {
   }
 }
 
-export default new DashboardService()
+export const dashboardService = new DashboardService()

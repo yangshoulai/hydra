@@ -13,6 +13,8 @@ var (
 	ErrAllUpstreamAttemptsFailed = errors.New("all upstream attempts failed")
 	// ErrReadRequestBodyFailed 读取请求体失败
 	ErrReadRequestBodyFailed = errors.New("failed to read request body")
+	// ErrRequestBodyTooLarge 请求体超过系统限制
+	ErrRequestBodyTooLarge = errors.New("request body too large")
 	// ErrUpstreamCallFailed 上游调用失败
 	ErrUpstreamCallFailed = errors.New("upstream call failed")
 	// ErrFake200Response 假 200 响应

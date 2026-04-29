@@ -1,4 +1,5 @@
 import { onUnmounted, ref } from 'vue'
+import { clearAuthTokens, getAccessToken, redirectToLogin, refreshAuthSession } from '@/services/authSession'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -97,7 +98,7 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
 
     const targetURL = typeof options.url === 'function' ? options.url() : options.url
 
-    const accessToken = localStorage.getItem('access_token') || ''
+    const accessToken = getAccessToken()
     const headers: Record<string, string> = {
       Accept: 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -115,6 +116,16 @@ export function useEventStream<T>(options: UseEventStreamOptions<T>) {
 
       if (currentVersion !== connectionVersion) {
         return
+      }
+
+      if (response.status === 401) {
+        try {
+          await refreshAuthSession()
+        } catch {
+          clearAuthTokens()
+          redirectToLogin()
+        }
+        throw new Error('stream request failed: 401')
       }
 
       if (!response.ok || !response.body) {
