@@ -206,6 +206,14 @@ export interface TestModeResult {
   success: boolean
   message: string
   latency?: string
+  content?: TestResponseContent
+}
+
+export interface TestResponseContent {
+  type?: 'text' | 'image' | 'json' | 'raw' | string
+  text?: string
+  image_url?: string
+  raw?: string
 }
 
 export interface TestModelResponse {

@@ -134,12 +134,7 @@ func replaceModelInMultipart(body []byte, contentType string, modelName string) 
 			continue
 		}
 		// 复制其他字段（包括文件字段）
-		var dst io.Writer
-		if part.FileName() != "" {
-			dst, err = writer.CreateFormFile(part.FormName(), part.FileName())
-		} else {
-			dst, err = writer.CreateFormField(part.FormName())
-		}
+		dst, err := writer.CreatePart(part.Header)
 		if err != nil {
 			_ = part.Close()
 			return nil, "", err

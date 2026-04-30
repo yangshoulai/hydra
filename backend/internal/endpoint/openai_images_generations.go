@@ -33,10 +33,11 @@ func (e *ImagesGenerationsEndpoint) GetColor() string {
 
 func (e *ImagesGenerationsEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, modelName string) error {
 	payload := map[string]any{
-		"model":  modelName,
-		"prompt": "请生成一只戴着耳机的柯基",
-		"n":      1,
-		"size":   "512x512",
+		"model":   modelName,
+		"prompt":  "请生成一只戴着耳机的柯基",
+		"n":       1,
+		"size":    "1024x1024",
+		"quality": "low",
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

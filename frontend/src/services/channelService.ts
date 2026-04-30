@@ -210,6 +210,8 @@ export const channelApi = {
     options?: {
       testPrompt?: string
       imageData?: string
+      imageSize?: string
+      imageQuality?: string
     }
   ): Promise<TestModelResponse> {
     const response = await apiClient.post<TestModelResponse>(
@@ -221,6 +223,8 @@ export const channelApi = {
         key_groups: keyGroups || [],
         test_prompt: options?.testPrompt || '',
         image_data: options?.imageData || '',
+        image_size: options?.imageSize || '',
+        image_quality: options?.imageQuality || '',
       }
     )
     return response.data

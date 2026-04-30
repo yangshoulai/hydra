@@ -316,7 +316,7 @@ func extractTopLevelErrorPreview(body []byte) (string, bool) {
 	}
 
 	errorField, hasError := data["error"]
-	if !hasError {
+	if !hasError || errorField == nil {
 		return "", false
 	}
 

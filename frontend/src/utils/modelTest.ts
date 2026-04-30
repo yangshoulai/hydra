@@ -1,4 +1,4 @@
-import type { TestModeResult, TestModelResponse } from '@/types/channel'
+import type { TestModeResult, TestModelResponse, TestResponseContent } from '@/types/channel'
 import type { ModelTestResultItem } from '@/types/modelTest'
 
 function buildFallbackNonStream(result: TestModelResponse): TestModeResult {
@@ -68,6 +68,25 @@ function buildModeDetail(label: string, modeResult: TestModeResult): string {
   return parts.join('，')
 }
 
+function hasResponseContent(content?: TestResponseContent): content is TestResponseContent {
+  return !!(content?.image_url || content?.text || content?.raw)
+}
+
+function pickResponseContent(nonStream: TestModeResult, stream: TestModeResult): TestResponseContent | undefined {
+  const modes = [nonStream, stream]
+  const successfulMode = modes.find((mode) => mode.success && hasResponseContent(mode.content))
+  if (successfulMode) {
+    return successfulMode.content
+  }
+
+  const modeWithContent = modes.find((mode) => hasResponseContent(mode.content))
+  if (modeWithContent) {
+    return modeWithContent.content
+  }
+
+  return undefined
+}
+
 export function createModelTestResultItem(input: {
   id: string
   channelName?: string
@@ -88,6 +107,7 @@ export function createModelTestResultItem(input: {
       success: input.result.success,
       nonStream,
       stream,
+      content: pickResponseContent(nonStream, stream),
       detail: buildTestResultDetail(input.result),
     }
   }

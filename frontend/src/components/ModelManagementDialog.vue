@@ -218,6 +218,13 @@
     <ImageTestDialog
       v-model:show="showImageTestDialog"
       :initial-prompt="imageTestInitialPrompt"
+      :initial-text-prompt="imageTestInitialTextPrompt"
+      :initial-generation-prompt="imageTestInitialGenerationPrompt"
+      :initial-edit-prompt="imageTestInitialEditPrompt"
+      :initial-size="imageTestInitialSize"
+      :initial-quality="imageTestInitialQuality"
+      :mode="imageTestMode"
+      :endpoint-types="imageTestEndpointTypes"
       :loading="activeTesting"
       @submit="handleImageTestSubmit"
     />
@@ -337,6 +344,8 @@ const weightEditMap = ref<Record<string, number>>({})
 const endpointTypesEditMap = ref<Record<string, string[]>>({})
 const keyGroupsEditMap = ref<Record<string, string[]>>({})
 const testPromptEditMap = ref<Record<string, string>>({})
+const imageTestSizeEditMap = ref<Record<string, string>>({})
+const imageTestQualityEditMap = ref<Record<string, string>>({})
 
 const testStatus = ref<Record<string, Record<string, 'idle' | 'testing' | 'success' | 'error'>>>({})
 const testDetailMap = ref<Record<string, string>>({})
@@ -382,9 +391,21 @@ const configEditor = reactive({
 const showImageTestDialog = ref(false)
 const showTestResultDialog = ref(false)
 const pendingImageTestRow = ref<ModelDisplayType | null>(null)
+const imageTestMode = ref<'generation' | 'edit' | 'mixed'>('edit')
+const imageTestEndpointTypes = ref<string[]>([])
 const imageTestInitialPrompt = ref('')
+const imageTestInitialTextPrompt = ref('')
+const imageTestInitialGenerationPrompt = ref('')
+const imageTestInitialEditPrompt = ref('')
+const imageTestInitialSize = ref('1024x1024')
+const imageTestInitialQuality = ref('low')
 const testResultTitle = ref('模型测试结果')
 const testResultItems = ref<ModelTestResultItem[]>([])
+
+const DEFAULT_IMAGE_TEST_SIZE = '1024x1024'
+const DEFAULT_IMAGE_TEST_QUALITY = 'low'
+const IMAGE_GENERATION_DEFAULT_PROMPT = '请生成一只戴着耳机的柯基'
+const IMAGE_EDIT_DEFAULT_PROMPT = '请将图片中的背景替换为星空，并保持主体不变'
 
 const activeConfigRow = computed(() => displayModels.value.find((item) => item.key === activeConfigKey.value))
 const activeTestDetail = computed(() => testDetailMap.value[activeConfigKey.value] || '')
@@ -762,12 +783,27 @@ function isRowTesting(key: string): boolean {
   return endpointTypes.some((type) => rowMap[type] === 'testing')
 }
 
+function getImageTestSize(key: string): string {
+  return imageTestSizeEditMap.value[key] || DEFAULT_IMAGE_TEST_SIZE
+}
+
+function getImageTestQuality(key: string): string {
+  return imageTestQualityEditMap.value[key] || DEFAULT_IMAGE_TEST_QUALITY
+}
+
+function setImageTestOptions(key: string, size?: string, quality?: string) {
+  imageTestSizeEditMap.value[key] = size || DEFAULT_IMAGE_TEST_SIZE
+  imageTestQualityEditMap.value[key] = quality || DEFAULT_IMAGE_TEST_QUALITY
+}
+
 function initEditState() {
   modelEditMap.value = {}
   weightEditMap.value = {}
   endpointTypesEditMap.value = {}
   keyGroupsEditMap.value = {}
   testPromptEditMap.value = {}
+  imageTestSizeEditMap.value = {}
+  imageTestQualityEditMap.value = {}
   testStatus.value = {}
   testDetailMap.value = {}
 
@@ -1036,12 +1072,23 @@ async function handleTestActiveConfig() {
 
 async function handleTest(row: ModelDisplayType) {
   const endpointTypes = endpointTypesEditMap.value[row.key] || row.endpoint_types
-  if (endpointTypes.includes('OpenAIImagesEdits')) {
+  const includesImageGeneration = endpointTypes.includes('OpenAIImagesGenerations')
+  const includesImageEdit = endpointTypes.includes('OpenAIImagesEdits')
+  if (includesImageGeneration || includesImageEdit) {
     pendingImageTestRow.value = row
-    imageTestInitialPrompt.value =
-      testPromptEditMap.value[row.key] ||
-      row.test_prompt ||
-      '请将图片中的背景替换为星空，并保持主体不变'
+    const configuredPrompt = testPromptEditMap.value[row.key] || row.test_prompt || ''
+    imageTestMode.value = includesImageGeneration && includesImageEdit
+      ? 'mixed'
+      : includesImageGeneration
+        ? 'generation'
+        : 'edit'
+    imageTestEndpointTypes.value = [...endpointTypes]
+    imageTestInitialPrompt.value = configuredPrompt
+    imageTestInitialTextPrompt.value = configuredPrompt
+    imageTestInitialGenerationPrompt.value = configuredPrompt || IMAGE_GENERATION_DEFAULT_PROMPT
+    imageTestInitialEditPrompt.value = configuredPrompt || IMAGE_EDIT_DEFAULT_PROMPT
+    imageTestInitialSize.value = getImageTestSize(row.key)
+    imageTestInitialQuality.value = getImageTestQuality(row.key)
     showImageTestDialog.value = true
     return
   }
@@ -1079,13 +1126,27 @@ async function handleToggleModelStatus(row: ModelDisplayType) {
   }
 }
 
-async function handleImageTestSubmit(payload: { prompt: string; imageData: string }) {
+async function handleImageTestSubmit(payload: {
+  prompt: string
+  textPrompt: string
+  generationPrompt: string
+  editPrompt: string
+  imageData: string
+  size: string
+  quality: string
+}) {
   const row = pendingImageTestRow.value
   if (!row) return
   showImageTestDialog.value = false
+  setImageTestOptions(row.key, payload.size, payload.quality)
   await executeModelTest(row, {
     prompt: payload.prompt,
+    textPrompt: payload.textPrompt,
+    imageGenerationPrompt: payload.generationPrompt,
+    imageEditPrompt: payload.editPrompt,
     imageData: payload.imageData,
+    imageSize: payload.size,
+    imageQuality: payload.quality,
   })
   pendingImageTestRow.value = null
 }
@@ -1094,7 +1155,12 @@ async function executeModelTest(
   row: ModelDisplayType,
   options?: {
     prompt?: string
+    textPrompt?: string
+    imageGenerationPrompt?: string
+    imageEditPrompt?: string
     imageData?: string
+    imageSize?: string
+    imageQuality?: string
   },
 ) {
   const key = row.key
@@ -1126,9 +1192,12 @@ async function executeModelTest(
     resultItems = await Promise.all(
       endpointTypes.map(async (endpointType, index) => {
         try {
-          const testPrompt = endpointType === 'OpenAIImagesEdits'
-            ? (options?.prompt || modelTestPrompt)
-            : modelTestPrompt
+          const isImageEndpoint = endpointType === 'OpenAIImagesGenerations' || endpointType === 'OpenAIImagesEdits'
+          const testPrompt = endpointType === 'OpenAIImagesGenerations'
+            ? (options?.imageGenerationPrompt || options?.prompt || modelTestPrompt)
+            : endpointType === 'OpenAIImagesEdits'
+              ? (options?.imageEditPrompt || options?.prompt || modelTestPrompt)
+              : (options?.textPrompt ?? modelTestPrompt)
           const imageData = endpointType === 'OpenAIImagesEdits' ? (options?.imageData || '') : ''
 
           const result = await channelApi.testModel(
@@ -1140,6 +1209,8 @@ async function executeModelTest(
             {
               testPrompt,
               imageData,
+              imageSize: isImageEndpoint ? (options?.imageSize || getImageTestSize(key)) : undefined,
+              imageQuality: isImageEndpoint ? (options?.imageQuality || getImageTestQuality(key)) : undefined,
             },
           )
           rowStatus[endpointType] = result.success ? 'success' : 'error'

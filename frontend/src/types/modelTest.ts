@@ -1,4 +1,4 @@
-import type { TestModeResult } from './channel'
+import type { TestModeResult, TestResponseContent } from './channel'
 
 export interface ModelTestResultItem {
   id: string
@@ -9,5 +9,6 @@ export interface ModelTestResultItem {
   success: boolean
   nonStream: TestModeResult
   stream: TestModeResult
+  content?: TestResponseContent
   detail: string
 }

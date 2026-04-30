@@ -55,19 +55,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h } from 'vue'
+import { computed, h, type VNodeChild } from 'vue'
 import {
   type DataTableColumns,
   NButton,
   NDataTable,
   NEmpty,
   NIcon,
+  NImage,
   NModal,
   NSpace,
   NText,
 } from 'naive-ui'
 import { CheckmarkOutline, CloseOutline, RemoveOutline } from '@vicons/ionicons5'
-import type { TestModeResult } from '@/types/channel'
+import type { TestModeResult, TestResponseContent } from '@/types/channel'
 import type { ModelTestResultItem } from '@/types/modelTest'
 
 interface Props {
@@ -106,10 +107,25 @@ const showModelColumn = computed(() => {
   return itemsWithModelName.some((item) => item.modelName !== item.channelModel)
 })
 
+const channelColumnWidth = 150
+const modelColumnWidth = 140
+const channelModelColumnWidth = 160
+const endpointColumnWidth = 180
+const resultColumnWidth = 80
+const modeColumnWidth = 120
+const responseContentColumnWidth = 420
+const detailColumnWidth = 340
+
 const tableScrollX = computed(() => {
-  let width = 900
-  if (showChannelColumn.value) width += 140
-  if (showModelColumn.value) width += 160
+  let width =
+    channelModelColumnWidth +
+    endpointColumnWidth +
+    resultColumnWidth +
+    modeColumnWidth * 2 +
+    responseContentColumnWidth +
+    detailColumnWidth
+  if (showChannelColumn.value) width += channelColumnWidth
+  if (showModelColumn.value) width += modelColumnWidth
   return width
 })
 
@@ -120,7 +136,7 @@ const columns = computed<DataTableColumns<ModelTestResultItem>>(() => {
     result.push({
       title: '渠道',
       key: 'channelName',
-      minWidth: 150,
+      width: channelColumnWidth,
       ellipsis: { tooltip: true },
       render: (row) => h(NText, null, { default: () => row.channelName || '-' }),
     })
@@ -130,7 +146,7 @@ const columns = computed<DataTableColumns<ModelTestResultItem>>(() => {
     result.push({
       title: '模型',
       key: 'modelName',
-      minWidth: 140,
+      width: modelColumnWidth,
       ellipsis: { tooltip: true },
       render: (row) => h(NText, { code: true }, { default: () => row.modelName || '-' }),
     })
@@ -140,39 +156,46 @@ const columns = computed<DataTableColumns<ModelTestResultItem>>(() => {
     {
       title: '渠道模型',
       key: 'channelModel',
-      width: 160,
+      width: channelModelColumnWidth,
       ellipsis: { tooltip: true },
       render: (row) => h(NText, { code: true }, { default: () => row.channelModel }),
     },
     {
       title: '端点',
       key: 'endpointType',
-      width: 180,
+      width: endpointColumnWidth,
       render: (row) => h('div', { class: 'endpoint-cell inline-code' }, row.endpointType),
     },
     {
       title: '结果',
       key: 'success',
-      width: 80,
+      width: resultColumnWidth,
       align: 'center',
       render: (row) => renderStatusPill(row.success ? '通过' : '失败', row.success ? 'success' : 'error'),
     },
     {
       title: '非流式',
       key: 'nonStream',
-      width: 120,
+      width: modeColumnWidth,
       render: (row) => renderModeCell(row.nonStream),
     },
     {
       title: '流式',
       key: 'stream',
-      width: 120,
+      width: modeColumnWidth,
       render: (row) => renderModeCell(row.stream),
+    },
+    {
+      title: '返回内容',
+      key: 'content',
+      width: responseContentColumnWidth,
+      className: 'response-content-table-cell',
+      render: (row) => renderResponseContent(row.content),
     },
     {
       title: '详情',
       key: 'detail',
-      minWidth: 320,
+      width: detailColumnWidth,
       render: (row) =>
         h(
           'div',
@@ -187,6 +210,50 @@ const columns = computed<DataTableColumns<ModelTestResultItem>>(() => {
 
   return result
 })
+
+function renderResponseContent(content?: TestResponseContent) {
+  if (!content || (!content.text && !content.image_url && !content.raw)) {
+    return h(NText, { depth: 3 }, { default: () => '—' })
+  }
+
+  const previewMaxWidth = `${responseContentColumnWidth - 32}px`
+  const nodes: VNodeChild[] = []
+  if (content.image_url) {
+    nodes.push(
+      h(
+        'div',
+        { class: 'response-preview__image-wrap', style: { maxWidth: previewMaxWidth } },
+        h(NImage, {
+          src: content.image_url,
+          width: 120,
+          height: 120,
+          objectFit: 'cover',
+        }),
+      ),
+    )
+  }
+
+  const text = content.text || (!content.image_url ? content.raw : '')
+  if (text) {
+    nodes.push(
+      h(
+        'pre',
+        {
+          class: 'response-preview__text',
+          style: {
+            maxWidth: previewMaxWidth,
+            whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+          },
+        },
+        text,
+      ),
+    )
+  }
+
+  return h('div', { class: 'response-preview', style: { maxWidth: previewMaxWidth } }, nodes)
+}
 
 function renderModeCell(mode: TestModeResult) {
   const state = !mode.tested ? 'neutral' : mode.success ? 'success' : 'error'
@@ -296,6 +363,59 @@ function renderStatusPill(label: string, state: 'success' | 'error' | 'neutral',
   color: var(--hydra-text-secondary);
   white-space: normal;
   word-break: break-word;
+}
+
+.response-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.response-preview__image-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.response-preview__image-wrap :deep(.n-image) {
+  overflow: hidden;
+  border: 1px solid var(--hydra-border);
+  border-radius: 10px;
+  background: var(--hydra-bg-subtle);
+}
+
+.response-preview__text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--hydra-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+:deep(.response-content-table-cell) {
+  white-space: normal !important;
+  overflow: hidden;
+}
+
+:deep(.response-content-table-cell .response-preview),
+:deep(.response-content-table-cell .response-preview__text) {
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 
 :deep(.n-data-table td) {

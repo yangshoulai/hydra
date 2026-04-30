@@ -48,6 +48,18 @@
       :title="testResultTitle"
       :items="testResultItems"
     />
+
+    <ImageTestDialog
+      v-model:show="showImageTestDialog"
+      :initial-prompt="imageTestInitialPrompt"
+      :initial-text-prompt="imageTestInitialTextPrompt"
+      :initial-generation-prompt="imageTestInitialGenerationPrompt"
+      :initial-edit-prompt="imageTestInitialEditPrompt"
+      :mode="imageTestMode"
+      :endpoint-types="imageTestEndpointTypes"
+      :loading="pendingImageTestContext ? testingConfigs.has(pendingImageTestContext.row.config_id) : false"
+      @submit="handleImageTestSubmit"
+    />
   </n-drawer>
 </template>
 
@@ -72,6 +84,7 @@ import {
 import {CheckmarkCircleOutline, CloseCircleOutline, PlayCircleOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
 import ModelTestResultDialog from './ModelTestResultDialog.vue'
+import ImageTestDialog from './ImageTestDialog.vue'
 import EndpointTags from './EndpointTags.vue'
 import type {ModelTestResultItem} from '../types/modelTest'
 import type {ModelRelatedChannelInfo} from '../types/channel'
@@ -118,8 +131,18 @@ const weightEditMap = ref<Record<number, number>>({})
 const showTestResultDialog = ref(false)
 const testResultTitle = ref('模型测试结果')
 const testResultItems = ref<ModelTestResultItem[]>([])
+const showImageTestDialog = ref(false)
+const pendingImageTestContext = ref<{ row: ModelConfig; channelId: number } | null>(null)
+const imageTestMode = ref<'generation' | 'edit' | 'mixed'>('edit')
+const imageTestEndpointTypes = ref<string[]>([])
+const imageTestInitialPrompt = ref('')
+const imageTestInitialTextPrompt = ref('')
+const imageTestInitialGenerationPrompt = ref('')
+const imageTestInitialEditPrompt = ref('')
 const weightSaveTimers = new Map<number, number>()
 const drawerWidth = 'min(1080px, calc(100vw - 32px))'
+const IMAGE_GENERATION_DEFAULT_PROMPT = '请生成一只戴着耳机的柯基'
+const IMAGE_EDIT_DEFAULT_PROMPT = '请将图片中的背景替换为星空，并保持主体不变'
 
 const visible = computed({
   get: () => props.show,
@@ -275,6 +298,65 @@ async function handleToggleStatus(row: ModelConfig) {
 }
 
 async function handleTest(row: ModelConfig, channelId: number) {
+  const endpointTypes = row.endpoint_types || []
+  const includesImageGeneration = endpointTypes.includes('OpenAIImagesGenerations')
+  const includesImageEdit = endpointTypes.includes('OpenAIImagesEdits')
+  if (includesImageGeneration || includesImageEdit) {
+    pendingImageTestContext.value = {row, channelId}
+    imageTestMode.value = includesImageGeneration && includesImageEdit
+      ? 'mixed'
+      : includesImageGeneration
+        ? 'generation'
+        : 'edit'
+    imageTestEndpointTypes.value = [...endpointTypes]
+    imageTestInitialPrompt.value = ''
+    imageTestInitialTextPrompt.value = ''
+    imageTestInitialGenerationPrompt.value = IMAGE_GENERATION_DEFAULT_PROMPT
+    imageTestInitialEditPrompt.value = IMAGE_EDIT_DEFAULT_PROMPT
+    showImageTestDialog.value = true
+    return
+  }
+
+  await executeChannelModelTest(row, channelId)
+}
+
+async function handleImageTestSubmit(payload: {
+  prompt: string
+  textPrompt: string
+  generationPrompt: string
+  editPrompt: string
+  imageData: string
+  size: string
+  quality: string
+}) {
+  const context = pendingImageTestContext.value
+  if (!context) return
+  showImageTestDialog.value = false
+  await executeChannelModelTest(context.row, context.channelId, {
+    prompt: payload.prompt,
+    textPrompt: payload.textPrompt,
+    imageGenerationPrompt: payload.generationPrompt,
+    imageEditPrompt: payload.editPrompt,
+    imageData: payload.imageData,
+    imageSize: payload.size,
+    imageQuality: payload.quality,
+  })
+  pendingImageTestContext.value = null
+}
+
+async function executeChannelModelTest(
+  row: ModelConfig,
+  channelId: number,
+  options?: {
+    prompt?: string
+    textPrompt?: string
+    imageGenerationPrompt?: string
+    imageEditPrompt?: string
+    imageData?: string
+    imageSize?: string
+    imageQuality?: string
+  },
+) {
   const configId = row.config_id
   testingConfigs.value.add(configId)
 
@@ -282,7 +364,24 @@ async function handleTest(row: ModelConfig, channelId: number) {
     const channelName = groupedChannels.value.find((group) => group.channel_id === channelId)?.channel_name
     const resultItems = await Promise.all(row.endpoint_types.map(async (endpointType, index) => {
       try {
-        const result = await channelApi.testModel(channelId, row.channel_model, props.modelName, endpointType)
+        const isImageEndpoint = endpointType === 'OpenAIImagesGenerations' || endpointType === 'OpenAIImagesEdits'
+        const result = await channelApi.testModel(
+          channelId,
+          row.channel_model,
+          props.modelName,
+          endpointType,
+          undefined,
+          {
+            testPrompt: endpointType === 'OpenAIImagesGenerations'
+              ? (options?.imageGenerationPrompt || options?.prompt)
+              : endpointType === 'OpenAIImagesEdits'
+                ? (options?.imageEditPrompt || options?.prompt)
+                : options?.textPrompt,
+            imageData: endpointType === 'OpenAIImagesEdits' ? (options?.imageData || '') : '',
+            imageSize: isImageEndpoint ? options?.imageSize : undefined,
+            imageQuality: isImageEndpoint ? options?.imageQuality : undefined,
+          },
+        )
         return createModelTestResultItem({
           id: `${configId}:${endpointType}:${index}`,
           channelName,

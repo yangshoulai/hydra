@@ -21,7 +21,12 @@
                 </n-grid-item>
                 <n-grid-item span="2 s:2 m:1 l:1">
                   <n-form-item label="权重" path="weight">
-                    <n-input-number v-model:value="formData.weight" :min="1" :max="1000" style="width: 100%" placeholder="1-1000" />
+                    <div class="form-stack">
+                      <n-input-number v-model:value="formData.weight" :min="1" :max="1000" style="width: 100%" placeholder="1-1000" />
+                      <p class="form-hint">
+                        仅在“加权随机”负载策略下影响渠道被选中的概率；轮询策略会忽略渠道权重。渠道内多个模型配置的分配由模型配置权重单独决定。
+                      </p>
+                    </div>
                   </n-form-item>
                 </n-grid-item>
                 <n-grid-item span="2 s:2 m:1 l:1">
