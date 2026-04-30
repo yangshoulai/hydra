@@ -20,13 +20,14 @@ import (
 
 // 失败阶段标识，写入 proxyCtx.LastFailureStage 便于日志聚合排障。
 const (
-	stageRoute            = "route"
-	stageStreamProbe      = "stream_probe"
-	stageStreamForward    = "stream_forward"
-	stageNonStreamRead    = "non_stream_read"
-	stageNonStreamForward = "non_stream_forward"
-	stageHandleResponse   = "handle_response"
-	stageClientCancelled  = "client_cancelled"
+	stageRoute              = "route"
+	stageStreamProbe        = "stream_probe"
+	stageStreamForward      = "stream_forward"
+	stageNonStreamRead      = "non_stream_read"
+	stageNonStreamForward   = "non_stream_forward"
+	stageNonStreamKeepalive = "non_stream_keepalive"
+	stageHandleResponse     = "handle_response"
+	stageClientCancelled    = "client_cancelled"
 )
 
 // clientCancelledStatusCode nginx 惯例：客户端主动关闭连接
@@ -70,22 +71,28 @@ type ProxyService struct {
 	tokenUsageRecorder *TokenUsageRecorder
 	requestLogRecorder *RequestLogRecorder
 
-	snifferConfigMu         sync.RWMutex
-	streamSnifferEnabled    bool
-	nonStreamSnifferEnabled bool
-	streamSniffPacketCount  int
-	debugModeEnabled        atomic.Bool
-	streamKeepaliveNanos    atomic.Int64
+	snifferConfigMu                   sync.RWMutex
+	streamSnifferEnabled              bool
+	nonStreamSnifferEnabled           bool
+	streamSniffPacketCount            int
+	debugModeEnabled                  atomic.Bool
+	streamKeepaliveNanos              atomic.Int64
+	nonStreamKeepaliveEnabled         atomic.Bool
+	nonStreamKeepaliveFirstDelayNanos atomic.Int64
+	nonStreamKeepaliveIntervalNanos   atomic.Int64
 }
 
 // ProxyServiceConfig 代理服务配置
 type ProxyServiceConfig struct {
-	MaxRetries              int
-	RetryDelay              time.Duration
-	RequestTimeout          time.Duration
-	StreamKeepaliveInterval time.Duration
-	NetworkProxy            string
-	LoadBalanceStrategy     string
+	MaxRetries                   int
+	RetryDelay                   time.Duration
+	RequestTimeout               time.Duration
+	StreamKeepaliveInterval      time.Duration
+	NonStreamKeepaliveEnabled    bool
+	NonStreamKeepaliveFirstDelay time.Duration
+	NonStreamKeepaliveInterval   time.Duration
+	NetworkProxy                 string
+	LoadBalanceStrategy          string
 }
 
 // =============================================================================
@@ -145,6 +152,11 @@ func NewProxyService(
 	}
 	svc.debugModeEnabled.Store(settingService.GetBool(context.Background(), models.SettingLogDebugEnabled, false))
 	svc.updateStreamKeepaliveInterval(config.StreamKeepaliveInterval)
+	svc.updateNonStreamKeepaliveConfig(
+		config.NonStreamKeepaliveEnabled,
+		config.NonStreamKeepaliveFirstDelay,
+		config.NonStreamKeepaliveInterval,
+	)
 	svc.retryCoordinator.SetDebugFn(svc.isDebugModeEnabled)
 	return svc
 }
@@ -273,6 +285,7 @@ func (ps *ProxyService) reloadLoggingConfig(ctx context.Context) {
 
 func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 	requestTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := ps.settingService.GetProxyConfig(ctx)
+	nonStreamKeepalive := ps.settingService.GetNonStreamKeepaliveConfig(ctx)
 	maxBodyBytes := ps.settingService.GetProxyMaxBodyBytes(ctx)
 	rateLimitConfig := ps.settingService.GetProxyRateLimitConfig(ctx)
 	retryDelay := 500 * time.Millisecond
@@ -281,11 +294,15 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 	ps.httpClient.UpdateUpstreamProxyURL(networkProxyURL)
 	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
 	ps.updateStreamKeepaliveInterval(keepaliveInterval)
+	ps.updateNonStreamKeepaliveConfig(nonStreamKeepalive.Enabled, nonStreamKeepalive.FirstDelay, nonStreamKeepalive.Interval)
 	ps.loadBalancer.UpdateChannelSelectionStrategy(loadBalanceStrategy)
 
 	ps.logger.Info("代理服务配置已更新",
 		slog.Duration("request_timeout", requestTimeout),
 		slog.Duration("stream_keepalive_interval", keepaliveInterval),
+		slog.Bool("non_stream_keepalive_enabled", nonStreamKeepalive.Enabled),
+		slog.Duration("non_stream_keepalive_first_delay", nonStreamKeepalive.FirstDelay),
+		slog.Duration("non_stream_keepalive_interval", nonStreamKeepalive.Interval),
 		slog.String("network_proxy_url", networkProxyURL),
 		slog.Int("max_retry", maxRetry),
 		slog.String("load_balance_strategy", ps.loadBalancer.CurrentChannelSelectionStrategyName()),
@@ -339,6 +356,20 @@ func (ps *ProxyService) updateStreamKeepaliveInterval(interval time.Duration) {
 
 func (ps *ProxyService) getStreamKeepaliveInterval() time.Duration {
 	return time.Duration(ps.streamKeepaliveNanos.Load())
+}
+
+func (ps *ProxyService) updateNonStreamKeepaliveConfig(enabled bool, firstDelay time.Duration, interval time.Duration) {
+	ps.nonStreamKeepaliveEnabled.Store(enabled)
+	ps.nonStreamKeepaliveFirstDelayNanos.Store(int64(normalizeNonStreamKeepaliveDelay(firstDelay)))
+	ps.nonStreamKeepaliveIntervalNanos.Store(int64(normalizeNonStreamKeepaliveInterval(interval)))
+}
+
+func (ps *ProxyService) getNonStreamKeepaliveConfig() configService.NonStreamKeepaliveConfig {
+	return configService.NonStreamKeepaliveConfig{
+		Enabled:    ps.nonStreamKeepaliveEnabled.Load(),
+		FirstDelay: time.Duration(ps.nonStreamKeepaliveFirstDelayNanos.Load()),
+		Interval:   time.Duration(ps.nonStreamKeepaliveIntervalNanos.Load()),
+	}
 }
 
 func (ps *ProxyService) GetHTTPClient() *HTTPClient {

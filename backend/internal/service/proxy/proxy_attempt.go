@@ -140,6 +140,14 @@ func (ps *ProxyService) attemptOnce(c *gin.Context, proxyCtx *ProxyContext, rout
 		}
 	}
 
+	if !proxyCtx.IsStreamRequest {
+		keepaliveCfg := ps.getNonStreamKeepaliveConfig()
+		if keepaliveCfg.Enabled {
+			handleErr := ps.handleNonStreamAttemptWithKeepalive(c, proxyCtx, routeResult, upstreamReq, keepaliveCfg)
+			return ps.decideAfterHandle(c, proxyCtx, routeResult, handleErr)
+		}
+	}
+
 	upstreamResp, requestErr := ps.httpClient.DoWithProxy(upstreamReq, proxyCtx.TraceID, routeResult.Channel.UseProxy)
 
 	// 客户端主动断开：不记熔断、不重试、不计失败指标
@@ -243,7 +251,9 @@ func (ps *ProxyService) decideAfterHandle(
 	retryErr, ok := AsRetryableProxyError(handleErr)
 	if !ok {
 		proxyCtx.LastError = handleErr
-		proxyCtx.LastFailureStage = stageHandleResponse
+		if proxyCtx.LastFailureStage == "" {
+			proxyCtx.LastFailureStage = stageHandleResponse
+		}
 		return false, handleErr
 	}
 	return ps.retryOrFail(c, proxyCtx, routeResult, retryErr.Cause, retryErr.FailureType, retryErr.FailureScope, retryErr.Stage)

@@ -82,7 +82,7 @@ func buildRequestSummary(c *gin.Context, proxyCtx *ProxyContext, err error) requ
 
 	s := requestSummary{
 		traceID:         normalizeProxyTraceID(proxyCtx.TraceID),
-		statusCode:      resolveFinalStatusCode(c.Writer.Status(), err, clientCancelled),
+		statusCode:      resolveFinalStatusCode(c.Writer.Status(), err, clientCancelled, proxyCtx.ResponseStatusLocked),
 		clientCancelled: clientCancelled,
 		duration:        time.Since(proxyCtx.StartTime),
 		routeAttempts:   routeAttempts,
@@ -118,9 +118,13 @@ func buildRequestSummary(c *gin.Context, proxyCtx *ProxyContext, err error) requ
 	return s
 }
 
-// resolveFinalStatusCode 按"写入状态优先、client_cancelled 次之、err 次之"的顺序解析最终日志状态码
-func resolveFinalStatusCode(written int, err error, clientCancelled bool) int {
+// resolveFinalStatusCode 按"写入状态优先、client_cancelled 次之、err 次之"的顺序解析最终日志状态码。
+// 当响应状态码已被非流式保活提前锁定时，日志应保留真实写出的 HTTP 状态码。
+func resolveFinalStatusCode(written int, err error, clientCancelled bool, statusLocked bool) int {
 	if written != 0 {
+		if statusLocked {
+			return written
+		}
 		if err != nil && !clientCancelled && written < http.StatusBadRequest {
 			return http.StatusBadGateway
 		}

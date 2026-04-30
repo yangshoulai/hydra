@@ -131,6 +131,24 @@ var DefaultSettings = []models.SystemSetting{
 		Remark:    "流式响应保活间隔(秒，0 表示禁用，仅对流式响应生效)",
 	},
 	{
+		Key:       models.SettingProxyNonStreamKeepaliveEnabled,
+		Value:     "false",
+		ValueType: "bool",
+		Remark:    "是否启用非流式响应保活",
+	},
+	{
+		Key:       models.SettingProxyNonStreamKeepaliveDelay,
+		Value:     strconv.Itoa(models.DefaultProxyNonStreamKeepaliveDelaySeconds),
+		ValueType: "int",
+		Remark:    "非流式响应首个保活延迟(秒)",
+	},
+	{
+		Key:       models.SettingProxyNonStreamKeepaliveInterval,
+		Value:     strconv.Itoa(models.DefaultProxyNonStreamKeepaliveIntervalSeconds),
+		ValueType: "int",
+		Remark:    "非流式响应保活间隔(秒)",
+	},
+	{
 		Key:       models.SettingProxyNetworkURL,
 		Value:     "",
 		ValueType: "string",

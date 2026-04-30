@@ -80,6 +80,55 @@
 
           <div class="setting-row">
             <div class="setting-row__info">
+              <div class="setting-row__label">非流式保活</div>
+              <div class="setting-row__desc">默认关闭；启用后会在长时间无上游响应时写出 JSON 空白心跳，避免中间代理读超时。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-space align="center">
+                <n-switch v-model:value="formData.proxy_non_stream_keepalive_enabled" />
+                <n-tag :type="formData.proxy_non_stream_keepalive_enabled ? 'warning' : 'default'" :bordered="false" size="small">
+                  {{ formData.proxy_non_stream_keepalive_enabled ? '已启用' : '已关闭' }}
+                </n-tag>
+              </n-space>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">非流式首个保活延迟（秒）</div>
+              <div class="setting-row__desc">从请求开始计时，超过该秒数仍未完成响应时写出第一个 JSON 空白心跳；写出后状态码锁定且不再重试。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number
+                v-model:value="formData.proxy_non_stream_keepalive_first_delay"
+                :min="1"
+                :max="120"
+                :disabled="!formData.proxy_non_stream_keepalive_enabled"
+                style="width: 100%"
+                placeholder="建议 80-90"
+              />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">非流式保活间隔（秒）</div>
+              <div class="setting-row__desc">第一个心跳写出后，按该间隔持续写出 JSON 空白心跳；建议小于 Cloudflare 读超时时间并留足余量。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number
+                v-model:value="formData.proxy_non_stream_keepalive_interval"
+                :min="1"
+                :max="120"
+                :disabled="!formData.proxy_non_stream_keepalive_enabled"
+                style="width: 100%"
+                placeholder="建议 25-30"
+              />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
               <div class="setting-row__label">最大重试次数</div>
               <div class="setting-row__desc">单次请求失败后的最大重试次数，0 表示不重试。</div>
             </div>
@@ -422,6 +471,21 @@
         </n-space>
       </template>
     </n-modal>
+
+    <n-modal v-model:show="showNonStreamKeepaliveConfirm" preset="dialog" title="启用非流式保活">
+      <n-space vertical :size="6">
+        <n-text>非流式保活会提前向客户端写出 JSON 空白字符，用于绕过中间代理长时间无响应导致的读超时。</n-text>
+        <n-text depth="3" style="font-size: 12px">· 首个心跳写出后，HTTP 状态码会被锁定为 200</n-text>
+        <n-text depth="3" style="font-size: 12px">· 状态码锁定后，响应嗅探仍可记录失败，但不能再切换渠道重试</n-text>
+        <n-text depth="3" style="font-size: 12px">· 上游失败时只能在 200 响应体内返回错误 JSON，可能影响部分客户端 SDK</n-text>
+      </n-space>
+      <template #action>
+        <n-space>
+          <n-button @click="cancelNonStreamKeepalive">取消</n-button>
+          <n-button type="warning" @click="confirmNonStreamKeepalive">确认启用</n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -457,6 +521,9 @@ interface SettingsData {
   proxy_network_url: string
   proxy_request_timeout: number
   proxy_keepalive_interval: number
+  proxy_non_stream_keepalive_enabled: boolean
+  proxy_non_stream_keepalive_first_delay: number
+  proxy_non_stream_keepalive_interval: number
   proxy_max_retry: number
   proxy_load_balance_strategy: 'weighted_random' | 'round_robin'
   proxy_max_body_mb: number
@@ -482,6 +549,7 @@ const isSaving = ref(false)
 const loadError = ref('')
 const debugModeEnabled = ref(false)
 const showDebugModeConfirm = ref(false)
+const showNonStreamKeepaliveConfirm = ref(false)
 const isConfirming = ref(false)
 const isConflictAdjusting = ref(false)
 const snifferKeywords = ref('')
@@ -496,6 +564,9 @@ const formData = ref<SettingsData>({
   proxy_network_url: '',
   proxy_request_timeout: 120,
   proxy_keepalive_interval: 0,
+  proxy_non_stream_keepalive_enabled: false,
+  proxy_non_stream_keepalive_first_delay: 80,
+  proxy_non_stream_keepalive_interval: 30,
   proxy_max_retry: 3,
   proxy_load_balance_strategy: 'weighted_random',
   proxy_max_body_mb: 50,
@@ -553,6 +624,21 @@ const loadSettings = async () => {
     }
     if (settings.proxy_keepalive_interval !== undefined) {
       formData.value.proxy_keepalive_interval = Math.min(120, Math.max(0, parseInt(settings.proxy_keepalive_interval) || 0))
+    }
+    if (settings.proxy_non_stream_keepalive_enabled !== undefined) {
+      formData.value.proxy_non_stream_keepalive_enabled = settings.proxy_non_stream_keepalive_enabled === 'true'
+    }
+    if (settings.proxy_non_stream_keepalive_first_delay !== undefined) {
+      formData.value.proxy_non_stream_keepalive_first_delay = Math.min(
+        120,
+        Math.max(0, parseInt(settings.proxy_non_stream_keepalive_first_delay) || 0),
+      )
+    }
+    if (settings.proxy_non_stream_keepalive_interval !== undefined) {
+      formData.value.proxy_non_stream_keepalive_interval = Math.min(
+        120,
+        Math.max(0, parseInt(settings.proxy_non_stream_keepalive_interval) || 0),
+      )
     }
     if (settings.proxy_network_url !== undefined) formData.value.proxy_network_url = settings.proxy_network_url || ''
     if (settings.proxy_max_retry !== undefined) {
@@ -643,6 +729,21 @@ watch(debugModeEnabled, (newValue, oldValue) => {
 })
 
 watch(
+  () => formData.value.proxy_non_stream_keepalive_enabled,
+  (newValue, oldValue) => {
+    if (isConfirming.value || isConflictAdjusting.value) return
+    if (!newValue || oldValue === undefined) return
+
+    isConfirming.value = true
+    formData.value.proxy_non_stream_keepalive_enabled = false
+    showNonStreamKeepaliveConfirm.value = true
+    setTimeout(() => {
+      isConfirming.value = false
+    }, 0)
+  },
+)
+
+watch(
   () => formData.value.sniffer_stream_enabled,
   (newValue, oldValue) => {
     if (isConfirming.value || isConflictAdjusting.value) return
@@ -705,6 +806,25 @@ const cancelDebugMode = () => {
   showDebugModeConfirm.value = false
 }
 
+const confirmNonStreamKeepalive = () => {
+  isConfirming.value = true
+  if (formData.value.proxy_non_stream_keepalive_first_delay <= 0) {
+    formData.value.proxy_non_stream_keepalive_first_delay = 80
+  }
+  if (formData.value.proxy_non_stream_keepalive_interval <= 0) {
+    formData.value.proxy_non_stream_keepalive_interval = 30
+  }
+  formData.value.proxy_non_stream_keepalive_enabled = true
+  showNonStreamKeepaliveConfirm.value = false
+  setTimeout(() => {
+    isConfirming.value = false
+  }, 0)
+}
+
+const cancelNonStreamKeepalive = () => {
+  showNonStreamKeepaliveConfirm.value = false
+}
+
 const generateJWTSecret = () => {
   const bytes = new Uint8Array(32)
   window.crypto.getRandomValues(bytes)
@@ -742,6 +862,9 @@ const handleSave = async () => {
         proxy_network_url: formData.value.proxy_network_url.trim(),
         proxy_request_timeout: formData.value.proxy_request_timeout.toString(),
         proxy_keepalive_interval: formData.value.proxy_keepalive_interval.toString(),
+        proxy_non_stream_keepalive_enabled: formData.value.proxy_non_stream_keepalive_enabled.toString(),
+        proxy_non_stream_keepalive_first_delay: Math.max(0, formData.value.proxy_non_stream_keepalive_first_delay).toString(),
+        proxy_non_stream_keepalive_interval: Math.max(0, formData.value.proxy_non_stream_keepalive_interval).toString(),
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
         proxy_load_balance_strategy: formData.value.proxy_load_balance_strategy,
         proxy_max_body_bytes: Math.round(Math.max(0, formData.value.proxy_max_body_mb) * 1024 * 1024).toString(),

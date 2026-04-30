@@ -174,6 +174,28 @@ func normalizeStreamKeepaliveInterval(interval time.Duration) time.Duration {
 	return interval
 }
 
+func normalizeNonStreamKeepaliveDelay(delay time.Duration) time.Duration {
+	if delay <= 0 {
+		return 0
+	}
+	maxDelay := 120 * time.Second
+	if delay > maxDelay {
+		return maxDelay
+	}
+	return delay
+}
+
+func normalizeNonStreamKeepaliveInterval(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return 0
+	}
+	maxInterval := 120 * time.Second
+	if interval > maxInterval {
+		return maxInterval
+	}
+	return interval
+}
+
 // maskSecret 脱敏密钥字符串用于日志
 func maskSecret(value string) string {
 	raw := strings.TrimSpace(value)

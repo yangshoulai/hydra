@@ -54,6 +54,12 @@ type ProxyRateLimitConfig struct {
 	TokenBurst  int
 }
 
+type NonStreamKeepaliveConfig struct {
+	Enabled    bool
+	FirstDelay time.Duration
+	Interval   time.Duration
+}
+
 // NewSettingService 创建系统设置服务
 func NewSettingService(logger *slog.Logger, systemSettingRepo *repository.SystemSettingRepository) *SettingService {
 	return &SettingService{
@@ -270,6 +276,9 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		return "logging"
 	case key == models.SettingProxyRequestTimeout ||
 		key == models.SettingProxyKeepaliveInterval ||
+		key == models.SettingProxyNonStreamKeepaliveEnabled ||
+		key == models.SettingProxyNonStreamKeepaliveDelay ||
+		key == models.SettingProxyNonStreamKeepaliveInterval ||
 		key == models.SettingProxyNetworkURL ||
 		key == models.SettingProxyMaxRetry ||
 		key == models.SettingProxyLoadBalanceStrategy ||
@@ -325,6 +334,32 @@ func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout tim
 		s.GetString(ctx, models.SettingProxyLoadBalanceStrategy, models.ProxyLoadBalanceStrategyWeightedRandom),
 	)
 	return
+}
+
+// GetNonStreamKeepaliveConfig 获取非流式响应保活配置。
+// 非流式保活通过写出 JSON whitespace 维持下游连接，默认关闭。
+func (s *SettingService) GetNonStreamKeepaliveConfig(ctx context.Context) NonStreamKeepaliveConfig {
+	firstDelaySeconds := s.GetInt(ctx, models.SettingProxyNonStreamKeepaliveDelay, models.DefaultProxyNonStreamKeepaliveDelaySeconds)
+	if firstDelaySeconds < 0 {
+		firstDelaySeconds = 0
+	}
+	if firstDelaySeconds > 120 {
+		firstDelaySeconds = 120
+	}
+
+	intervalSeconds := s.GetInt(ctx, models.SettingProxyNonStreamKeepaliveInterval, models.DefaultProxyNonStreamKeepaliveIntervalSeconds)
+	if intervalSeconds < 0 {
+		intervalSeconds = 0
+	}
+	if intervalSeconds > 120 {
+		intervalSeconds = 120
+	}
+
+	return NonStreamKeepaliveConfig{
+		Enabled:    s.GetBool(ctx, models.SettingProxyNonStreamKeepaliveEnabled, false),
+		FirstDelay: time.Duration(firstDelaySeconds) * time.Second,
+		Interval:   time.Duration(intervalSeconds) * time.Second,
+	}
 }
 
 func (s *SettingService) GetJWTSecret(ctx context.Context) string {
@@ -391,6 +426,26 @@ func (s *SettingService) validateValue(key string, value string) error {
 		}
 		if seconds < 0 || seconds > 120 {
 			return &SettingValidationError{message: "保活间隔必须在 0-120 秒之间"}
+		}
+	case models.SettingProxyNonStreamKeepaliveEnabled:
+		if _, err := strconv.ParseBool(trimmed); err != nil {
+			return &SettingValidationError{message: "非流式保活开关必须是 true 或 false"}
+		}
+	case models.SettingProxyNonStreamKeepaliveDelay:
+		seconds, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "非流式首个保活延迟必须是 0-120 的整数秒数"}
+		}
+		if seconds < 0 || seconds > 120 {
+			return &SettingValidationError{message: "非流式首个保活延迟必须在 0-120 秒之间"}
+		}
+	case models.SettingProxyNonStreamKeepaliveInterval:
+		seconds, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "非流式保活间隔必须是 0-120 的整数秒数"}
+		}
+		if seconds < 0 || seconds > 120 {
+			return &SettingValidationError{message: "非流式保活间隔必须在 0-120 秒之间"}
 		}
 	case models.SettingSnifferEnabled,
 		models.SettingSnifferNonStreamEnabled,
@@ -511,6 +566,35 @@ func (s *SettingService) ValidateSettingsPatch(ctx context.Context, patch map[st
 
 	if cfg.StreamEnabled && keepaliveSeconds > 0 {
 		return &SettingConflictError{message: "流式响应嗅探与流式保活不能同时启用，请关闭流式响应嗅探或将流式保活间隔设置为 0"}
+	}
+
+	nonStreamKeepalive := s.GetNonStreamKeepaliveConfig(ctx)
+	if value, ok := patch[models.SettingProxyNonStreamKeepaliveEnabled]; ok {
+		enabled, parseErr := strconv.ParseBool(strings.TrimSpace(value))
+		if parseErr != nil {
+			return &SettingValidationError{message: "非流式保活开关必须是 true 或 false"}
+		}
+		nonStreamKeepalive.Enabled = enabled
+	}
+	if value, ok := patch[models.SettingProxyNonStreamKeepaliveDelay]; ok {
+		seconds, parseErr := strconv.Atoi(strings.TrimSpace(value))
+		if parseErr != nil {
+			return &SettingValidationError{message: "非流式首个保活延迟必须是 0-120 的整数秒数"}
+		}
+		nonStreamKeepalive.FirstDelay = time.Duration(seconds) * time.Second
+	}
+	if value, ok := patch[models.SettingProxyNonStreamKeepaliveInterval]; ok {
+		seconds, parseErr := strconv.Atoi(strings.TrimSpace(value))
+		if parseErr != nil {
+			return &SettingValidationError{message: "非流式保活间隔必须是 0-120 的整数秒数"}
+		}
+		nonStreamKeepalive.Interval = time.Duration(seconds) * time.Second
+	}
+	if nonStreamKeepalive.Enabled && nonStreamKeepalive.FirstDelay <= 0 {
+		return &SettingConflictError{message: "启用非流式保活时，首个保活延迟必须大于 0 秒"}
+	}
+	if nonStreamKeepalive.Enabled && nonStreamKeepalive.Interval <= 0 {
+		return &SettingConflictError{message: "启用非流式保活时，保活间隔必须大于 0 秒"}
 	}
 
 	return nil

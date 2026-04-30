@@ -164,6 +164,7 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 	}
 
 	requestTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := settingService.GetProxyConfig(ctx)
+	nonStreamKeepalive := settingService.GetNonStreamKeepaliveConfig(ctx)
 	requestLogRecorder := proxyService.NewRequestLogRecorder(runtimeLogger, repos.RequestLogRepo, 1024, 2)
 	proxySvc := proxyService.NewProxyService(
 		runtimeLogger,
@@ -173,12 +174,15 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 		repos.AccessTokenRepo,
 		circuitManager,
 		&proxyService.ProxyServiceConfig{
-			MaxRetries:              maxRetry,
-			RetryDelay:              500 * time.Millisecond,
-			RequestTimeout:          requestTimeout,
-			StreamKeepaliveInterval: keepaliveInterval,
-			NetworkProxy:            networkProxyURL,
-			LoadBalanceStrategy:     loadBalanceStrategy,
+			MaxRetries:                   maxRetry,
+			RetryDelay:                   500 * time.Millisecond,
+			RequestTimeout:               requestTimeout,
+			StreamKeepaliveInterval:      keepaliveInterval,
+			NonStreamKeepaliveEnabled:    nonStreamKeepalive.Enabled,
+			NonStreamKeepaliveFirstDelay: nonStreamKeepalive.FirstDelay,
+			NonStreamKeepaliveInterval:   nonStreamKeepalive.Interval,
+			NetworkProxy:                 networkProxyURL,
+			LoadBalanceStrategy:          loadBalanceStrategy,
 		},
 		settingService,
 		runtimeMetrics,

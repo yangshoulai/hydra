@@ -67,16 +67,13 @@ func shouldSendSSEKeepalive(contentType string) bool {
 	return strings.EqualFold(mediaType, "text/event-stream")
 }
 
-// ForwardNonStreamResponse 转发非流式响应
-// 调用方负责在进入该函数前完成嗅探与响应校验。
-func (rf *ResponseForwarder) ForwardNonStreamResponse(
-	c *gin.Context,
+func (rf *ResponseForwarder) prepareNonStreamBody(
 	upstreamResp *http.Response,
 	body []byte,
 	channelModel string,
 	model string,
 	traceID string,
-) (*NonStreamForwardResult, error) {
+) []byte {
 	contentType := upstreamResp.Header.Get("Content-Type")
 	if len(body) > 0 && (contentType == "" || bytes.Contains([]byte(contentType), []byte("application/json"))) {
 		modifiedBody, replaceErr := rf.replaceModelInJSON(body, channelModel, model, traceID)
@@ -89,13 +86,10 @@ func (rf *ResponseForwarder) ForwardNonStreamResponse(
 			body = modifiedBody
 		}
 	}
+	return body
+}
 
-	rf.copyResponseHeaders(upstreamResp, c)
-	c.Status(upstreamResp.StatusCode)
-	if c.Writer.Header().Get("Content-Type") == "" {
-		c.Header("Content-Type", "application/json")
-	}
-
+func (rf *ResponseForwarder) writeBodyChunks(c *gin.Context, body []byte) error {
 	const chunkSize = 16 * 1024
 	for i := 0; i < len(body); i += chunkSize {
 		end := i + chunkSize
@@ -103,13 +97,53 @@ func (rf *ResponseForwarder) ForwardNonStreamResponse(
 			end = len(body)
 		}
 		if _, err := c.Writer.Write(body[i:end]); err != nil {
-			return &NonStreamForwardResult{
-				ResponseBody: string(body),
-			}, err
+			return err
 		}
 		c.Writer.Flush()
 	}
+	return nil
+}
 
+// ForwardNonStreamResponse 转发非流式响应
+// 调用方负责在进入该函数前完成嗅探与响应校验。
+func (rf *ResponseForwarder) ForwardNonStreamResponse(
+	c *gin.Context,
+	upstreamResp *http.Response,
+	body []byte,
+	channelModel string,
+	model string,
+	traceID string,
+) (*NonStreamForwardResult, error) {
+	body = rf.prepareNonStreamBody(upstreamResp, body, channelModel, model, traceID)
+
+	rf.copyResponseHeaders(upstreamResp, c)
+	c.Status(upstreamResp.StatusCode)
+	if c.Writer.Header().Get("Content-Type") == "" {
+		c.Header("Content-Type", "application/json")
+	}
+
+	if err := rf.writeBodyChunks(c, body); err != nil {
+		return &NonStreamForwardResult{
+			ResponseBody: string(body),
+		}, err
+	}
+
+	return &NonStreamForwardResult{
+		ResponseBody: string(body),
+	}, nil
+}
+
+// ForwardLockedNonStreamBody 在响应头/状态码已被非流式保活提交后写入最终 JSON body。
+// 调用方必须保证 body 本身仍是合法 JSON；此前写出的保活内容只能是 JSON whitespace。
+func (rf *ResponseForwarder) ForwardLockedNonStreamBody(
+	c *gin.Context,
+	body []byte,
+) (*NonStreamForwardResult, error) {
+	if err := rf.writeBodyChunks(c, body); err != nil {
+		return &NonStreamForwardResult{
+			ResponseBody: string(body),
+		}, err
+	}
 	return &NonStreamForwardResult{
 		ResponseBody: string(body),
 	}, nil
@@ -347,4 +381,32 @@ func (rf *ResponseForwarder) ForwardErrorResponse(c *gin.Context, statusCode int
 			"code":    statusCode,
 		},
 	})
+}
+
+// ForwardLockedErrorBody 在非流式保活已提交响应后追加错误 JSON。
+// 此时 HTTP 状态码已经锁定，不能再调用 c.JSON 或改写状态码。
+func (rf *ResponseForwarder) ForwardLockedErrorBody(c *gin.Context, message string, traceID string) (string, error) {
+	if !ShouldSuppressProxyLogging(c) {
+		rf.logger.Debug("转发状态码锁定后的错误响应体",
+			slog.String("trace_id", traceID),
+			slog.String("message", message),
+		)
+	}
+
+	payload, err := json.Marshal(gin.H{
+		"error": gin.H{
+			"message":       message,
+			"type":          "hydra_error",
+			"code":          http.StatusOK,
+			"status_locked": true,
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if err := rf.writeBodyChunks(c, payload); err != nil {
+		return string(payload), err
+	}
+	return string(payload), nil
 }

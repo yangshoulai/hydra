@@ -95,12 +95,13 @@ type AttemptRecord struct {
 
 // ProxyContext 代理上下文（包含请求元信息与重试状态）
 type ProxyContext struct {
-	TraceID         string            // 追踪 ID
-	Model           string            // 统一模型名
-	IsStreamRequest bool              // 是否流式请求
-	Endpoint        endpoint.Endpoint // 当前端点
-	RequestBody     []byte            // 原始请求体
-	SuppressLogging bool              // 是否跳过代理汇总日志与请求日志落库
+	TraceID              string            // 追踪 ID
+	Model                string            // 统一模型名
+	IsStreamRequest      bool              // 是否流式请求
+	Endpoint             endpoint.Endpoint // 当前端点
+	RequestBody          []byte            // 原始请求体
+	SuppressLogging      bool              // 是否跳过代理汇总日志与请求日志落库
+	ResponseStatusLocked bool              // 是否已提前提交响应状态码（例如非流式保活）
 
 	// 客户端侧日志采集（仅调试模式使用 headers / response body）
 	RequestHeaders http.Header // 入口处客户端请求头快照（脱敏前原文）
