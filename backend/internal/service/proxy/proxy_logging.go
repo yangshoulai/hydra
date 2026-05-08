@@ -216,7 +216,7 @@ func (ps *ProxyService) logFinalRequestResult(c *gin.Context, proxyCtx *ProxyCon
 }
 
 // persistRequestLog 把本次请求投递到 RequestLogRecorder（异步落表）
-// 主表始终写；详情 / 尝试明细仅在调试模式开启时写。
+// 主表与上游尝试基础信息始终写；客户端/上游请求响应报文与头仅在调试模式开启时写。
 func (ps *ProxyService) persistRequestLog(c *gin.Context, proxyCtx *ProxyContext, retErr error, summary requestSummary) {
 	if ps.requestLogRecorder == nil {
 		return
@@ -263,9 +263,13 @@ func (ps *ProxyService) persistRequestLog(c *gin.Context, proxyCtx *ProxyContext
 		log.FailureScope = ""
 	}
 
-	event := RequestLogEvent{Log: log}
+	debugMode := ps.isDebugModeEnabled()
+	event := RequestLogEvent{
+		Log:      log,
+		Attempts: buildRequestLogAttempts(log, proxyCtx.Attempts, debugMode),
+	}
 
-	if ps.isDebugModeEnabled() {
+	if debugMode {
 		event.Detail = &models.RequestLogDetail{
 			TraceID:             log.TraceID,
 			CreatedAt:           log.CreatedAt,
@@ -276,37 +280,50 @@ func (ps *ProxyService) persistRequestLog(c *gin.Context, proxyCtx *ProxyContext
 			ResponseBody:        string(proxyCtx.ResponseBody),
 			ResponseBodySize:    int64(len(proxyCtx.ResponseBody)),
 		}
-
-		attempts := make([]*models.RequestLogAttempt, 0, len(proxyCtx.Attempts))
-		for _, a := range proxyCtx.Attempts {
-			attempts = append(attempts, &models.RequestLogAttempt{
-				CreatedAt:                   log.CreatedAt,
-				TraceID:                     log.TraceID,
-				AttemptNum:                  a.AttemptNum,
-				ChannelID:                   a.ChannelID,
-				ChannelName:                 a.ChannelName,
-				ChannelModel:                a.ChannelModel,
-				KeyID:                       a.KeyID,
-				KeyName:                     a.KeyName,
-				KeyMasked:                   a.KeyMasked,
-				UpstreamURL:                 a.UpstreamURL,
-				DurationMS:                  a.DurationMS,
-				UpstreamStatusCode:          a.UpstreamStatusCode,
-				Success:                     a.Success,
-				FailureType:                 failureTypeString(a.FailureType),
-				FailureScope:                failureScopeString(a.FailureScope),
-				FailureStage:                a.FailureStage,
-				ErrorMessage:                a.ErrorMessage,
-				UpstreamRequestHeadersJSON:  marshalHeaders(sanitizeHeaders(a.UpstreamRequestHeaders)),
-				UpstreamRequestBody:         string(a.UpstreamRequestBody),
-				UpstreamRequestBodySize:     int64(len(a.UpstreamRequestBody)),
-				UpstreamResponseHeadersJSON: marshalHeaders(sanitizeHeaders(a.UpstreamResponseHeaders)),
-				UpstreamResponseBody:        string(a.UpstreamResponseBody),
-				UpstreamResponseBodySize:    int64(len(a.UpstreamResponseBody)),
-			})
-		}
-		event.Attempts = attempts
 	}
 
 	ps.requestLogRecorder.Record(event)
+}
+
+func buildRequestLogAttempts(log *models.RequestLog, attempts []*AttemptRecord, includePayload bool) []*models.RequestLogAttempt {
+	if log == nil || len(attempts) == 0 {
+		return nil
+	}
+	result := make([]*models.RequestLogAttempt, 0, len(attempts))
+	for _, a := range attempts {
+		if a == nil {
+			continue
+		}
+		item := &models.RequestLogAttempt{
+			CreatedAt:          log.CreatedAt,
+			TraceID:            log.TraceID,
+			AttemptNum:         a.AttemptNum,
+			ChannelID:          a.ChannelID,
+			ChannelName:        a.ChannelName,
+			ModelConfigID:      a.ModelConfigID,
+			Model:              a.Model,
+			ChannelModel:       a.ChannelModel,
+			KeyID:              a.KeyID,
+			KeyName:            a.KeyName,
+			KeyMasked:          a.KeyMasked,
+			UpstreamURL:        a.UpstreamURL,
+			DurationMS:         a.DurationMS,
+			UpstreamStatusCode: a.UpstreamStatusCode,
+			Success:            a.Success,
+			FailureType:        failureTypeString(a.FailureType),
+			FailureScope:       failureScopeString(a.FailureScope),
+			FailureStage:       a.FailureStage,
+			ErrorMessage:       a.ErrorMessage,
+		}
+		if includePayload {
+			item.UpstreamRequestHeadersJSON = marshalHeaders(sanitizeHeaders(a.UpstreamRequestHeaders))
+			item.UpstreamRequestBody = string(a.UpstreamRequestBody)
+			item.UpstreamRequestBodySize = int64(len(a.UpstreamRequestBody))
+			item.UpstreamResponseHeadersJSON = marshalHeaders(sanitizeHeaders(a.UpstreamResponseHeaders))
+			item.UpstreamResponseBody = string(a.UpstreamResponseBody)
+			item.UpstreamResponseBodySize = int64(len(a.UpstreamResponseBody))
+		}
+		result = append(result, item)
+	}
+	return result
 }

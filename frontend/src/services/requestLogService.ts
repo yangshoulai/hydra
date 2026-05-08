@@ -48,6 +48,8 @@ export interface RequestLogAttempt {
   attempt_num: number
   channel_id: number
   channel_name: string
+  model_config_id: number
+  model: string
   channel_model: string
   key_id: number
   key_name: string

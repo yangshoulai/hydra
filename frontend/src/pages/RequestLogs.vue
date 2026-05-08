@@ -274,7 +274,7 @@ function renderTraceID(row: RequestLog) {
 
 function renderErrorIndicator(row: RequestLog) {
   if (row.success || !row.error_message) {
-    return '—'
+    return ''
   }
   const preview = row.error_message.length > 60
       ? row.error_message.slice(0, 60) + '…'
@@ -329,7 +329,7 @@ const columns = computed<DataTableColumns<RequestLog>>(() => [
     align: 'center',
     render: (row) => row.retry_count > 0
         ? h(NTag, {type: 'warning', bordered: false, size: 'small'}, {default: () => `↻ ${row.retry_count}`})
-        : '—',
+        : '',
   },
   {
     title: 'Tokens',

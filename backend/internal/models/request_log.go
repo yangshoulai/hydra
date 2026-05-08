@@ -6,7 +6,7 @@ import "time"
 //
 // 每次代理请求写一行，无论是否开启调试模式。记录请求的核心元信息与最终结果。
 // 详细的请求/响应 body 放在 RequestLogDetail，重试轨迹放在 RequestLogAttempt，
-// 这两张表只有在调试模式开启时才会写入。
+// 调试模式关闭时仍写 RequestLogAttempt 基础信息，但不写报文/头。
 type RequestLog struct {
 	ID              uint      `gorm:"primarykey" json:"id"`
 	CreatedAt       time.Time `gorm:"index;index:idx_logs_channel_time,priority:2;index:idx_logs_model_time,priority:2;index:idx_logs_token_time,priority:2" json:"created_at"`
@@ -69,20 +69,23 @@ func (RequestLogDetail) TableName() string {
 
 // RequestLogAttempt 请求日志 1:N 渠道调用表
 //
-// 仅在调试模式开启时写入，每次上游尝试（路由 → 调用 → 响应）一行。
-// 允许回看「这次请求走过了哪几个渠道、每个渠道返回了什么」。
+// 每次上游尝试（路由 → 调用 → 响应）一行。
+// 调试模式关闭时仅保存渠道、模型、Key、状态、耗时、错误等基础信息；
+// 调试模式开启时额外保存上游请求/响应 headers 与 body。
 type RequestLogAttempt struct {
 	ID         uint      `gorm:"primarykey" json:"id"`
 	CreatedAt  time.Time `gorm:"index" json:"created_at"`
 	TraceID    string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_trace_attempt,priority:1" json:"trace_id"`
 	AttemptNum int       `gorm:"uniqueIndex:idx_trace_attempt,priority:2" json:"attempt_num"`
 
-	ChannelID    uint   `json:"channel_id"`
-	ChannelName  string `gorm:"type:varchar(100)" json:"channel_name"`
-	ChannelModel string `gorm:"type:varchar(100)" json:"channel_model"`
-	KeyID        uint   `json:"key_id"`
-	KeyName      string `gorm:"type:varchar(200)" json:"key_name"`
-	KeyMasked    string `gorm:"type:varchar(64)" json:"key_masked"`
+	ChannelID     uint   `json:"channel_id"`
+	ChannelName   string `gorm:"type:varchar(100)" json:"channel_name"`
+	ModelConfigID uint   `json:"model_config_id"`
+	Model         string `gorm:"type:varchar(100)" json:"model"`
+	ChannelModel  string `gorm:"type:varchar(100)" json:"channel_model"`
+	KeyID         uint   `json:"key_id"`
+	KeyName       string `gorm:"type:varchar(200)" json:"key_name"`
+	KeyMasked     string `gorm:"type:varchar(64)" json:"key_masked"`
 
 	UpstreamURL        string `gorm:"type:varchar(1000)" json:"upstream_url"`
 	DurationMS         int64  `json:"duration_ms"`

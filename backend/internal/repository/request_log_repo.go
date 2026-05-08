@@ -84,8 +84,8 @@ type RequestLogModelAggregate struct {
 	FailedRequests  int    `json:"failed_requests"`
 }
 
-// CreateWithTx 在单一事务内写入主表 + 详情 + 尝试明细
-// detail 与 attempts 为 nil 时跳过写入，支持调试模式开关语义。
+// CreateWithTx 在单一事务内写入主表 + 客户端详情 + 上游尝试明细。
+// detail 为 nil 时跳过客户端请求/响应详情；attempts 为空时跳过上游尝试明细。
 func (r *RequestLogRepository) CreateWithTx(
 	ctx context.Context,
 	log *models.RequestLog,

@@ -109,6 +109,7 @@ func (ps *ProxyService) attemptOnce(c *gin.Context, proxyCtx *ProxyContext, rout
 		KeyName:       routeResult.Key.Remark,
 		KeyMasked:     proxyCtx.LastRoute.KeyMasked,
 		ModelConfigID: routeResult.ModelConfigID,
+		Model:         routeResult.Model,
 		StartedAt:     proxyCtx.AttemptStartTime,
 	}
 	proxyCtx.Attempts = append(proxyCtx.Attempts, attempt)

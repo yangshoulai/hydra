@@ -75,6 +75,7 @@ type AttemptRecord struct {
 	KeyName       string // 密钥备注（ChannelKey.Remark），便于展示
 	KeyMasked     string
 	ModelConfigID uint
+	Model         string
 	UpstreamURL   string
 
 	StartedAt  time.Time

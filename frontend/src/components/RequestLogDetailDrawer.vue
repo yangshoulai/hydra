@@ -114,6 +114,9 @@
 
           <n-tab-pane name="upstream" :tab="`上游调用 (${full.attempts.length})`">
             <template v-if="full.attempts.length > 0">
+              <div v-if="!hasAnyAttemptPayload" class="attempts-hint">
+                未启用调试模式，仅展示上游调用的渠道、模型、Key、状态与耗时等基础信息。
+              </div>
               <div class="attempts">
                 <div
                   v-for="a in full.attempts"
@@ -128,7 +131,8 @@
                     </n-tag>
                     <span class="attempt-title">
                       {{ a.channel_name }}
-                      <span v-if="a.channel_model" class="muted"> · {{ a.channel_model }}</span>
+                      <span v-if="a.model" class="muted"> · {{ a.model }}</span>
+                      <span v-if="a.channel_model" class="muted"> → {{ a.channel_model }}</span>
                     </span>
                     <span class="muted">
                       · 密钥 {{ keyDisplay(a) }} ({{ a.key_masked }})
@@ -141,6 +145,7 @@
                     {{ a.error_message }}
                   </div>
                   <BodySection
+                    v-if="hasAttemptPayload(a)"
                     title="请求"
                     :method="full.log.method"
                     :url="a.upstream_url"
@@ -152,6 +157,7 @@
                     :default-closed="true"
                   />
                   <BodySection
+                    v-if="hasAttemptPayload(a)"
                     title="响应"
                     :headers-json="a.upstream_response_headers_json"
                     :body="a.upstream_response_body"
@@ -162,7 +168,7 @@
                 </div>
               </div>
             </template>
-            <n-empty v-else description="未启用调试模式，无上游调用明细" />
+            <n-empty v-else description="无上游调用记录" />
           </n-tab-pane>
         </n-tabs>
       </template>
@@ -213,6 +219,10 @@ const lastAttempt = computed(() => {
   return full.value.attempts[full.value.attempts.length - 1]
 })
 
+const hasAnyAttemptPayload = computed(() => {
+  return full.value?.attempts.some((attempt) => hasAttemptPayload(attempt)) ?? false
+})
+
 const successType = computed<'success' | 'warning' | 'error'>(() => {
   if (!full.value) return 'warning'
   if (full.value.log.success) return 'success'
@@ -235,6 +245,15 @@ function keyDisplay(a: RequestLogAttempt): string {
   if (a.key_name) return a.key_name
   if (a.key_id) return `#${a.key_id}`
   return '—'
+}
+
+function hasAttemptPayload(a: RequestLogAttempt): boolean {
+  return Boolean(
+    a.upstream_request_headers_json ||
+    a.upstream_request_body ||
+    a.upstream_response_headers_json ||
+    a.upstream_response_body,
+  )
 }
 
 function formatTime(s: string): string {
@@ -363,6 +382,12 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.attempts-hint {
+  margin-bottom: 12px;
+  color: var(--n-text-color-3, #888);
+  font-size: 12px;
 }
 
 .attempt-card {

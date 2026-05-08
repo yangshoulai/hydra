@@ -13,14 +13,14 @@ import (
 // RequestLogEvent 请求日志异步写入事件
 type RequestLogEvent struct {
 	Log      *models.RequestLog
-	Detail   *models.RequestLogDetail    // nil 表示调试关，不写详情
-	Attempts []*models.RequestLogAttempt // 空切片表示调试关，不写尝试
+	Detail   *models.RequestLogDetail    // nil 表示调试关，不写客户端请求/响应详情
+	Attempts []*models.RequestLogAttempt // 始终可写基础上游尝试信息；调试关时不含报文/头
 }
 
 // RequestLogRecorder 基于 worker pool 的请求日志异步写入器
 //
 // 和 TokenUsageRecorder 同样的思路：阻塞投递保证不丢；workers 按事务批写。
-// 调用方负责判断是否进入调试模式并组装 Detail/Attempts；本组件不读设置。
+// 调用方负责判断是否进入调试模式并组装 Detail/Attempts 的敏感字段；本组件不读设置。
 type RequestLogRecorder struct {
 	logger *slog.Logger
 	repo   *repository.RequestLogRepository
