@@ -24,7 +24,7 @@
                     <div class="form-stack">
                       <n-input-number v-model:value="formData.weight" :min="1" :max="1000" style="width: 100%" placeholder="1-1000" />
                       <p class="form-hint">
-                        仅在“加权随机”负载策略下影响渠道被选中的概率；轮询策略会忽略渠道权重。渠道内多个模型配置的分配由模型配置权重单独决定。
+                        渠道权重不直接参与请求路由；新建或同步渠道模型未单独填写权重时，会继承该值作为初始模型权重。
                       </p>
                     </div>
                   </n-form-item>

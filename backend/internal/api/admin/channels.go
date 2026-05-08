@@ -355,7 +355,6 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 
 	// 更新字段
 	oldStatus := channel.Status
-	oldWeight := channel.Weight
 	if req.Name != "" {
 		channel.Name = req.Name
 	}
@@ -393,36 +392,6 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 		h.logger.Info("渠道已停用，已清理熔断器",
 			slog.Uint64("channel_id", id),
 			slog.String("name", channel.Name),
-		)
-	}
-
-	// 如果渠道权重变化，则批量同步仍“继承渠道权重”的模型配置权重
-	// 规则：仅更新 weight == oldWeight 的配置，手工覆盖过权重的配置不受影响。
-	if oldWeight != channel.Weight {
-		affected, updateErr := h.modelConfigRepo.BulkUpdateWeightByChannelAndCurrentWeight(
-			c.Request.Context(),
-			channel.ID,
-			oldWeight,
-			channel.Weight,
-		)
-		if updateErr != nil {
-			h.logger.Error("同步渠道模型权重失败",
-				slog.Uint64("channel_id", uint64(channel.ID)),
-				slog.Int("old_channel_weight", oldWeight),
-				slog.Int("new_channel_weight", channel.Weight),
-				slog.String("error", updateErr.Error()),
-			)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "failed to sync channel model weights",
-			})
-			return
-		}
-
-		h.logger.Info("渠道模型权重已同步",
-			slog.Uint64("channel_id", uint64(channel.ID)),
-			slog.Int("old_channel_weight", oldWeight),
-			slog.Int("new_channel_weight", channel.Weight),
-			slog.Int64("affected_model_configs", affected),
 		)
 	}
 

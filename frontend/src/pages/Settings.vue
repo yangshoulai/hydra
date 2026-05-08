@@ -139,13 +139,14 @@
 
           <div class="setting-row">
             <div class="setting-row__info">
-              <div class="setting-row__label">负载策略</div>
-              <div class="setting-row__desc">系统代理在多个可用渠道之间的分配方式。轮询会忽略渠道权重；加权随机会按渠道权重分配流量。</div>
+              <div class="setting-row__label">渠道负载策略（兼容保留）</div>
+              <div class="setting-row__desc">当前代理会把所有可用渠道模型放入同一个候选池，并只按渠道模型权重加权随机；渠道权重仅作为新建渠道模型的初始权重。</div>
             </div>
             <div class="setting-row__control">
               <n-select
                 v-model:value="formData.proxy_load_balance_strategy"
                 :options="loadBalanceStrategyOptions"
+                disabled
                 placeholder="请选择负载策略"
               />
             </div>
@@ -587,8 +588,8 @@ const formData = ref<SettingsData>({
 const hasAnySnifferEnabled = computed(() => formData.value.sniffer_non_stream_enabled || formData.value.sniffer_stream_enabled)
 
 const loadBalanceStrategyOptions = [
-  { label: '加权随机', value: 'weighted_random' },
-  { label: '轮询', value: 'round_robin' },
+  { label: '兼容保留：加权随机', value: 'weighted_random' },
+  { label: '兼容保留：轮询', value: 'round_robin' },
 ]
 
 const runSilentFormUpdate = (updater: () => void) => {

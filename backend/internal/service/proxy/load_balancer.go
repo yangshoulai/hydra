@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"log/slog"
-	"sync"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
@@ -27,13 +26,18 @@ type channelRouteCandidate struct {
 	keys    []models.ChannelKey
 }
 
+type modelRouteCandidate struct {
+	channel *models.Channel
+	config  models.ChannelModelConfig
+	keys    []models.ChannelKey
+	weight  int64
+}
+
 // LoadBalancer 负载均衡器,协调多渠道流量分配
 type LoadBalancer struct {
 	channelSelector *ChannelSelector
 	keySelector     *KeySelector
 	modelRouter     *ModelRouter
-	strategyMu      sync.RWMutex
-	channelStrategy channelSelectionStrategy
 }
 
 // NewLoadBalancer 创建负载均衡器
@@ -41,7 +45,7 @@ func NewLoadBalancer(
 	logger *slog.Logger,
 	channelRepo *repository.ChannelRepository,
 	circuitManager *circuit.CircuitManager,
-	strategyName string,
+	_ string,
 ) *LoadBalancer {
 	keySelector := NewKeySelector()
 	channelSelector := NewChannelSelector(channelRepo, circuitManager)
@@ -52,7 +56,6 @@ func NewLoadBalancer(
 		keySelector:     keySelector,
 		modelRouter:     modelRouter,
 	}
-	loadBalancer.UpdateChannelSelectionStrategy(strategyName)
 	return loadBalancer
 }
 
@@ -71,11 +74,6 @@ func (lb *LoadBalancer) Route(ctx context.Context, proxyCtx *ProxyContext) (*Rou
 	for _, keyID := range proxyCtx.FailedKeyIDs {
 		excludeKeyMap[keyID] = true
 	}
-	lastChannelID := uint(0)
-	if proxyCtx.LastRoute != nil {
-		lastChannelID = proxyCtx.LastRoute.ChannelID
-	}
-
 	result, err := lb.routeWithExclusions(
 		ctx,
 		proxyCtx.Model,
@@ -85,7 +83,6 @@ func (lb *LoadBalancer) Route(ctx context.Context, proxyCtx *ProxyContext) (*Rou
 		excludeModelMap,
 		excludeKeyMap,
 		proxyCtx.TraceID,
-		lastChannelID,
 	)
 	if err != nil {
 		return nil, err
@@ -103,7 +100,6 @@ func (lb *LoadBalancer) routeWithExclusions(
 	excludeModelConfigs map[uint]bool,
 	excludeKeys map[uint]bool,
 	traceID string,
-	lastChannelID uint,
 ) (*RouteResult, error) {
 	channels, err := lb.channelSelector.SelectChannels(ctx, model, endpointType, isStream, excludeChannels)
 	if err != nil {
@@ -122,42 +118,29 @@ func (lb *LoadBalancer) routeWithExclusions(
 		return nil, ErrNoAvailableRoute
 	}
 
-	selectedCandidate := lb.selectChannelCandidate(candidates, channelSelectionContext{
-		Model:         model,
-		EndpointType:  endpointType,
-		IsStream:      isStream,
-		LastChannelID: lastChannelID,
-	})
+	modelCandidates := buildModelRouteCandidates(candidates)
+	if len(modelCandidates) == 0 {
+		return nil, ErrNoAvailableRoute
+	}
+
+	selectedCandidate := lb.modelRouter.RouteModel(modelCandidates, traceID)
 	if selectedCandidate == nil {
 		return nil, ErrNoAvailableRoute
 	}
 
-	routeResult, ok := lb.selectRouteFromChannelCandidate(selectedCandidate, traceID)
+	routeResult, ok := lb.selectRouteFromModelCandidate(selectedCandidate)
 	if !ok {
 		return nil, ErrNoAvailableRoute
 	}
 	return routeResult, nil
 }
 
-func channelWeight(channel *models.Channel) int64 {
-	if channel == nil {
-		return defaultRouteWeight
-	}
-	return normalizedWeight(channel.Weight)
+func modelConfigWeight(config models.ChannelModelConfig) int {
+	return int(modelConfigRouteWeight(config))
 }
 
-func modelConfigWeight(config models.ChannelModelConfig, channel *models.Channel) int {
-	return int(modelConfigWeightWithFallback(config, channelWeight(channel)))
-}
-
-func modelConfigWeightWithFallback(config models.ChannelModelConfig, fallbackWeight int64) int64 {
-	if config.Weight > 0 {
-		return int64(config.Weight)
-	}
-	if fallbackWeight > 0 {
-		return fallbackWeight
-	}
-	return defaultRouteWeight
+func modelConfigRouteWeight(config models.ChannelModelConfig) int64 {
+	return normalizedWeight(config.Weight)
 }
 
 func buildChannelRouteCandidate(
@@ -187,17 +170,37 @@ func buildChannelRouteCandidate(
 	}, true
 }
 
-func (lb *LoadBalancer) selectRouteFromChannelCandidate(
-	candidate *channelRouteCandidate,
-	traceID string,
+func buildModelRouteCandidates(channelCandidates []*channelRouteCandidate) []*modelRouteCandidate {
+	modelCandidates := make([]*modelRouteCandidate, 0)
+	for _, candidate := range channelCandidates {
+		if candidate == nil || candidate.channel == nil {
+			continue
+		}
+		for _, config := range candidate.configs {
+			selectedKeys := filterKeysByConfig(candidate.keys, config)
+			if len(selectedKeys) == 0 {
+				continue
+			}
+			modelCandidates = append(modelCandidates, &modelRouteCandidate{
+				channel: candidate.channel,
+				config:  config,
+				keys:    selectedKeys,
+				weight:  modelConfigRouteWeight(config),
+			})
+		}
+	}
+	return modelCandidates
+}
+
+func (lb *LoadBalancer) selectRouteFromModelCandidate(
+	candidate *modelRouteCandidate,
 ) (*RouteResult, bool) {
-	selectedConfig := lb.modelRouter.RouteModel(candidate.channel, candidate.configs, traceID)
-	selectedKeys := filterKeysByConfig(candidate.keys, selectedConfig)
-	if len(selectedKeys) == 0 {
+	if candidate == nil || candidate.channel == nil || len(candidate.keys) == 0 {
 		return nil, false
 	}
 
-	selectedKey := lb.keySelector.SelectKey(candidate.channel, selectedKeys)
+	selectedConfig := candidate.config
+	selectedKey := lb.keySelector.SelectKey(candidate.channel, candidate.keys)
 
 	result := &RouteResult{
 		Channel:       candidate.channel,
@@ -205,38 +208,10 @@ func (lb *LoadBalancer) selectRouteFromChannelCandidate(
 		ModelConfigID: selectedConfig.ID,
 		ChannelModel:  selectedConfig.ChannelModel,
 		Model:         selectedConfig.Model,
-		ModelWeight:   modelConfigWeight(selectedConfig, candidate.channel),
+		ModelWeight:   modelConfigWeight(selectedConfig),
 		KeyGroups:     selectedConfig.KeyGroups,
 	}
 	return result, true
-}
-
-func (lb *LoadBalancer) UpdateChannelSelectionStrategy(strategyName string) {
-	lb.strategyMu.Lock()
-	lb.channelStrategy = newChannelSelectionStrategy(strategyName)
-	lb.strategyMu.Unlock()
-}
-
-func (lb *LoadBalancer) CurrentChannelSelectionStrategyName() string {
-	lb.strategyMu.RLock()
-	defer lb.strategyMu.RUnlock()
-	if lb.channelStrategy == nil {
-		return models.ProxyLoadBalanceStrategyWeightedRandom
-	}
-	return lb.channelStrategy.Name()
-}
-
-func (lb *LoadBalancer) selectChannelCandidate(
-	candidates []*channelRouteCandidate,
-	ctx channelSelectionContext,
-) *channelRouteCandidate {
-	lb.strategyMu.RLock()
-	strategy := lb.channelStrategy
-	lb.strategyMu.RUnlock()
-	if strategy == nil {
-		strategy = newChannelSelectionStrategy(models.ProxyLoadBalanceStrategyWeightedRandom)
-	}
-	return strategy.Select(candidates, ctx)
 }
 
 func filterModelConfigs(configs []models.ChannelModelConfig, exclude map[uint]bool) []models.ChannelModelConfig {

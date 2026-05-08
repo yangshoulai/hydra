@@ -311,7 +311,7 @@ func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureTh
 	return
 }
 
-// GetProxyConfig 获取代理配置（超时/网络代理/重试/负载策略）
+// GetProxyConfig 获取代理配置（超时/网络代理/重试/历史负载策略）
 func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, keepaliveInterval time.Duration, networkProxyURL string, maxRetry int, loadBalanceStrategy string) {
 	requestTimeoutSeconds := s.GetInt(ctx, models.SettingProxyRequestTimeout, 120)
 	if requestTimeoutSeconds < 0 {
@@ -457,7 +457,7 @@ func (s *SettingService) validateValue(key string, value string) error {
 		switch trimmed {
 		case models.ProxyLoadBalanceStrategyWeightedRandom, models.ProxyLoadBalanceStrategyRoundRobin:
 		default:
-			return &SettingValidationError{message: "负载策略必须是 weighted_random 或 round_robin"}
+			return &SettingValidationError{message: "历史负载策略必须是 weighted_random 或 round_robin"}
 		}
 	case models.SettingProxyMaxBodyBytes:
 		bytes, err := strconv.Atoi(trimmed)

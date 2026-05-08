@@ -130,32 +130,6 @@ func (r *ChannelModelConfigRepository) Update(ctx context.Context, config *model
 	return r.db.WithContext(ctx).Save(config).Error
 }
 
-// BulkUpdateWeightByChannelAndCurrentWeight 批量更新渠道模型权重
-// 仅更新“当前权重等于 expectedCurrentWeight”的记录，用于同步继承渠道权重的模型配置。
-func (r *ChannelModelConfigRepository) BulkUpdateWeightByChannelAndCurrentWeight(
-	ctx context.Context,
-	channelID uint,
-	expectedCurrentWeight int,
-	targetWeight int,
-) (int64, error) {
-	if targetWeight <= 0 {
-		return 0, nil
-	}
-
-	result := r.db.WithContext(ctx).
-		Model(&models.ChannelModelConfig{}).
-		Where("channel_id = ?", channelID).
-		Where("weight = ?", expectedCurrentWeight).
-		Updates(map[string]any{
-			"weight": targetWeight,
-		})
-
-	if result.Error != nil {
-		return 0, result.Error
-	}
-	return result.RowsAffected, nil
-}
-
 // IncrementTokenUsage 累加模型配置的 token 使用量
 func (r *ChannelModelConfigRepository) IncrementTokenUsage(ctx context.Context, id uint, promptTokens, completionTokens int64) error {
 	return r.db.WithContext(ctx).

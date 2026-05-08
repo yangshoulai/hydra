@@ -295,7 +295,6 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
 	ps.updateStreamKeepaliveInterval(keepaliveInterval)
 	ps.updateNonStreamKeepaliveConfig(nonStreamKeepalive.Enabled, nonStreamKeepalive.FirstDelay, nonStreamKeepalive.Interval)
-	ps.loadBalancer.UpdateChannelSelectionStrategy(loadBalanceStrategy)
 
 	ps.logger.Info("代理服务配置已更新",
 		slog.Duration("request_timeout", requestTimeout),
@@ -305,7 +304,8 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 		slog.Duration("non_stream_keepalive_interval", nonStreamKeepalive.Interval),
 		slog.String("network_proxy_url", networkProxyURL),
 		slog.Int("max_retry", maxRetry),
-		slog.String("load_balance_strategy", ps.loadBalancer.CurrentChannelSelectionStrategyName()),
+		slog.String("route_selection_strategy", "model_config_weighted_random"),
+		slog.String("configured_load_balance_strategy", loadBalanceStrategy),
 		slog.Int64("max_body_bytes", maxBodyBytes),
 		slog.Bool("rate_limit_enabled", rateLimitConfig.Enabled),
 		slog.Int("rate_limit_global_rps", rateLimitConfig.GlobalRPS),

@@ -9,7 +9,7 @@ import (
 	"github.com/yangshoulai/hydra/internal/service/circuit"
 )
 
-// ChannelSelector Channel 选择器，筛出所有可用渠道供权重路由使用
+// ChannelSelector Channel 选择器，筛出所有支持目标模型且具备可用 Key 的渠道
 type ChannelSelector struct {
 	channelRepo    *repository.ChannelRepository
 	circuitManager *circuit.CircuitManager
@@ -26,7 +26,7 @@ func NewChannelSelector(
 	}
 }
 
-// SelectChannels 返回所有可用渠道（结果会按权重排序，便于日志与调试观察）
+// SelectChannels 返回所有可用渠道（排序仅用于稳定输出与调试观察，不参与请求期路由权重）
 func (cs *ChannelSelector) SelectChannels(
 	ctx context.Context,
 	modelName string,
@@ -98,7 +98,7 @@ func (cs *ChannelSelector) filterAvailableChannels(channels []models.Channel, ex
 	return available
 }
 
-// sortChannelsByWeight 渠道按权重排序（高权重优先）
+// sortChannelsByWeight 渠道按权重排序（仅用于稳定输出，高权重优先）
 func (cs *ChannelSelector) sortChannelsByWeight(channels []models.Channel) {
 	sort.SliceStable(channels, func(i, j int) bool {
 		if channels[i].Weight == channels[j].Weight {

@@ -164,7 +164,7 @@ var DefaultSettings = []models.SystemSetting{
 		Key:       models.SettingProxyLoadBalanceStrategy,
 		Value:     models.ProxyLoadBalanceStrategyWeightedRandom,
 		ValueType: "string",
-		Remark:    "渠道负载策略(weighted_random/round_robin)",
+		Remark:    "历史渠道负载策略(兼容保留；当前路由按渠道模型权重统一加权随机)",
 	},
 	{
 		Key:       models.SettingProxyMaxBodyBytes,

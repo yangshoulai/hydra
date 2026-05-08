@@ -84,7 +84,7 @@
                 </template>
               </n-input-number>
               <template #feedback>
-                数值越大权重越高，范围 1-1000
+                仅作为新建渠道模型的初始权重，范围 1-1000
               </template>
             </n-form-item>
           </n-grid-item>
