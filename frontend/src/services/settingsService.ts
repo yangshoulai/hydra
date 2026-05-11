@@ -16,6 +16,12 @@ export interface Setting {
   updated_at: string
 }
 
+export interface TestNotificationRequest {
+  channel: 'telegram'
+  telegram_bot_token?: string
+  telegram_chat_id?: string
+}
+
 // Settings API client
 class SettingsService {
   // 获取所有系统设置
@@ -38,6 +44,11 @@ class SettingsService {
   // 更新单个设置
   async updateSetting(key: string, value: string): Promise<void> {
     await apiClient.put(`/admin/api/settings/${key}`, { value })
+  }
+
+  // 测试通知渠道
+  async testNotification(request: TestNotificationRequest): Promise<void> {
+    await apiClient.post('/admin/api/settings/notifications/test', request)
   }
 }
 

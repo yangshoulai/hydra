@@ -380,6 +380,67 @@
 
       <section class="panel-card">
         <header class="panel-card__header">
+          <h3 class="panel-card__title">通知</h3>
+          <n-tag size="small" :type="notificationStatusType" :bordered="false">{{ notificationStatusText }}</n-tag>
+        </header>
+        <div class="panel-card__body panel-card__body--flush">
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">全局通知开关</div>
+              <div class="setting-row__desc">开启后，只有在渠道配置完整且通知点已勾选时才会发送通知。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-space align="center">
+                <n-switch v-model:value="formData.notification_enabled" />
+                <n-tag :type="formData.notification_enabled ? 'success' : 'default'" :bordered="false" size="small">
+                  {{ formData.notification_enabled ? '已启用' : '已关闭' }}
+                </n-tag>
+              </n-space>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">通知渠道</div>
+              <div class="setting-row__desc">当前仅支持 Telegram，后续渠道会沿用同一套通知点配置。</div>
+            </div>
+            <div class="setting-row__control setting-row__control--wide">
+              <div class="notification-channel-row">
+                <n-select
+                  v-model:value="formData.notification_channel"
+                  :options="notificationChannelOptions"
+                  placeholder="选择通知渠道"
+                  style="width: 160px"
+                />
+                <n-button @click="openTelegramConfig">配置 Telegram</n-button>
+                <n-tag :type="telegramConfigured ? 'success' : 'warning'" :bordered="false" size="small">
+                  {{ telegramConfigured ? '已配置' : '未配置' }}
+                </n-tag>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-row setting-row--block">
+            <div class="setting-row__info">
+              <div class="setting-row__label">通知发送配置</div>
+              <div class="setting-row__desc">勾选需要触发通知的事件；未勾选的事件不会发送，即使全局开关已开启。</div>
+            </div>
+            <div class="setting-row__control setting-row__control--block">
+              <n-checkbox-group v-model:value="formData.notification_events">
+                <div class="notification-event-grid">
+                  <label v-for="item in notificationEventOptions" :key="item.value" class="notification-event-card">
+                    <n-checkbox :value="item.value">{{ item.label }}</n-checkbox>
+                    <span>{{ item.description }}</span>
+                  </label>
+                </div>
+              </n-checkbox-group>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <header class="panel-card__header">
           <h3 class="panel-card__title">日志与调试</h3>
         </header>
         <div class="panel-card__body panel-card__body--flush">
@@ -459,6 +520,31 @@
       </section>
     </template>
 
+    <n-modal v-model:show="showTelegramConfigModal" preset="dialog" title="Telegram 渠道配置" :mask-closable="true" style="width: 520px">
+      <n-space vertical :size="12">
+        <div>
+          <n-input
+            v-model:value="telegramDraft.bot_token"
+            type="password"
+            show-password-on="click"
+            placeholder="Bot Token，例如：123456789:AAHxxxx"
+          />
+          <div class="form-hint">在 Telegram 中通过 BotFather 创建 Bot 后获取。</div>
+        </div>
+        <div>
+          <n-input v-model:value="telegramDraft.chat_id" placeholder="Chat ID，例如：123456789 或 -1001234567890" />
+          <div class="form-hint">可填写个人、群组或频道的 Chat ID；确保 Bot 已加入目标会话。</div>
+        </div>
+      </n-space>
+      <template #action>
+        <n-space>
+          <n-button @click="showTelegramConfigModal = false">取消</n-button>
+          <n-button :loading="isTestingTelegram" @click="handleTestTelegram">发送测试</n-button>
+          <n-button type="primary" @click="confirmTelegramConfig">保存到草稿</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <n-modal v-model:show="showDebugModeConfirm" preset="dialog" title="启用调试模式">
       <n-space vertical :size="6">
         <n-text>调试模式会记录更完整请求/响应内容，可能包含敏感信息。</n-text>
@@ -495,6 +581,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import {
   NAlert,
   NButton,
+  NCheckbox,
+  NCheckboxGroup,
   NInput,
   NInputNumber,
   NModal,
@@ -540,6 +628,11 @@ interface SettingsData {
   log_debug_enabled: boolean
   model_test_prompt: string
   model_test_user_agent: string
+  notification_enabled: boolean
+  notification_channel: 'telegram'
+  notification_events: string[]
+  notification_telegram_bot_token: string
+  notification_telegram_chat_id: string
 }
 
 const DEFAULT_MODEL_TEST_USER_AGENT =
@@ -551,9 +644,15 @@ const loadError = ref('')
 const debugModeEnabled = ref(false)
 const showDebugModeConfirm = ref(false)
 const showNonStreamKeepaliveConfirm = ref(false)
+const showTelegramConfigModal = ref(false)
 const isConfirming = ref(false)
 const isConflictAdjusting = ref(false)
+const isTestingTelegram = ref(false)
 const snifferKeywords = ref('')
+const telegramDraft = ref({
+  bot_token: '',
+  chat_id: '',
+})
 
 const formData = ref<SettingsData>({
   security_jwt_secret: '',
@@ -583,14 +682,70 @@ const formData = ref<SettingsData>({
   log_debug_enabled: false,
   model_test_prompt: 'Hi',
   model_test_user_agent: DEFAULT_MODEL_TEST_USER_AGENT,
+  notification_enabled: false,
+  notification_channel: 'telegram',
+  notification_events: [],
+  notification_telegram_bot_token: '',
+  notification_telegram_chat_id: '',
 })
 
 const hasAnySnifferEnabled = computed(() => formData.value.sniffer_non_stream_enabled || formData.value.sniffer_stream_enabled)
+const telegramConfigured = computed(
+  () => formData.value.notification_telegram_bot_token.trim().length > 0 && formData.value.notification_telegram_chat_id.trim().length > 0,
+)
+const notificationReady = computed(
+  () =>
+    formData.value.notification_enabled &&
+    formData.value.notification_channel === 'telegram' &&
+    telegramConfigured.value &&
+    formData.value.notification_events.length > 0,
+)
+const notificationStatusType = computed(() => {
+  if (!formData.value.notification_enabled) return 'default'
+  return notificationReady.value ? 'success' : 'warning'
+})
+const notificationStatusText = computed(() => {
+  if (!formData.value.notification_enabled) return '未启用'
+  return notificationReady.value ? '可发送' : '待完善'
+})
 
 const loadBalanceStrategyOptions = [
   { label: '兼容保留：加权随机', value: 'weighted_random' },
   { label: '兼容保留：轮询', value: 'round_robin' },
 ]
+
+const notificationChannelOptions = [{ label: 'Telegram', value: 'telegram' }]
+
+const notificationEventOptions = [
+  {
+    label: '代理渠道或密钥熔断',
+    value: 'circuit_breaker',
+    description: '渠道模型配置进入冷却、密钥进入冷却或被停用时通知。',
+  },
+  {
+    label: '管理员登录',
+    value: 'admin_login',
+    description: '管理员成功登录后台后通知，包含来源 IP 与 User-Agent。',
+  },
+  {
+    label: '管理员修改密码',
+    value: 'admin_password_change',
+    description: '当前管理员密码修改成功后通知，用于安全审计。',
+  },
+]
+
+const supportedNotificationEvents = new Set(notificationEventOptions.map((item) => item.value))
+
+const parseNotificationEvents = (value?: string) => {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return Array.from(new Set(parsed.filter((item): item is string => typeof item === 'string' && supportedNotificationEvents.has(item))))
+  } catch {
+    return []
+  }
+}
 
 const runSilentFormUpdate = (updater: () => void) => {
   isConflictAdjusting.value = true
@@ -691,6 +846,21 @@ const loadSettings = async () => {
     }
     if (settings.model_test_user_agent !== undefined) {
       formData.value.model_test_user_agent = settings.model_test_user_agent || DEFAULT_MODEL_TEST_USER_AGENT
+    }
+    if (settings.notification_enabled !== undefined) {
+      formData.value.notification_enabled = settings.notification_enabled === 'true'
+    }
+    if (settings.notification_channel !== undefined) {
+      formData.value.notification_channel = settings.notification_channel === 'telegram' ? 'telegram' : 'telegram'
+    }
+    if (settings.notification_events !== undefined) {
+      formData.value.notification_events = parseNotificationEvents(settings.notification_events)
+    }
+    if (settings.notification_telegram_bot_token !== undefined) {
+      formData.value.notification_telegram_bot_token = settings.notification_telegram_bot_token || ''
+    }
+    if (settings.notification_telegram_chat_id !== undefined) {
+      formData.value.notification_telegram_chat_id = settings.notification_telegram_chat_id || ''
     }
 
     if (settings.sniffer_plain_text_error_rules) {
@@ -835,6 +1005,44 @@ const generateJWTSecret = () => {
     .replace(/=+$/g, '')
 }
 
+const openTelegramConfig = () => {
+  telegramDraft.value = {
+    bot_token: formData.value.notification_telegram_bot_token,
+    chat_id: formData.value.notification_telegram_chat_id,
+  }
+  showTelegramConfigModal.value = true
+}
+
+const confirmTelegramConfig = () => {
+  formData.value.notification_telegram_bot_token = telegramDraft.value.bot_token.trim()
+  formData.value.notification_telegram_chat_id = telegramDraft.value.chat_id.trim()
+  showTelegramConfigModal.value = false
+}
+
+const handleTestTelegram = async () => {
+  const botToken = telegramDraft.value.bot_token.trim()
+  const chatID = telegramDraft.value.chat_id.trim()
+  if (!botToken || !chatID) {
+    message.error('请先填写 Telegram Bot Token 和 Chat ID')
+    return
+  }
+
+  isTestingTelegram.value = true
+  try {
+    await settingsService.testNotification({
+      channel: 'telegram',
+      telegram_bot_token: botToken,
+      telegram_chat_id: chatID,
+    })
+    message.success('测试通知已发送')
+  } catch (error: any) {
+    const reason = error?.response?.data?.message || '测试通知发送失败'
+    message.error(reason)
+  } finally {
+    isTestingTelegram.value = false
+  }
+}
+
 const handleSave = async () => {
   if (formData.value.security_jwt_secret.trim().length < 32) {
     message.error('JWT 签名密钥至少需要 32 个字符')
@@ -843,6 +1051,16 @@ const handleSave = async () => {
   if (!formData.value.log_retention_days || formData.value.log_retention_days < 1) {
     message.error('日志保留天数必须大于 0')
     return
+  }
+  if (formData.value.notification_enabled) {
+    if (!telegramConfigured.value) {
+      message.error('开启通知前请先完成 Telegram Bot Token 和 Chat ID 配置')
+      return
+    }
+    if (formData.value.notification_events.length === 0) {
+      message.error('开启通知前请至少勾选一个通知发送配置')
+      return
+    }
   }
 
   isSaving.value = true
@@ -881,6 +1099,11 @@ const handleSave = async () => {
         log_debug_enabled: debugModeEnabled.value.toString(),
         model_test_prompt: formData.value.model_test_prompt.trim(),
         model_test_user_agent: formData.value.model_test_user_agent.trim(),
+        notification_enabled: formData.value.notification_enabled.toString(),
+        notification_channel: formData.value.notification_channel,
+        notification_events: JSON.stringify(formData.value.notification_events),
+        notification_telegram_bot_token: formData.value.notification_telegram_bot_token.trim(),
+        notification_telegram_chat_id: formData.value.notification_telegram_chat_id.trim(),
         sniffer_plain_text_error_rules: JSON.stringify(keywords),
       },
     })
@@ -994,6 +1217,49 @@ onMounted(() => {
   width: 100%;
 }
 
+.notification-channel-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
+.notification-event-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.notification-event-card {
+  display: flex;
+  min-height: 86px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--hydra-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.66);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.notification-event-card:hover {
+  border-color: var(--hydra-text);
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateY(-1px);
+}
+
+.notification-event-card span {
+  color: var(--hydra-text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 @media (max-width: 820px) {
   .setting-row {
     grid-template-columns: 1fr;
@@ -1008,6 +1274,15 @@ onMounted(() => {
   .secret-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .notification-channel-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .notification-event-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

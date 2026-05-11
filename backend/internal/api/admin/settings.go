@@ -2,13 +2,14 @@ package admin
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
-	"log/slog"
-
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/config"
+	notificationService "github.com/yangshoulai/hydra/internal/service/notification"
 )
 
 // SettingsHandler 系统设置处理器
@@ -16,6 +17,7 @@ type SettingsHandler struct {
 	logger            *slog.Logger
 	systemSettingRepo *repository.SystemSettingRepository
 	settingService    *config.SettingService
+	notificationSvc   *notificationService.Service
 }
 
 // NewSettingsHandler 创建系统设置处理器
@@ -23,11 +25,13 @@ func NewSettingsHandler(
 	logger *slog.Logger,
 	systemSettingRepo *repository.SystemSettingRepository,
 	settingService *config.SettingService,
+	notificationSvc *notificationService.Service,
 ) *SettingsHandler {
 	return &SettingsHandler{
 		logger:            logger,
 		systemSettingRepo: systemSettingRepo,
 		settingService:    settingService,
+		notificationSvc:   notificationSvc,
 	}
 }
 
@@ -220,11 +224,62 @@ func (h *SettingsHandler) UpdateSetting(c *gin.Context) {
 
 	h.logger.Info("系统配置已更新",
 		slog.String("key", key),
-		slog.String("value", req.Value),
+		slog.String("value", safeSettingValueForAdminLog(key, req.Value)),
 	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Setting updated successfully",
+	})
+}
+
+// TestNotificationRequest 测试通知渠道请求
+type TestNotificationRequest struct {
+	Channel          string `json:"channel" binding:"required"`
+	TelegramBotToken string `json:"telegram_bot_token"`
+	TelegramChatID   string `json:"telegram_chat_id"`
+}
+
+// TestNotification 测试通知渠道
+// POST /admin/api/settings/notifications/test
+func (h *SettingsHandler) TestNotification(c *gin.Context) {
+	if h.notificationSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "notification service is not initialized",
+		})
+		return
+	}
+
+	var req TestNotificationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request body",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	switch req.Channel {
+	case models.NotificationChannelTelegram:
+		if err := h.notificationSvc.TestTelegram(c.Request.Context(), req.TelegramBotToken, req.TelegramChatID); err != nil {
+			h.logger.Warn("测试 Telegram 通知失败",
+				slog.String("error", err.Error()),
+			)
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":   "Failed to send test notification",
+				"message": err.Error(),
+			})
+			return
+		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Unsupported notification channel",
+			"message": "通知渠道当前仅支持 telegram",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "test notification sent successfully",
 	})
 }
 
@@ -234,7 +289,21 @@ func (h *SettingsHandler) RegisterRoutes(router *gin.RouterGroup) {
 	{
 		settings.GET("", h.GetAllSettings)
 		settings.PUT("", h.UpdateSettings)
+		settings.POST("/notifications/test", h.TestNotification)
 		settings.GET("/:key", h.GetSetting)
 		settings.PUT("/:key", h.UpdateSetting)
+	}
+}
+
+func safeSettingValueForAdminLog(key, value string) string {
+	switch key {
+	case models.SettingSecurityJWTSecret,
+		models.SettingNotificationTelegramBotToken:
+		if value == "" {
+			return ""
+		}
+		return "***"
+	default:
+		return value
 	}
 }

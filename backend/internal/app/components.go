@@ -8,6 +8,7 @@ import (
 	"github.com/yangshoulai/hydra/internal/service/circuit"
 	configService "github.com/yangshoulai/hydra/internal/service/config"
 	modelsyncService "github.com/yangshoulai/hydra/internal/service/modelsync"
+	notificationService "github.com/yangshoulai/hydra/internal/service/notification"
 	proxyService "github.com/yangshoulai/hydra/internal/service/proxy"
 	schedulerService "github.com/yangshoulai/hydra/internal/service/scheduler"
 	"gorm.io/gorm"
@@ -29,6 +30,7 @@ type Repositories struct {
 // Services 应用内共享的服务实例
 type Services struct {
 	SettingService      *configService.SettingService
+	NotificationService *notificationService.Service
 	CircuitManager      *circuit.CircuitManager
 	CronScheduler       *schedulerService.CronScheduler
 	ProxyService        *proxyService.ProxyService

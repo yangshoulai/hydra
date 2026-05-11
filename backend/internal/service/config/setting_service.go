@@ -292,6 +292,12 @@ func (s *SettingService) getDefaultCategory(key string) string {
 	case key == models.SettingModelTestPrompt ||
 		key == models.SettingModelTestUserAgent:
 		return "model_test"
+	case key == models.SettingNotificationEnabled ||
+		key == models.SettingNotificationChannel ||
+		key == models.SettingNotificationEvents ||
+		key == models.SettingNotificationTelegramBotToken ||
+		key == models.SettingNotificationTelegramChatID:
+		return "notification"
 	case key == models.SettingSnifferPlainTextErrorRules:
 		return "sniffer"
 	case key == models.SettingSnifferEnabled ||
@@ -482,14 +488,56 @@ func (s *SettingService) validateValue(key string, value string) error {
 		if value < 0 || value > 100000 {
 			return &SettingValidationError{message: "限流参数必须在 0-100000 之间，0 表示不限制"}
 		}
+	case models.SettingNotificationEnabled:
+		if _, err := strconv.ParseBool(trimmed); err != nil {
+			return &SettingValidationError{message: "通知总开关必须是 true 或 false"}
+		}
+	case models.SettingNotificationChannel:
+		if trimmed != "" && trimmed != models.NotificationChannelTelegram {
+			return &SettingValidationError{message: "通知渠道当前仅支持 telegram"}
+		}
+	case models.SettingNotificationEvents:
+		if err := validateNotificationEvents(trimmed); err != nil {
+			return err
+		}
+	case models.SettingNotificationTelegramBotToken:
+		if strings.ContainsAny(trimmed, " \t\r\n") {
+			return &SettingValidationError{message: "Telegram Bot Token 不能包含空白字符"}
+		}
+	case models.SettingNotificationTelegramChatID:
+		if strings.ContainsAny(trimmed, " \t\r\n") {
+			return &SettingValidationError{message: "Telegram Chat ID 不能包含空白字符"}
+		}
 	}
 
 	return nil
 }
 
+func validateNotificationEvents(value string) error {
+	var events []string
+	if strings.TrimSpace(value) == "" {
+		events = []string{}
+	} else if err := json.Unmarshal([]byte(value), &events); err != nil {
+		return &SettingValidationError{message: "通知发送配置必须是 JSON 字符串数组"}
+	}
+
+	supportedEvents := map[string]bool{
+		models.NotificationEventCircuitBreaker:      true,
+		models.NotificationEventAdminLogin:          true,
+		models.NotificationEventAdminPasswordChange: true,
+	}
+	for _, event := range events {
+		if !supportedEvents[event] {
+			return &SettingValidationError{message: "通知发送配置包含不支持的事件：" + event}
+		}
+	}
+	return nil
+}
+
 func safeSettingValueForLog(key, value string) string {
 	switch key {
-	case models.SettingSecurityJWTSecret:
+	case models.SettingSecurityJWTSecret,
+		models.SettingNotificationTelegramBotToken:
 		if strings.TrimSpace(value) == "" {
 			return ""
 		}

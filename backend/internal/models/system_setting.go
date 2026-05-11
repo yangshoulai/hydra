@@ -63,6 +63,13 @@ const (
 	SettingSnifferPlainTextErrorRules      = "sniffer_plain_text_error_rules"
 	SettingModelTestPrompt                 = "model_test_prompt"
 	SettingModelTestUserAgent              = "model_test_user_agent"
+
+	// Notification
+	SettingNotificationEnabled          = "notification_enabled"
+	SettingNotificationChannel          = "notification_channel"
+	SettingNotificationEvents           = "notification_events"
+	SettingNotificationTelegramBotToken = "notification_telegram_bot_token"
+	SettingNotificationTelegramChatID   = "notification_telegram_chat_id"
 )
 
 const DefaultModelTestUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/1.7.13 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36"
@@ -80,4 +87,14 @@ const (
 	DefaultProxyRateLimitTokenBurst               = 120
 	DefaultProxyNonStreamKeepaliveDelaySeconds    = 80
 	DefaultProxyNonStreamKeepaliveIntervalSeconds = 30
+)
+
+const (
+	NotificationChannelTelegram = "telegram"
+)
+
+const (
+	NotificationEventCircuitBreaker      = "circuit_breaker"
+	NotificationEventAdminLogin          = "admin_login"
+	NotificationEventAdminPasswordChange = "admin_password_change"
 )

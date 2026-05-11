@@ -4,22 +4,27 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/service/admin"
+	notificationService "github.com/yangshoulai/hydra/internal/service/notification"
 )
 
 // AuthHandler 认证处理器
 type AuthHandler struct {
-	authService *admin.AuthService
-	logger      *slog.Logger
+	authService     *admin.AuthService
+	logger          *slog.Logger
+	notificationSvc *notificationService.Service
 }
 
 // NewAuthHandler 创建认证处理器
-func NewAuthHandler(authService *admin.AuthService, logger *slog.Logger) *AuthHandler {
+func NewAuthHandler(authService *admin.AuthService, logger *slog.Logger, notificationSvc *notificationService.Service) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		logger:      logger,
+		authService:     authService,
+		logger:          logger,
+		notificationSvc: notificationSvc,
 	}
 }
 
@@ -60,6 +65,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		})
 		return
 	}
+
+	h.notifyAdminEvent(models.NotificationEventAdminLogin, "管理员登录", c, resp.User.Username)
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -106,6 +113,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
+	username, _ := c.Get("username")
+	h.notifyAdminEvent(models.NotificationEventAdminPasswordChange, "管理员修改密码", c, stringValue(username))
+
 	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
 }
 
@@ -136,4 +146,27 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *AuthHandler) notifyAdminEvent(eventType string, title string, c *gin.Context, username string) {
+	if h.notificationSvc == nil {
+		return
+	}
+	h.notificationSvc.NotifyAsync(notificationService.Event{
+		Type:      eventType,
+		Title:     title,
+		CreatedAt: time.Now(),
+		Fields: []notificationService.Field{
+			{Name: "管理员", Value: username},
+			{Name: "来源 IP", Value: c.ClientIP()},
+			{Name: "User-Agent", Value: c.Request.UserAgent()},
+		},
+	})
+}
+
+func stringValue(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return ""
 }

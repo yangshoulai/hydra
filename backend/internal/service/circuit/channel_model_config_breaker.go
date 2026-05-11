@@ -43,17 +43,19 @@ func (mb *ChannelModelConfigBreaker) RecordSuccess() {
 	}
 }
 
-// RecordFailure 记录失败请求
-func (mb *ChannelModelConfigBreaker) RecordFailure() {
+// RecordFailure 记录失败请求，返回状态变更快照。
+func (mb *ChannelModelConfigBreaker) RecordFailure() (oldState ModelConfigState, newState ModelConfigState, failureCount int, lastFailure time.Time) {
 	mb.mu.Lock()
 	defer mb.mu.Unlock()
 
+	oldState = mb.state
 	mb.lastFailure = time.Now()
 	mb.failureCount++
 
 	if mb.failureCount >= mb.failureThreshold {
 		mb.state = ModelConfigStateCooling
 	}
+	return oldState, mb.state, mb.failureCount, mb.lastFailure
 }
 
 // IsAvailable 检查模型配置是否可用

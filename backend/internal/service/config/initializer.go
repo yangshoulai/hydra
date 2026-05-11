@@ -214,6 +214,37 @@ var DefaultSettings = []models.SystemSetting{
 		ValueType: "string",
 		Remark:    "渠道模型测试/同步/健康检查统一使用的 User-Agent",
 	},
+	// 通知设置
+	{
+		Key:       models.SettingNotificationEnabled,
+		Value:     "false",
+		ValueType: "bool",
+		Remark:    "是否启用系统通知",
+	},
+	{
+		Key:       models.SettingNotificationChannel,
+		Value:     models.NotificationChannelTelegram,
+		ValueType: "string",
+		Remark:    "系统通知渠道",
+	},
+	{
+		Key:       models.SettingNotificationEvents,
+		Value:     "[]",
+		ValueType: "json",
+		Remark:    "已启用的通知事件列表",
+	},
+	{
+		Key:       models.SettingNotificationTelegramBotToken,
+		Value:     "",
+		ValueType: "string",
+		Remark:    "Telegram Bot Token",
+	},
+	{
+		Key:       models.SettingNotificationTelegramChatID,
+		Value:     "",
+		ValueType: "string",
+		Remark:    "Telegram Chat ID",
+	},
 	// 响应嗅探设置
 	{
 		Key:       models.SettingSnifferNonStreamEnabled,

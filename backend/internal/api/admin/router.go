@@ -26,16 +26,17 @@ func RegisterRoutes(
 	modelService := services.ModelService
 	providerService := services.ProviderService
 	settingService := services.SettingService
+	notificationSvc := services.NotificationService
 	circuitManager := services.CircuitManager
 
 	// 创建 handlers
-	authHandler := NewAuthHandler(authService, logger)
+	authHandler := NewAuthHandler(authService, logger, notificationSvc)
 	channelHandler := NewChannelHandler(repos.ChannelRepo, repos.ModelConfigRepo, repos.ChannelKeyRepo, db, logger, circuitManager)
 	channelKeyHandler := NewChannelKeyHandler(repos.ChannelKeyRepo, repos.ChannelRepo, healthCheckService, circuitManager, logger)
 	modelConfigHandler := NewChannelModelHandler(repos.ModelConfigRepo, repos.ChannelRepo, logger, circuitManager)
 	modelSyncHandler := NewModelSyncHandler(syncService, repos.ModelConfigRepo, settingService, services.ProxyService.GetHTTPClient(), db, logger)
 	dashboardHandler := NewDashboardHandler(dashboardService)
-	settingsHandler := NewSettingsHandler(logger, repos.SystemSettingRepo, settingService)
+	settingsHandler := NewSettingsHandler(logger, repos.SystemSettingRepo, settingService, notificationSvc)
 	tokensHandler := NewTokensHandler(logger, repos.AccessTokenRepo)
 	modelHandler := NewModelHandler(modelService, logger)
 	providerHandler := NewProviderHandler(providerService, logger)

@@ -41,20 +41,23 @@ func (kb *ChannelKeyBreaker) RecordSuccess() {
 	kb.state = KeyStateActive
 }
 
-// RecordHardFailure 记录硬故障
-func (kb *ChannelKeyBreaker) RecordHardFailure() {
+// RecordHardFailure 记录硬故障，返回状态变更快照。
+func (kb *ChannelKeyBreaker) RecordHardFailure() (oldState KeyState, newState KeyState, failureCount int, lastFailure time.Time) {
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
 
+	oldState = kb.state
 	kb.lastFailure = time.Now()
 	kb.state = KeyStateInactive
+	return oldState, kb.state, kb.failureCount, kb.lastFailure
 }
 
-// RecordSoftFailure 记录软故障(5xx/timeout)
-func (kb *ChannelKeyBreaker) RecordSoftFailure() {
+// RecordSoftFailure 记录软故障(5xx/timeout)，返回状态变更快照。
+func (kb *ChannelKeyBreaker) RecordSoftFailure() (oldState KeyState, newState KeyState, failureCount int, lastFailure time.Time) {
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
 
+	oldState = kb.state
 	kb.lastFailure = time.Now()
 	kb.failureCount++
 
@@ -62,6 +65,7 @@ func (kb *ChannelKeyBreaker) RecordSoftFailure() {
 	if kb.failureCount >= kb.failureThreshold {
 		kb.state = KeyStateCooling
 	}
+	return oldState, kb.state, kb.failureCount, kb.lastFailure
 }
 
 // IsAvailable 检查 Key 是否可用

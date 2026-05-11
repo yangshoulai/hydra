@@ -12,6 +12,7 @@ import (
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
 	"github.com/yangshoulai/hydra/internal/service/config"
+	notificationService "github.com/yangshoulai/hydra/internal/service/notification"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +25,7 @@ type CircuitManager struct {
 	channelKeyRepo   *repository.ChannelKeyRepository
 	modelConfigRepo  *repository.ChannelModelConfigRepository
 	settingService   *config.SettingService // 配置服务，用于获取最新配置
+	notificationSvc  *notificationService.Service
 	failureThreshold int
 	coolingDuration  time.Duration
 
@@ -50,6 +52,7 @@ func NewCircuitManager(
 	channelKeyRepo *repository.ChannelKeyRepository,
 	modelConfigRepo *repository.ChannelModelConfigRepository,
 	settingService *config.SettingService,
+	notificationSvc *notificationService.Service,
 	failureThreshold int,
 	coolingDuration time.Duration,
 ) *CircuitManager {
@@ -59,6 +62,7 @@ func NewCircuitManager(
 		channelKeyRepo:      channelKeyRepo,
 		modelConfigRepo:     modelConfigRepo,
 		settingService:      settingService,
+		notificationSvc:     notificationSvc,
 		failureThreshold:    failureThreshold,
 		coolingDuration:     coolingDuration,
 		keyBreakers:         make(map[uint]*ChannelKeyBreaker),
@@ -195,8 +199,7 @@ func (m *CircuitManager) RecordKeySuccess(keyID uint, traceID ...string) {
 // RecordKeyHardFailure 记录 Key 硬故障
 func (m *CircuitManager) RecordKeyHardFailure(keyID uint, channelID uint, channelName string, errMsg string, traceID ...string) {
 	keyBreaker := m.GetKeyBreaker(keyID)
-	oldState := keyBreaker.state
-	keyBreaker.RecordHardFailure()
+	oldState, newState, failureCount, lastFailure := keyBreaker.RecordHardFailure()
 	trace := normalizeTraceID(traceID...)
 
 	m.logger.Debug("密钥硬故障",
@@ -212,6 +215,21 @@ func (m *CircuitManager) RecordKeyHardFailure(keyID uint, channelID uint, channe
 		go m.updateKeyStatus(keyID, "inactive")
 	}
 
+	if oldState != KeyStateInactive && newState == KeyStateInactive {
+		m.notifyCircuitBreaker(notificationService.Event{
+			Type:      models.NotificationEventCircuitBreaker,
+			Title:     "密钥已停用",
+			CreatedAt: lastFailure,
+			Fields: []notificationService.Field{
+				{Name: "对象", Value: "密钥 #" + strconv.FormatUint(uint64(keyID), 10)},
+				{Name: "状态", Value: string(newState)},
+				{Name: "渠道", Value: formatChannelLabel(channelID, channelName)},
+				{Name: "失败次数", Value: strconv.Itoa(failureCount)},
+				{Name: "错误", Value: errMsg},
+				{Name: "Trace ID", Value: trace},
+			},
+		})
+	}
 }
 
 // RecordKeySoftFailure 记录 Key 软故障
@@ -219,9 +237,9 @@ func (m *CircuitManager) RecordKeySoftFailure(keyID uint, channelID uint, channe
 	keyBreaker := m.GetKeyBreaker(keyID)
 	trace := normalizeTraceID(traceID...)
 
-	keyBreaker.RecordSoftFailure()
+	oldState, newState, failureCount, lastFailure := keyBreaker.RecordSoftFailure()
 
-	m.logger.Debug("密钥连续["+strconv.Itoa(keyBreaker.failureCount)+"]次失败",
+	m.logger.Debug("密钥连续["+strconv.Itoa(failureCount)+"]次失败",
 		slog.String("trace_id", trace),
 		slog.Uint64("key_id", uint64(keyID)),
 		slog.Uint64("channel_id", uint64(channelID)),
@@ -229,7 +247,7 @@ func (m *CircuitManager) RecordKeySoftFailure(keyID uint, channelID uint, channe
 	)
 
 	// 冷却状态仅保存在内存熔断器中
-	if keyBreaker.state == KeyStateCooling {
+	if newState == KeyStateCooling {
 		m.logger.Debug("密钥进入冷却状态",
 			slog.String("trace_id", trace),
 			slog.Uint64("key_id", uint64(keyID)),
@@ -237,6 +255,22 @@ func (m *CircuitManager) RecordKeySoftFailure(keyID uint, channelID uint, channe
 			slog.String("channel_name", channelName),
 			slog.String("errMsg", errMsg),
 		)
+	}
+
+	if oldState != KeyStateCooling && newState == KeyStateCooling {
+		m.notifyCircuitBreaker(notificationService.Event{
+			Type:      models.NotificationEventCircuitBreaker,
+			Title:     "密钥进入熔断冷却",
+			CreatedAt: lastFailure,
+			Fields: []notificationService.Field{
+				{Name: "对象", Value: "密钥 #" + strconv.FormatUint(uint64(keyID), 10)},
+				{Name: "状态", Value: string(newState)},
+				{Name: "渠道", Value: formatChannelLabel(channelID, channelName)},
+				{Name: "失败次数", Value: strconv.Itoa(failureCount)},
+				{Name: "错误", Value: errMsg},
+				{Name: "Trace ID", Value: trace},
+			},
+		})
 	}
 }
 
@@ -249,10 +283,10 @@ func (m *CircuitManager) RecordModelConfigSuccess(modelConfigID uint, channelID 
 // RecordModelConfigFailure 记录模型配置失败（模型映射调用失败）
 func (m *CircuitManager) RecordModelConfigFailure(modelConfigID uint, channelID uint, channelName string, model string, channelModel string, errMsg string, traceID ...string) {
 	breaker := m.GetModelConfigBreaker(modelConfigID, channelID)
-	breaker.RecordFailure()
+	oldState, newState, failureCount, lastFailure := breaker.RecordFailure()
 	trace := normalizeTraceID(traceID...)
 
-	m.logger.Debug("模型配置连续["+strconv.Itoa(breaker.failureCount)+"]次失败",
+	m.logger.Debug("模型配置连续["+strconv.Itoa(failureCount)+"]次失败",
 		slog.String("trace_id", trace),
 		slog.Uint64("model_config_id", uint64(modelConfigID)),
 		slog.Uint64("channel_id", uint64(channelID)),
@@ -262,7 +296,7 @@ func (m *CircuitManager) RecordModelConfigFailure(modelConfigID uint, channelID 
 		slog.String("errMsg", errMsg),
 	)
 
-	if breaker.state == ModelConfigStateCooling {
+	if newState == ModelConfigStateCooling {
 		m.logger.Debug("模型配置进入冷却状态",
 			slog.String("trace_id", trace),
 			slog.Uint64("model_config_id", uint64(modelConfigID)),
@@ -271,6 +305,24 @@ func (m *CircuitManager) RecordModelConfigFailure(modelConfigID uint, channelID 
 			slog.String("model", model),
 			slog.String("channel_model", channelModel),
 		)
+	}
+
+	if oldState != ModelConfigStateCooling && newState == ModelConfigStateCooling {
+		m.notifyCircuitBreaker(notificationService.Event{
+			Type:      models.NotificationEventCircuitBreaker,
+			Title:     "代理渠道进入熔断冷却",
+			CreatedAt: lastFailure,
+			Fields: []notificationService.Field{
+				{Name: "对象", Value: "渠道模型配置 #" + strconv.FormatUint(uint64(modelConfigID), 10)},
+				{Name: "状态", Value: string(newState)},
+				{Name: "渠道", Value: formatChannelLabel(channelID, channelName)},
+				{Name: "模型", Value: model},
+				{Name: "上游模型", Value: channelModel},
+				{Name: "失败次数", Value: strconv.Itoa(failureCount)},
+				{Name: "错误", Value: errMsg},
+				{Name: "Trace ID", Value: trace},
+			},
+		})
 	}
 }
 
@@ -283,6 +335,22 @@ func normalizeTraceID(traceID ...string) string {
 		return "-"
 	}
 	return value
+}
+
+func (m *CircuitManager) notifyCircuitBreaker(event notificationService.Event) {
+	if m.notificationSvc == nil {
+		return
+	}
+	m.notificationSvc.NotifyAsync(event)
+}
+
+func formatChannelLabel(channelID uint, channelName string) string {
+	name := strings.TrimSpace(channelName)
+	id := strconv.FormatUint(uint64(channelID), 10)
+	if name == "" {
+		return "#" + id
+	}
+	return name + " (#" + id + ")"
 }
 
 // SnapshotBreakers 获取非 active 熔断器快照

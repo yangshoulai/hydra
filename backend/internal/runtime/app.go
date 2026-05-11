@@ -26,6 +26,7 @@ import (
 	loggerService "github.com/yangshoulai/hydra/internal/service/logger"
 	metricsService "github.com/yangshoulai/hydra/internal/service/metrics"
 	modelsyncService "github.com/yangshoulai/hydra/internal/service/modelsync"
+	notificationService "github.com/yangshoulai/hydra/internal/service/notification"
 	proxyService "github.com/yangshoulai/hydra/internal/service/proxy"
 	schedulerService "github.com/yangshoulai/hydra/internal/service/scheduler"
 	"gorm.io/driver/sqlite"
@@ -122,6 +123,7 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 
 	ctx := context.Background()
 	runtimeMetrics := metricsService.NewRuntimeMetrics()
+	notificationSvc := notificationService.NewService(runtimeLogger, settingService)
 
 	failureThreshold, coolingDuration := settingService.GetCircuitBreakerConfig(ctx)
 	circuitManager := circuit.NewCircuitManager(
@@ -130,6 +132,7 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 		repos.ChannelKeyRepo,
 		repos.ModelConfigRepo,
 		settingService,
+		notificationSvc,
 		failureThreshold,
 		coolingDuration,
 	)
@@ -217,6 +220,7 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 		Repos:  repos,
 		Services: &app.Services{
 			SettingService:      settingService,
+			NotificationService: notificationSvc,
 			CircuitManager:      circuitManager,
 			CronScheduler:       cronScheduler,
 			ProxyService:        proxySvc,
