@@ -13,7 +13,7 @@
         <n-input
           v-model:value="formData.newPassword"
           type="password"
-          placeholder="至少 8 位新密码"
+          placeholder="至少 6 位新密码"
           show-password-on="click"
         />
       </n-form-item>
@@ -69,7 +69,7 @@ const rules: FormRules = {
   oldPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 8, message: '密码长度至少 8 位', trigger: 'blur' },
+    { min: 6, message: '密码长度至少 6 位', trigger: 'blur' },
   ],
   confirmPassword: [
     { required: true, message: '请再次输入新密码', trigger: 'blur' },
@@ -92,10 +92,32 @@ function handleCancel() {
   resetForm()
 }
 
+function getValidationMessage(err: unknown): string {
+  if (Array.isArray(err)) {
+    for (const item of err) {
+      const message = getValidationMessage(item)
+      if (message) return message
+    }
+  }
+
+  if (err && typeof err === 'object' && 'message' in err) {
+    const message = (err as { message?: unknown }).message
+    if (typeof message === 'string' && message) return message
+  }
+
+  return ''
+}
+
 async function handleSubmit() {
+  if (!formRef.value) {
+    feedback.message?.error('表单尚未初始化，请稍后重试')
+    return
+  }
+
   try {
-    await formRef.value?.validate()
-  } catch {
+    await formRef.value.validate()
+  } catch (err) {
+    feedback.message?.error(getValidationMessage(err) || '请检查表单填写是否正确')
     return
   }
 
