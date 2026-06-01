@@ -10,6 +10,7 @@ import (
 
 	"github.com/yangshoulai/hydra/internal/models"
 	configservice "github.com/yangshoulai/hydra/internal/service/config"
+	loggerutil "github.com/yangshoulai/hydra/internal/service/logger"
 	"github.com/yangshoulai/hydra/internal/service/upstreamhttp"
 )
 
@@ -106,14 +107,15 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 	switch {
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		// 认证失败,硬故障
-		ph.logger.Warn("嗅探失败 (authentication error)",
+		logAttrs := []any{
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
 			slog.Int("status_code", resp.StatusCode),
-			slog.String("response_body", string(body)),
-		)
+		}
+		logAttrs = append(logAttrs, loggerutil.ResponseBodyLogAttrs(body)...)
+		ph.logger.Warn("嗅探失败 (authentication error)", logAttrs...)
 		return false, true, fmt.Errorf("authentication failed: %d", resp.StatusCode)
 
 	case resp.StatusCode == 429:
@@ -140,14 +142,15 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 
 	default:
 		// 其他错误,视为软故障
-		ph.logger.Warn("嗅探失败 (unexpected status)",
+		logAttrs := []any{
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
 			slog.String("url", req.URL.String()),
 			slog.Int("status_code", resp.StatusCode),
-			slog.String("response_body", string(body)),
-		)
+		}
+		logAttrs = append(logAttrs, loggerutil.ResponseBodyLogAttrs(body)...)
+		ph.logger.Warn("嗅探失败 (unexpected status)", logAttrs...)
 		return false, false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 }

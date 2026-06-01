@@ -22,6 +22,7 @@ import (
 	"github.com/yangshoulai/hydra/internal/models"
 	"github.com/yangshoulai/hydra/internal/repository"
 	configservice "github.com/yangshoulai/hydra/internal/service/config"
+	loggerutil "github.com/yangshoulai/hydra/internal/service/logger"
 	"github.com/yangshoulai/hydra/internal/service/modelsync"
 	"github.com/yangshoulai/hydra/internal/service/upstreamhttp"
 	"gorm.io/gorm"
@@ -524,15 +525,17 @@ func (h *ModelSyncHandler) testModelViaUpstream(
 		return false, fmt.Sprintf("无法读取响应内容: %v", err), latency, nil, err
 	}
 	content := buildModelTestResponseContent(endpointType, stream, body)
-	h.logger.Info("模型测试完成", slog.Uint64("channel_id", uint64(channel.ID)),
+	logAttrs := []any{
+		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
 		slog.String("channel_model", upstreamModel),
 		slog.String("endpoint_type", endpointType),
 		slog.Bool("stream", stream),
 		slog.String("url", req.URL.String()),
 		slog.Uint64("status_code", uint64(resp.StatusCode)),
-		slog.String("response_body", string(body)),
-	)
+	}
+	logAttrs = append(logAttrs, loggerutil.ResponseBodyLogAttrs(body)...)
+	h.logger.Info("模型测试完成", logAttrs...)
 
 	if stream {
 		valid, errMsg := validateStreamTestResponse(resp.StatusCode, body)
