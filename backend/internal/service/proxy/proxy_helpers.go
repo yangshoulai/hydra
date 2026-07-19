@@ -174,6 +174,17 @@ func normalizeStreamKeepaliveInterval(interval time.Duration) time.Duration {
 	return interval
 }
 
+func normalizeStreamIdleTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return 0
+	}
+	maxTimeout := time.Hour
+	if timeout > maxTimeout {
+		return maxTimeout
+	}
+	return timeout
+}
+
 func normalizeNonStreamKeepaliveDelay(delay time.Duration) time.Duration {
 	if delay <= 0 {
 		return 0

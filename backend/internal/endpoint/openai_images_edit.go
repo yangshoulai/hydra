@@ -69,7 +69,7 @@ func (e *ImagesEditEndpoint) ConfigureRequest(req *http.Request, apiKey string, 
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	updatedBody, newContentType, err := replaceModelInMultipart(requestBody, req.Header.Get("Content-Type"), modelName)
 	if err != nil {
-		return requestBody, nil
+		return nil, fmt.Errorf("rewrite images edit model: %w", err)
 	}
 	req.Header.Set("Content-Type", newContentType)
 	return updatedBody, nil

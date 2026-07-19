@@ -120,9 +120,21 @@ var DefaultSettings = []models.SystemSetting{
 	// 代理设置
 	{
 		Key:       models.SettingProxyRequestTimeout,
-		Value:     "120",
+		Value:     "0",
 		ValueType: "int",
-		Remark:    "代理请求超时时间(秒，0 表示不超时)",
+		Remark:    "代理请求总超时时间(秒，0 表示不设总时长限制；适合流式请求)",
+	},
+	{
+		Key:       models.SettingProxyUpstreamHeaderTimeout,
+		Value:     strconv.Itoa(models.DefaultProxyUpstreamHeaderTimeoutSeconds),
+		ValueType: "int",
+		Remark:    "上游响应头超时时间(秒，0 表示不限制；不限制正常流式持续时间)",
+	},
+	{
+		Key:       models.SettingProxyStreamIdleTimeout,
+		Value:     strconv.Itoa(models.DefaultProxyStreamIdleTimeoutSeconds),
+		ValueType: "int",
+		Remark:    "流式上游空闲超时时间(秒，0 表示不限制；仅在持续无上游数据时断开)",
 	},
 	{
 		Key:       models.SettingProxyKeepaliveInterval,
@@ -171,6 +183,12 @@ var DefaultSettings = []models.SystemSetting{
 		Value:     strconv.Itoa(models.DefaultProxyMaxBodyBytes),
 		ValueType: "int",
 		Remark:    "代理请求体最大大小(字节，0 表示不限制)",
+	},
+	{
+		Key:       models.SettingProxyMaxResponseBytes,
+		Value:     strconv.Itoa(models.DefaultProxyMaxResponseBytes),
+		ValueType: "int",
+		Remark:    "代理非流式响应体最大大小(字节，0 表示不限制)",
 	},
 	{
 		Key:       models.SettingProxyRateLimitEnabled,

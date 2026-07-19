@@ -275,6 +275,8 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingLogFileCompress:
 		return "logging"
 	case key == models.SettingProxyRequestTimeout ||
+		key == models.SettingProxyUpstreamHeaderTimeout ||
+		key == models.SettingProxyStreamIdleTimeout ||
 		key == models.SettingProxyKeepaliveInterval ||
 		key == models.SettingProxyNonStreamKeepaliveEnabled ||
 		key == models.SettingProxyNonStreamKeepaliveDelay ||
@@ -283,6 +285,7 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingProxyMaxRetry ||
 		key == models.SettingProxyLoadBalanceStrategy ||
 		key == models.SettingProxyMaxBodyBytes ||
+		key == models.SettingProxyMaxResponseBytes ||
 		key == models.SettingProxyRateLimitEnabled ||
 		key == models.SettingProxyRateLimitGlobalRPS ||
 		key == models.SettingProxyRateLimitGlobalBurst ||
@@ -318,12 +321,30 @@ func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureTh
 }
 
 // GetProxyConfig 获取代理配置（超时/网络代理/重试/历史负载策略）
-func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, keepaliveInterval time.Duration, networkProxyURL string, maxRetry int, loadBalanceStrategy string) {
-	requestTimeoutSeconds := s.GetInt(ctx, models.SettingProxyRequestTimeout, 120)
+func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, upstreamHeaderTimeout time.Duration, streamIdleTimeout time.Duration, keepaliveInterval time.Duration, networkProxyURL string, maxRetry int, loadBalanceStrategy string) {
+	requestTimeoutSeconds := s.GetInt(ctx, models.SettingProxyRequestTimeout, 0)
 	if requestTimeoutSeconds < 0 {
 		requestTimeoutSeconds = 0
 	}
 	requestTimeout = time.Duration(requestTimeoutSeconds) * time.Second
+
+	upstreamHeaderTimeoutSeconds := s.GetInt(ctx, models.SettingProxyUpstreamHeaderTimeout, models.DefaultProxyUpstreamHeaderTimeoutSeconds)
+	if upstreamHeaderTimeoutSeconds < 0 {
+		upstreamHeaderTimeoutSeconds = 0
+	}
+	if upstreamHeaderTimeoutSeconds > 3600 {
+		upstreamHeaderTimeoutSeconds = 3600
+	}
+	upstreamHeaderTimeout = time.Duration(upstreamHeaderTimeoutSeconds) * time.Second
+
+	streamIdleTimeoutSeconds := s.GetInt(ctx, models.SettingProxyStreamIdleTimeout, models.DefaultProxyStreamIdleTimeoutSeconds)
+	if streamIdleTimeoutSeconds < 0 {
+		streamIdleTimeoutSeconds = 0
+	}
+	if streamIdleTimeoutSeconds > 3600 {
+		streamIdleTimeoutSeconds = 3600
+	}
+	streamIdleTimeout = time.Duration(streamIdleTimeoutSeconds) * time.Second
 
 	keepaliveSeconds := s.GetInt(ctx, models.SettingProxyKeepaliveInterval, 0)
 	if keepaliveSeconds < 0 {
@@ -380,6 +401,14 @@ func (s *SettingService) GetProxyMaxBodyBytes(ctx context.Context) int64 {
 	return int64(value)
 }
 
+func (s *SettingService) GetProxyMaxResponseBytes(ctx context.Context) int64 {
+	value := s.GetInt(ctx, models.SettingProxyMaxResponseBytes, models.DefaultProxyMaxResponseBytes)
+	if value < 0 {
+		return int64(models.DefaultProxyMaxResponseBytes)
+	}
+	return int64(value)
+}
+
 func (s *SettingService) GetProxyRateLimitConfig(ctx context.Context) ProxyRateLimitConfig {
 	cfg := ProxyRateLimitConfig{
 		Enabled:     s.GetBool(ctx, models.SettingProxyRateLimitEnabled, true),
@@ -425,6 +454,15 @@ func (s *SettingService) validateValue(key string, value string) error {
 		if seconds < 0 || seconds > 300 {
 			return &SettingValidationError{message: "代理请求超时必须在 0-300 秒之间"}
 		}
+	case models.SettingProxyUpstreamHeaderTimeout,
+		models.SettingProxyStreamIdleTimeout:
+		seconds, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "上游超时参数必须是 0-3600 的整数秒数"}
+		}
+		if seconds < 0 || seconds > 3600 {
+			return &SettingValidationError{message: "上游超时参数必须在 0-3600 秒之间"}
+		}
 	case models.SettingProxyKeepaliveInterval:
 		seconds, err := strconv.Atoi(trimmed)
 		if err != nil {
@@ -465,7 +503,8 @@ func (s *SettingService) validateValue(key string, value string) error {
 		default:
 			return &SettingValidationError{message: "历史负载策略必须是 weighted_random 或 round_robin"}
 		}
-	case models.SettingProxyMaxBodyBytes:
+	case models.SettingProxyMaxBodyBytes,
+		models.SettingProxyMaxResponseBytes:
 		bytes, err := strconv.Atoi(trimmed)
 		if err != nil {
 			return &SettingValidationError{message: "代理请求体大小限制必须是 0-1073741824 的整数"}
@@ -610,10 +649,6 @@ func (s *SettingService) ValidateSettingsPatch(ctx context.Context, patch map[st
 			return &SettingValidationError{message: "保活间隔必须是 0-120 的整数秒数"}
 		}
 		keepaliveSeconds = seconds
-	}
-
-	if cfg.StreamEnabled && keepaliveSeconds > 0 {
-		return &SettingConflictError{message: "流式响应嗅探与流式保活不能同时启用，请关闭流式响应嗅探或将流式保活间隔设置为 0"}
 	}
 
 	nonStreamKeepalive := s.GetNonStreamKeepaliveConfig(ctx)

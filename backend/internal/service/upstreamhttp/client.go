@@ -24,7 +24,8 @@ type HTTPClient struct {
 
 // HTTPClientConfig HTTP 客户端配置
 type HTTPClientConfig struct {
-	RequestTimeout        time.Duration // 请求超时时间
+	RequestTimeout        time.Duration // 请求总超时时间
+	ResponseHeaderTimeout time.Duration // 上游响应头超时时间
 	UpstreamProxyURL      string        // 上游网络代理地址（http/https/socks5）
 	DialTimeout           time.Duration // 连接超时时间
 	KeepAlive             time.Duration // Keep-Alive 时长
@@ -40,7 +41,10 @@ type HTTPClientConfig struct {
 // DefaultHTTPClientConfig 默认 HTTP 客户端配置
 func DefaultHTTPClientConfig() *HTTPClientConfig {
 	return &HTTPClientConfig{
-		RequestTimeout:        120 * time.Second,
+		// 流式请求可持续较长时间；默认不设置 http.Client 的总时长截止。
+		// 连接与 TLS 阶段仍分别受 DialTimeout / TLSHandshakeTimeout 保护。
+		RequestTimeout:        0,
+		ResponseHeaderTimeout: 60 * time.Second,
 		UpstreamProxyURL:      "",
 		DialTimeout:           10 * time.Second,
 		KeepAlive:             30 * time.Second,
@@ -86,6 +90,7 @@ func buildTransport(config HTTPClientConfig, logger *slog.Logger) *http.Transpor
 		MaxIdleConnsPerHost:   config.MaxIdleConnsPerHost,
 		MaxConnsPerHost:       config.MaxConnsPerHost,
 		IdleConnTimeout:       config.IdleConnTimeout,
+		ResponseHeaderTimeout: config.ResponseHeaderTimeout,
 		TLSHandshakeTimeout:   config.TLSHandshakeTimeout,
 		ExpectContinueTimeout: config.ExpectContinueTimeout,
 		TLSClientConfig: &tls.Config{
@@ -234,6 +239,31 @@ func (hc *HTTPClient) UpdateRequestTimeout(timeout time.Duration) {
 	}
 
 	hc.logger.Info("HTTP客户端超时时间已更新",
+		slog.Duration("old_timeout", oldTimeout),
+		slog.Duration("new_timeout", timeout),
+	)
+}
+
+// UpdateResponseHeaderTimeout 动态更新上游响应头等待上限。
+// 它只约束上游开始响应，不限制已经持续输出数据的流式响应。
+func (hc *HTTPClient) UpdateResponseHeaderTimeout(timeout time.Duration) {
+	hc.configMu.Lock()
+	oldTimeout := hc.config.ResponseHeaderTimeout
+	oldDirectClient := hc.directClient
+	oldProxyClient := hc.proxyClient
+	hc.config.ResponseHeaderTimeout = timeout
+	hc.directClient = newStdHTTPClient(*hc.config, hc.logger, "")
+	hc.proxyClient = newStdHTTPClient(*hc.config, hc.logger, hc.config.UpstreamProxyURL)
+	hc.configMu.Unlock()
+
+	if oldDirectClient != nil {
+		oldDirectClient.CloseIdleConnections()
+	}
+	if oldProxyClient != nil && oldProxyClient != oldDirectClient {
+		oldProxyClient.CloseIdleConnections()
+	}
+
+	hc.logger.Info("HTTP客户端响应头超时时间已更新",
 		slog.Duration("old_timeout", oldTimeout),
 		slog.Duration("new_timeout", timeout),
 	)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
@@ -19,16 +20,20 @@ type RequestLogEvent struct {
 
 // RequestLogRecorder 基于 worker pool 的请求日志异步写入器
 //
-// 和 TokenUsageRecorder 同样的思路：阻塞投递保证不丢；workers 按事务批写。
+// 队列满时主动降级丢弃日志，不能反向阻塞代理请求；workers 按事务写入。
 // 调用方负责判断是否进入调试模式并组装 Detail/Attempts 的敏感字段；本组件不读设置。
 type RequestLogRecorder struct {
 	logger *slog.Logger
 	repo   *repository.RequestLogRepository
 
-	ch       chan RequestLogEvent
-	wg       sync.WaitGroup
-	stopCh   chan struct{}
-	stopOnce sync.Once
+	ch            chan RequestLogEvent
+	wg            sync.WaitGroup
+	mu            sync.RWMutex
+	closed        bool
+	stopOnce      sync.Once
+	dropped       atomic.Uint64
+	workerCtx     context.Context
+	cancelWorkers context.CancelFunc
 }
 
 // NewRequestLogRecorder 创建并启动 workers
@@ -43,11 +48,13 @@ func NewRequestLogRecorder(
 	if workers <= 0 {
 		workers = 2
 	}
+	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	r := &RequestLogRecorder{
-		logger: logger,
-		repo:   repo,
-		ch:     make(chan RequestLogEvent, queueSize),
-		stopCh: make(chan struct{}),
+		logger:        logger,
+		repo:          repo,
+		ch:            make(chan RequestLogEvent, queueSize),
+		workerCtx:     workerCtx,
+		cancelWorkers: cancelWorkers,
 	}
 	for i := 0; i < workers; i++ {
 		r.wg.Add(1)
@@ -56,26 +63,50 @@ func NewRequestLogRecorder(
 	return r
 }
 
-// Record 阻塞投递事件。进程关闭后投递会被丢弃。
+// Record 非阻塞投递事件。队列满或关闭时丢弃日志，保证日志系统不会拖慢代理。
 func (r *RequestLogRecorder) Record(event RequestLogEvent) {
 	if event.Log == nil {
 		return
 	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return
+	}
 	select {
 	case r.ch <- event:
-	case <-r.stopCh:
+	default:
+		dropped := r.dropped.Add(1)
+		if r.logger != nil && (dropped == 1 || dropped%100 == 0) {
+			r.logger.Warn("请求日志队列已满，已丢弃日志事件",
+				slog.Uint64("dropped_total", dropped),
+				slog.Int("queue_capacity", cap(r.ch)),
+			)
+		}
 	}
 }
 
 func (r *RequestLogRecorder) worker() {
 	defer r.wg.Done()
-	for ev := range r.ch {
-		r.process(ev)
+	for {
+		// Close 时优先退出，避免停机时在满队列上串行等待大量数据库超时。
+		if r.workerCtx.Err() != nil {
+			return
+		}
+		select {
+		case <-r.workerCtx.Done():
+			return
+		case ev, ok := <-r.ch:
+			if !ok {
+				return
+			}
+			r.process(ev)
+		}
 	}
 }
 
 func (r *RequestLogRecorder) process(ev RequestLogEvent) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.workerCtx, 10*time.Second)
 	defer cancel()
 
 	if err := r.repo.CreateWithTx(ctx, ev.Log, ev.Detail, ev.Attempts); err != nil {
@@ -86,11 +117,27 @@ func (r *RequestLogRecorder) process(ev RequestLogEvent) {
 	}
 }
 
-// Close 关闭队列并等待所有在飞事件处理完毕。幂等。
+// Close 停止接收新事件并取消 worker 正在执行的写库操作。
+// 停机优先于日志完整性：遗留队列被丢弃，避免 SQLite 卡顿令重启无限等待。
+// 幂等且与并发 Record 安全。
 func (r *RequestLogRecorder) Close() {
 	r.stopOnce.Do(func() {
-		close(r.stopCh)
+		r.mu.Lock()
+		r.closed = true
+		pending := len(r.ch)
 		close(r.ch)
+		if r.cancelWorkers != nil {
+			r.cancelWorkers()
+		}
+		r.mu.Unlock()
+		if pending > 0 {
+			r.dropped.Add(uint64(pending))
+			if r.logger != nil {
+				r.logger.Warn("服务停止，已丢弃未写入的请求日志事件",
+					slog.Int("dropped_on_shutdown", pending),
+				)
+			}
+		}
 		r.wg.Wait()
 	})
 }

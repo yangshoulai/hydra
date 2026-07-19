@@ -43,6 +43,8 @@ const (
 	SettingLogRetentionDays                = "log_retention_days"
 	SettingLogDebugEnabled                 = "log_debug_enabled"
 	SettingProxyRequestTimeout             = "proxy_request_timeout"
+	SettingProxyUpstreamHeaderTimeout      = "proxy_upstream_header_timeout"
+	SettingProxyStreamIdleTimeout          = "proxy_stream_idle_timeout"
 	SettingProxyKeepaliveInterval          = "proxy_keepalive_interval"
 	SettingProxyNonStreamKeepaliveEnabled  = "proxy_non_stream_keepalive_enabled"
 	SettingProxyNonStreamKeepaliveDelay    = "proxy_non_stream_keepalive_first_delay"
@@ -51,6 +53,7 @@ const (
 	SettingProxyMaxRetry                   = "proxy_max_retry"
 	SettingProxyLoadBalanceStrategy        = "proxy_load_balance_strategy"
 	SettingProxyMaxBodyBytes               = "proxy_max_body_bytes"
+	SettingProxyMaxResponseBytes           = "proxy_max_response_bytes"
 	SettingProxyRateLimitEnabled           = "proxy_rate_limit_enabled"
 	SettingProxyRateLimitGlobalRPS         = "proxy_rate_limit_global_rps"
 	SettingProxyRateLimitGlobalBurst       = "proxy_rate_limit_global_burst"
@@ -81,6 +84,9 @@ const (
 
 const (
 	DefaultProxyMaxBodyBytes                      = 50 * 1024 * 1024
+	DefaultProxyMaxResponseBytes                  = 50 * 1024 * 1024
+	DefaultProxyUpstreamHeaderTimeoutSeconds      = 60
+	DefaultProxyStreamIdleTimeoutSeconds          = 120
 	DefaultProxyRateLimitGlobalRPS                = 300
 	DefaultProxyRateLimitGlobalBurst              = 600
 	DefaultProxyRateLimitTokenRPS                 = 60

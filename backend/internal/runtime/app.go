@@ -166,8 +166,9 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 		runtimeLogger.Warn("添加请求日志清理任务失败", slog.String("error", err.Error()))
 	}
 
-	requestTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := settingService.GetProxyConfig(ctx)
+	requestTimeout, upstreamHeaderTimeout, streamIdleTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := settingService.GetProxyConfig(ctx)
 	nonStreamKeepalive := settingService.GetNonStreamKeepaliveConfig(ctx)
+	maxResponseBytes := settingService.GetProxyMaxResponseBytes(ctx)
 	requestLogRecorder := proxyService.NewRequestLogRecorder(runtimeLogger, repos.RequestLogRepo, 1024, 2)
 	proxySvc := proxyService.NewProxyService(
 		runtimeLogger,
@@ -180,7 +181,10 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 			MaxRetries:                   maxRetry,
 			RetryDelay:                   500 * time.Millisecond,
 			RequestTimeout:               requestTimeout,
+			UpstreamHeaderTimeout:        upstreamHeaderTimeout,
+			StreamIdleTimeout:            streamIdleTimeout,
 			StreamKeepaliveInterval:      keepaliveInterval,
+			MaxResponseBytes:             maxResponseBytes,
 			NonStreamKeepaliveEnabled:    nonStreamKeepalive.Enabled,
 			NonStreamKeepaliveFirstDelay: nonStreamKeepalive.FirstDelay,
 			NonStreamKeepaliveInterval:   nonStreamKeepalive.Interval,
@@ -287,6 +291,10 @@ func (a *App) Stop(ctx context.Context) error {
 
 		if err := a.Server.Shutdown(ctx); err != nil {
 			stopErr = err
+			// Shutdown 超时不会主动断开仍在执行的流连接；在释放 DB/代理资源前强制收尾。
+			if closeErr := a.Server.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+				a.Logger.Warn("强制关闭 HTTP 服务失败", slog.String("error", closeErr.Error()))
+			}
 		}
 
 		if a.Components.Services.ProxyService != nil {

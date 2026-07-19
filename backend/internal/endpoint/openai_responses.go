@@ -64,17 +64,22 @@ func (e *ResponsesEndpoint) ValidateResponse(statusCode int, body []byte) (bool,
 		return false, "invalid JSON response"
 	}
 
-	// OpenAI Response: 检查 output 字段
-	if output, ok := result["output"].([]any); !ok || len(output) <= 0 {
-		// 有 output 字段
-		if errMsg, ok := result["error"]; ok {
-			errBytes, _ := json.Marshal(errMsg)
-			return false, fmt.Sprintf("上游渠道异常: %s", string(errBytes))
-		}
-		responseBody, _ := json.Marshal(result)
-		return false, fmt.Sprintf("非法的响应报文: no choices or output (response: %s)", string(responseBody))
+	// 后台响应在 queued / in_progress 阶段允许 output 为空；这是 OpenAI Responses 的合法状态。
+	if output, ok := result["output"].([]any); ok && len(output) > 0 {
+		return true, ""
 	}
-	return true, ""
+	if id, ok := result["id"].(string); ok && id != "" {
+		if status, ok := result["status"].(string); ok && (status == "queued" || status == "in_progress") {
+			return true, ""
+		}
+	}
+
+	if errMsg, ok := result["error"]; ok {
+		errBytes, _ := json.Marshal(errMsg)
+		return false, fmt.Sprintf("上游渠道异常: %s", string(errBytes))
+	}
+	responseBody, _ := json.Marshal(result)
+	return false, fmt.Sprintf("非法的响应报文: no output (response: %s)", string(responseBody))
 }
 
 func (e *ResponsesEndpoint) ParseTokenUsage(_ []byte, responseBody string, isStream bool) (int64, int64) {

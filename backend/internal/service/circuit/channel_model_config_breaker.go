@@ -60,6 +60,9 @@ func (mb *ChannelModelConfigBreaker) RecordFailure() (oldState ModelConfigState,
 
 // IsAvailable 检查模型配置是否可用
 func (mb *ChannelModelConfigBreaker) IsAvailable() bool {
+	mb.mu.RLock()
+	defer mb.mu.RUnlock()
+
 	if mb.state == ModelConfigStateActive {
 		return true
 	}

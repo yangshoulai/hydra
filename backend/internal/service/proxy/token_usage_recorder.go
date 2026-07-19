@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/repository"
@@ -24,17 +25,21 @@ type tokenUsageEvent struct {
 // 设计目标：
 // - 控制 goroutine 数量，避免高 QPS 下无界增长
 // - 合并同时写三张表的数据库抖动到固定 worker
-// - 阻塞投递保证统计不丢
+// - 队列满时丢弃统计并告警，优先保障代理请求时延
 type TokenUsageRecorder struct {
 	logger          *slog.Logger
 	modelConfigRepo *repository.ChannelModelConfigRepository
 	channelKeyRepo  *repository.ChannelKeyRepository
 	accessTokenRepo *repository.AccessTokenRepository
 
-	ch       chan tokenUsageEvent
-	wg       sync.WaitGroup
-	stopCh   chan struct{}
-	stopOnce sync.Once
+	ch            chan tokenUsageEvent
+	wg            sync.WaitGroup
+	mu            sync.RWMutex
+	closed        bool
+	stopOnce      sync.Once
+	dropped       atomic.Uint64
+	workerCtx     context.Context
+	cancelWorkers context.CancelFunc
 }
 
 // NewTokenUsageRecorder 创建并启动 worker
@@ -51,13 +56,15 @@ func NewTokenUsageRecorder(
 	if workers <= 0 {
 		workers = 4
 	}
+	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 	r := &TokenUsageRecorder{
 		logger:          logger,
 		modelConfigRepo: modelConfigRepo,
 		channelKeyRepo:  channelKeyRepo,
 		accessTokenRepo: accessTokenRepo,
 		ch:              make(chan tokenUsageEvent, queueSize),
-		stopCh:          make(chan struct{}),
+		workerCtx:       workerCtx,
+		cancelWorkers:   cancelWorkers,
 	}
 	for i := 0; i < workers; i++ {
 		r.wg.Add(1)
@@ -66,27 +73,51 @@ func NewTokenUsageRecorder(
 	return r
 }
 
-// Record 阻塞投递事件。promptTokens 与 completionTokens 都为 0 时直接忽略。
-// 调用方应承受 channel 满载时的短暂阻塞；进程关闭后投递会被丢弃。
+// Record 非阻塞投递事件。promptTokens 与 completionTokens 都为 0 时直接忽略。
+// 队列满或关闭时丢弃统计，避免统计写入反压代理主链路。
 func (r *TokenUsageRecorder) Record(event tokenUsageEvent) {
 	if event.promptTokens == 0 && event.completionTokens == 0 {
 		return
 	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return
+	}
 	select {
 	case r.ch <- event:
-	case <-r.stopCh:
+	default:
+		dropped := r.dropped.Add(1)
+		if r.logger != nil && (dropped == 1 || dropped%100 == 0) {
+			r.logger.Warn("Token 统计队列已满，已丢弃统计事件",
+				slog.Uint64("dropped_total", dropped),
+				slog.Int("queue_capacity", cap(r.ch)),
+			)
+		}
 	}
 }
 
 func (r *TokenUsageRecorder) worker() {
 	defer r.wg.Done()
-	for ev := range r.ch {
-		r.process(ev)
+	for {
+		// Close 时优先退出，避免停机时在满队列上串行等待大量数据库超时。
+		if r.workerCtx.Err() != nil {
+			return
+		}
+		select {
+		case <-r.workerCtx.Done():
+			return
+		case ev, ok := <-r.ch:
+			if !ok {
+				return
+			}
+			r.process(ev)
+		}
 	}
 }
 
 func (r *TokenUsageRecorder) process(ev tokenUsageEvent) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.workerCtx, 5*time.Second)
 	defer cancel()
 
 	if ev.modelConfigID != 0 {
@@ -115,11 +146,27 @@ func (r *TokenUsageRecorder) process(ev tokenUsageEvent) {
 	}
 }
 
-// Close 关闭队列并等待所有在飞事件处理完毕。幂等。
+// Close 停止接收新事件并取消 worker 正在执行的写库操作。
+// 停机优先于统计完整性：遗留队列被丢弃，避免 SQLite 卡顿令重启无限等待。
+// 幂等且与并发 Record 安全。
 func (r *TokenUsageRecorder) Close() {
 	r.stopOnce.Do(func() {
-		close(r.stopCh)
+		r.mu.Lock()
+		r.closed = true
+		pending := len(r.ch)
 		close(r.ch)
+		if r.cancelWorkers != nil {
+			r.cancelWorkers()
+		}
+		r.mu.Unlock()
+		if pending > 0 {
+			r.dropped.Add(uint64(pending))
+			if r.logger != nil {
+				r.logger.Warn("服务停止，已丢弃未写入的 Token 统计事件",
+					slog.Int("dropped_on_shutdown", pending),
+				)
+			}
+		}
 		r.wg.Wait()
 	})
 }

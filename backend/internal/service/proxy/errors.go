@@ -23,6 +23,10 @@ var (
 	ErrEmptySniffResult = errors.New("empty sniff result")
 	// ErrResponseValidationFailed 响应校验失败
 	ErrResponseValidationFailed = errors.New("response validation failed")
+	// ErrUpstreamStreamIdle 上游流在空闲期限内未继续输出数据
+	ErrUpstreamStreamIdle = errors.New("upstream stream idle timeout")
+	// ErrUpstreamResponseTooLarge 非流式上游响应超过系统限制
+	ErrUpstreamResponseTooLarge = errors.New("upstream response body too large")
 	// ErrModelNotAllowedForToken 令牌无权访问模型
 	ErrModelNotAllowedForToken = errors.New("model not allowed for token")
 )

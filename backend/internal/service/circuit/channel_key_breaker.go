@@ -70,6 +70,9 @@ func (kb *ChannelKeyBreaker) RecordSoftFailure() (oldState KeyState, newState Ke
 
 // IsAvailable 检查 Key 是否可用
 func (kb *ChannelKeyBreaker) IsAvailable() bool {
+	kb.mu.RLock()
+	defer kb.mu.RUnlock()
+
 	state := kb.state
 	if state == KeyStateActive {
 		return true

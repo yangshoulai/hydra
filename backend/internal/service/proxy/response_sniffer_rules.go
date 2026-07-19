@@ -197,6 +197,18 @@ func (r *PlainTextErrorRule) analyze(body []byte, contentType string) (plainText
 	match := plainTextRuleMatch{
 		ContentType: normalizeContentType(contentType),
 	}
+	if looksLikeEventStreamContentType(match.ContentType) {
+		// SSE 渠道有时不返回标准 JSON error，而是 `data: unauthorized` 一类明文。
+		// 逐个 data payload 复用严格的短文本规则，避免把整个 SSE 帧格式当成业务内容。
+		for _, payload := range extractSSEDataPayloads(body) {
+			payloadMatch, matched := r.analyze([]byte(payload), "text/plain")
+			if matched {
+				payloadMatch.ContentType = match.ContentType
+				return payloadMatch, true
+			}
+		}
+		return match, false
+	}
 	if !isPlainTextCandidate(match.ContentType) {
 		return match, false
 	}

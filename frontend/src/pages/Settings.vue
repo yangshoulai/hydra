@@ -61,10 +61,30 @@
           <div class="setting-row">
             <div class="setting-row__info">
               <div class="setting-row__label">代理请求超时（秒）</div>
-              <div class="setting-row__desc">调用上游厂商接口的超时时间，0 表示不超时；大于 0 时超时后触发重试。</div>
+              <div class="setting-row__desc">整个上游调用的总时长，0 表示不设总时长限制；流式请求可持续输出。</div>
             </div>
             <div class="setting-row__control">
               <n-input-number v-model:value="formData.proxy_request_timeout" :min="0" :max="300" style="width: 100%" placeholder="0-300" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">上游响应头超时（秒）</div>
+              <div class="setting-row__desc">仅限制上游接受请求后迟迟未开始响应的等待时间；不限制正常持续输出的流，0 表示不限制。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.proxy_upstream_header_timeout" :min="0" :max="3600" style="width: 100%" placeholder="0-3600" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">流式上游空闲超时（秒）</div>
+              <div class="setting-row__desc">流开始前或过程中持续未收到上游任何数据时终止；正常持续输出的长流不受限制，0 表示不限制。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.proxy_stream_idle_timeout" :min="0" :max="3600" style="width: 100%" placeholder="0-3600" />
             </div>
           </div>
 
@@ -203,6 +223,16 @@
             </div>
             <div class="setting-row__control">
               <n-input-number v-model:value="formData.proxy_max_body_mb" :min="0" :max="1024" style="width: 100%" placeholder="0-1024" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">代理非流式响应上限（MB）</div>
+              <div class="setting-row__desc">限制完整读取的上游 JSON、图片等响应，避免异常渠道耗尽内存；0 表示不限制。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.proxy_max_response_mb" :min="0" :max="1024" style="width: 100%" placeholder="0-1024" />
             </div>
           </div>
 
@@ -609,6 +639,8 @@ interface SettingsData {
   circuit_breaker_cooling_duration: number
   proxy_network_url: string
   proxy_request_timeout: number
+  proxy_upstream_header_timeout: number
+  proxy_stream_idle_timeout: number
   proxy_keepalive_interval: number
   proxy_non_stream_keepalive_enabled: boolean
   proxy_non_stream_keepalive_first_delay: number
@@ -616,6 +648,7 @@ interface SettingsData {
   proxy_max_retry: number
   proxy_load_balance_strategy: 'weighted_random' | 'round_robin'
   proxy_max_body_mb: number
+  proxy_max_response_mb: number
   proxy_rate_limit_enabled: boolean
   proxy_rate_limit_global_rps: number
   proxy_rate_limit_global_burst: number
@@ -646,7 +679,6 @@ const showDebugModeConfirm = ref(false)
 const showNonStreamKeepaliveConfirm = ref(false)
 const showTelegramConfigModal = ref(false)
 const isConfirming = ref(false)
-const isConflictAdjusting = ref(false)
 const isTestingTelegram = ref(false)
 const snifferKeywords = ref('')
 const telegramDraft = ref({
@@ -662,7 +694,9 @@ const formData = ref<SettingsData>({
   circuit_breaker_failure_threshold: 3,
   circuit_breaker_cooling_duration: 60,
   proxy_network_url: '',
-  proxy_request_timeout: 120,
+  proxy_request_timeout: 0,
+  proxy_upstream_header_timeout: 60,
+  proxy_stream_idle_timeout: 120,
   proxy_keepalive_interval: 0,
   proxy_non_stream_keepalive_enabled: false,
   proxy_non_stream_keepalive_first_delay: 80,
@@ -670,6 +704,7 @@ const formData = ref<SettingsData>({
   proxy_max_retry: 3,
   proxy_load_balance_strategy: 'weighted_random',
   proxy_max_body_mb: 50,
+  proxy_max_response_mb: 50,
   proxy_rate_limit_enabled: true,
   proxy_rate_limit_global_rps: 300,
   proxy_rate_limit_global_burst: 600,
@@ -747,14 +782,6 @@ const parseNotificationEvents = (value?: string) => {
   }
 }
 
-const runSilentFormUpdate = (updater: () => void) => {
-  isConflictAdjusting.value = true
-  updater()
-  setTimeout(() => {
-    isConflictAdjusting.value = false
-  }, 0)
-}
-
 const loadSettings = async () => {
   isLoading.value = true
   loadError.value = ''
@@ -777,6 +804,12 @@ const loadSettings = async () => {
     }
     if (settings.proxy_request_timeout !== undefined) {
       formData.value.proxy_request_timeout = Math.max(0, parseInt(settings.proxy_request_timeout) || 0)
+    }
+    if (settings.proxy_upstream_header_timeout !== undefined) {
+      formData.value.proxy_upstream_header_timeout = Math.min(3600, Math.max(0, parseInt(settings.proxy_upstream_header_timeout) || 0))
+    }
+    if (settings.proxy_stream_idle_timeout !== undefined) {
+      formData.value.proxy_stream_idle_timeout = Math.min(3600, Math.max(0, parseInt(settings.proxy_stream_idle_timeout) || 0))
     }
     if (settings.proxy_keepalive_interval !== undefined) {
       formData.value.proxy_keepalive_interval = Math.min(120, Math.max(0, parseInt(settings.proxy_keepalive_interval) || 0))
@@ -807,6 +840,10 @@ const loadSettings = async () => {
     if (settings.proxy_max_body_bytes !== undefined) {
       const bytes = Math.max(0, parseInt(settings.proxy_max_body_bytes) || 0)
       formData.value.proxy_max_body_mb = Math.round(bytes / 1024 / 1024)
+    }
+    if (settings.proxy_max_response_bytes !== undefined) {
+      const bytes = Math.max(0, parseInt(settings.proxy_max_response_bytes) || 0)
+      formData.value.proxy_max_response_mb = Math.round(bytes / 1024 / 1024)
     }
     if (settings.proxy_rate_limit_enabled !== undefined) {
       formData.value.proxy_rate_limit_enabled = settings.proxy_rate_limit_enabled === 'true'
@@ -902,7 +939,7 @@ watch(debugModeEnabled, (newValue, oldValue) => {
 watch(
   () => formData.value.proxy_non_stream_keepalive_enabled,
   (newValue, oldValue) => {
-    if (isConfirming.value || isConflictAdjusting.value) return
+    if (isConfirming.value) return
     if (!newValue || oldValue === undefined) return
 
     isConfirming.value = true
@@ -911,56 +948,6 @@ watch(
     setTimeout(() => {
       isConfirming.value = false
     }, 0)
-  },
-)
-
-watch(
-  () => formData.value.sniffer_stream_enabled,
-  (newValue, oldValue) => {
-    if (isConfirming.value || isConflictAdjusting.value) return
-    if (!newValue || oldValue === undefined || formData.value.proxy_keepalive_interval <= 0) return
-
-    dialog.warning({
-      title: '启用流式响应嗅探',
-      content: '流式响应嗅探需要在转发前预读上游数据，与流式保活互斥。继续后将自动把“流式保活间隔”设置为 0。',
-      positiveText: '继续启用',
-      negativeText: '取消',
-      onPositiveClick: () => {
-        runSilentFormUpdate(() => {
-          formData.value.proxy_keepalive_interval = 0
-        })
-      },
-      onNegativeClick: () => {
-        runSilentFormUpdate(() => {
-          formData.value.sniffer_stream_enabled = oldValue
-        })
-      },
-    })
-  },
-)
-
-watch(
-  () => formData.value.proxy_keepalive_interval,
-  (newValue, oldValue) => {
-    if (isConfirming.value || isConflictAdjusting.value) return
-    if (newValue <= 0 || !formData.value.sniffer_stream_enabled) return
-
-    dialog.warning({
-      title: '启用流式保活',
-      content: '流式保活会提前向客户端发送保活帧，这会影响流式响应嗅探的预读与错误判定。继续后将自动关闭“流式响应嗅探”。',
-      positiveText: '继续启用',
-      negativeText: '取消',
-      onPositiveClick: () => {
-        runSilentFormUpdate(() => {
-          formData.value.sniffer_stream_enabled = false
-        })
-      },
-      onNegativeClick: () => {
-        runSilentFormUpdate(() => {
-          formData.value.proxy_keepalive_interval = oldValue ?? 0
-        })
-      },
-    })
   },
 )
 
@@ -1080,6 +1067,8 @@ const handleSave = async () => {
         circuit_breaker_cooling_duration: formData.value.circuit_breaker_cooling_duration.toString(),
         proxy_network_url: formData.value.proxy_network_url.trim(),
         proxy_request_timeout: formData.value.proxy_request_timeout.toString(),
+        proxy_upstream_header_timeout: Math.max(0, formData.value.proxy_upstream_header_timeout).toString(),
+        proxy_stream_idle_timeout: Math.max(0, formData.value.proxy_stream_idle_timeout).toString(),
         proxy_keepalive_interval: formData.value.proxy_keepalive_interval.toString(),
         proxy_non_stream_keepalive_enabled: formData.value.proxy_non_stream_keepalive_enabled.toString(),
         proxy_non_stream_keepalive_first_delay: Math.max(0, formData.value.proxy_non_stream_keepalive_first_delay).toString(),
@@ -1087,6 +1076,7 @@ const handleSave = async () => {
         proxy_max_retry: formData.value.proxy_max_retry.toString(),
         proxy_load_balance_strategy: formData.value.proxy_load_balance_strategy,
         proxy_max_body_bytes: Math.round(Math.max(0, formData.value.proxy_max_body_mb) * 1024 * 1024).toString(),
+        proxy_max_response_bytes: Math.round(Math.max(0, formData.value.proxy_max_response_mb) * 1024 * 1024).toString(),
         proxy_rate_limit_enabled: formData.value.proxy_rate_limit_enabled.toString(),
         proxy_rate_limit_global_rps: Math.max(0, formData.value.proxy_rate_limit_global_rps).toString(),
         proxy_rate_limit_global_burst: Math.max(0, formData.value.proxy_rate_limit_global_burst).toString(),

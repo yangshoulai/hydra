@@ -234,7 +234,7 @@ func (ps *ProxyService) handleNonStreamAttemptWithKeepalive(
 
 	bodyCh := make(chan nonStreamBodyResult)
 	go func(body io.ReadCloser) {
-		bodyBytes, readErr := io.ReadAll(body)
+		bodyBytes, readErr := readResponseBody(body, ps.getMaxResponseBytes())
 		_ = body.Close()
 		result := nonStreamBodyResult{body: bodyBytes, err: readErr}
 		select {

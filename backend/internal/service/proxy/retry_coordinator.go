@@ -181,22 +181,47 @@ func (rc *RetryCoordinator) ShouldRetry(proxyCtx *ProxyContext) bool {
 	return true
 }
 
-// RecordAttempt 记录一次尝试
-func (rc *RetryCoordinator) RecordAttempt(proxyCtx *ProxyContext, channelID uint, channelName string, modelConfigID uint, keyID uint, err error, failureType FailureType) {
+// RecordAttempt 记录一次失败尝试，并按故障归因排除最小路由单元。
+//
+// Key / ModelConfig 故障不能排除整个 Channel，否则同渠道的备用 Key
+// 或其它模型映射永远没有机会参与重试。只有无法归因的故障才退化为
+// 排除整个 Channel，避免反复命中完全相同的异常路由。
+func (rc *RetryCoordinator) RecordAttempt(
+	proxyCtx *ProxyContext,
+	channelID uint,
+	channelName string,
+	modelConfigID uint,
+	keyID uint,
+	err error,
+	failureType FailureType,
+	failureScope FailureScope,
+) {
 	proxyCtx.AttemptCount++
 	proxyCtx.LastError = err
 	proxyCtx.LastFailureType = failureType
+	proxyCtx.LastFailureScope = failureScope
 	proxyCtx.LastFailureStage = ""
 
-	// 记录失败的 Channel
-	if !rc.containsChannel(proxyCtx.FailedChannelIDs, channelID) {
-		proxyCtx.FailedChannelIDs = append(proxyCtx.FailedChannelIDs, channelID)
-	}
-	if modelConfigID != 0 && !rc.containsUint(proxyCtx.FailedModelIDs, modelConfigID) {
-		proxyCtx.FailedModelIDs = append(proxyCtx.FailedModelIDs, modelConfigID)
-	}
-	if keyID != 0 && !rc.containsUint(proxyCtx.FailedKeyIDs, keyID) {
-		proxyCtx.FailedKeyIDs = append(proxyCtx.FailedKeyIDs, keyID)
+	switch failureScope {
+	case FailureScopeKey:
+		if keyID != 0 && !rc.containsUint(proxyCtx.FailedKeyIDs, keyID) {
+			proxyCtx.FailedKeyIDs = append(proxyCtx.FailedKeyIDs, keyID)
+		}
+	case FailureScopeModelConfig:
+		if modelConfigID != 0 && !rc.containsUint(proxyCtx.FailedModelIDs, modelConfigID) {
+			proxyCtx.FailedModelIDs = append(proxyCtx.FailedModelIDs, modelConfigID)
+		}
+	case FailureScopeBoth:
+		if modelConfigID != 0 && !rc.containsUint(proxyCtx.FailedModelIDs, modelConfigID) {
+			proxyCtx.FailedModelIDs = append(proxyCtx.FailedModelIDs, modelConfigID)
+		}
+		if keyID != 0 && !rc.containsUint(proxyCtx.FailedKeyIDs, keyID) {
+			proxyCtx.FailedKeyIDs = append(proxyCtx.FailedKeyIDs, keyID)
+		}
+	default:
+		if channelID != 0 && !rc.containsUint(proxyCtx.FailedChannelIDs, channelID) {
+			proxyCtx.FailedChannelIDs = append(proxyCtx.FailedChannelIDs, channelID)
+		}
 	}
 
 	if rc.isDebugEnabled() {
@@ -208,6 +233,7 @@ func (rc *RetryCoordinator) RecordAttempt(proxyCtx *ProxyContext, channelID uint
 			slog.Uint64("model_config_id", uint64(modelConfigID)),
 			slog.Uint64("key_id", uint64(keyID)),
 			slog.String("failure_type", string(failureType)),
+			slog.String("failure_scope", string(failureScope)),
 			slog.Int("failed_channels_count", len(proxyCtx.FailedChannelIDs)),
 			slog.Int("failed_models_count", len(proxyCtx.FailedModelIDs)),
 			slog.Int("failed_keys_count", len(proxyCtx.FailedKeyIDs)),
@@ -250,16 +276,7 @@ func (rc *RetryCoordinator) calculateDelay(attemptCount int) time.Duration {
 	return rc.retryDelay * time.Duration(multiplier)
 }
 
-// containsChannel 检查 Channel ID 是否已存在
-func (rc *RetryCoordinator) containsChannel(channelIDs []uint, channelID uint) bool {
-	for _, id := range channelIDs {
-		if id == channelID {
-			return true
-		}
-	}
-	return false
-}
-
+// containsUint 检查 ID 是否已存在。
 func (rc *RetryCoordinator) containsUint(ids []uint, target uint) bool {
 	for _, id := range ids {
 		if id == target {

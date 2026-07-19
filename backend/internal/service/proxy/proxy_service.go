@@ -76,6 +76,8 @@ type ProxyService struct {
 	nonStreamSnifferEnabled           bool
 	streamSniffPacketCount            int
 	debugModeEnabled                  atomic.Bool
+	streamIdleNanos                   atomic.Int64
+	maxResponseBytes                  atomic.Int64
 	streamKeepaliveNanos              atomic.Int64
 	nonStreamKeepaliveEnabled         atomic.Bool
 	nonStreamKeepaliveFirstDelayNanos atomic.Int64
@@ -87,7 +89,10 @@ type ProxyServiceConfig struct {
 	MaxRetries                   int
 	RetryDelay                   time.Duration
 	RequestTimeout               time.Duration
+	UpstreamHeaderTimeout        time.Duration
+	StreamIdleTimeout            time.Duration
 	StreamKeepaliveInterval      time.Duration
+	MaxResponseBytes             int64
 	NonStreamKeepaliveEnabled    bool
 	NonStreamKeepaliveFirstDelay time.Duration
 	NonStreamKeepaliveInterval   time.Duration
@@ -114,6 +119,7 @@ func NewProxyService(
 ) *ProxyService {
 	httpClientConfig := DefaultHTTPClientConfig()
 	httpClientConfig.RequestTimeout = config.RequestTimeout
+	httpClientConfig.ResponseHeaderTimeout = config.UpstreamHeaderTimeout
 	httpClientConfig.UpstreamProxyURL = config.NetworkProxy
 
 	retryDelay := 500 * time.Millisecond
@@ -151,6 +157,8 @@ func NewProxyService(
 		streamSniffPacketCount:  normalizeStreamSniffPacketCount(snifferCfg.StreamPacketCount),
 	}
 	svc.debugModeEnabled.Store(settingService.GetBool(context.Background(), models.SettingLogDebugEnabled, false))
+	svc.updateStreamIdleTimeout(config.StreamIdleTimeout)
+	svc.updateMaxResponseBytes(config.MaxResponseBytes)
 	svc.updateStreamKeepaliveInterval(config.StreamKeepaliveInterval)
 	svc.updateNonStreamKeepaliveConfig(
 		config.NonStreamKeepaliveEnabled,
@@ -284,20 +292,26 @@ func (ps *ProxyService) reloadLoggingConfig(ctx context.Context) {
 }
 
 func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
-	requestTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := ps.settingService.GetProxyConfig(ctx)
+	requestTimeout, upstreamHeaderTimeout, streamIdleTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := ps.settingService.GetProxyConfig(ctx)
 	nonStreamKeepalive := ps.settingService.GetNonStreamKeepaliveConfig(ctx)
 	maxBodyBytes := ps.settingService.GetProxyMaxBodyBytes(ctx)
+	maxResponseBytes := ps.settingService.GetProxyMaxResponseBytes(ctx)
 	rateLimitConfig := ps.settingService.GetProxyRateLimitConfig(ctx)
 	retryDelay := 500 * time.Millisecond
 
 	ps.httpClient.UpdateRequestTimeout(requestTimeout)
+	ps.httpClient.UpdateResponseHeaderTimeout(upstreamHeaderTimeout)
 	ps.httpClient.UpdateUpstreamProxyURL(networkProxyURL)
 	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
+	ps.updateStreamIdleTimeout(streamIdleTimeout)
+	ps.updateMaxResponseBytes(maxResponseBytes)
 	ps.updateStreamKeepaliveInterval(keepaliveInterval)
 	ps.updateNonStreamKeepaliveConfig(nonStreamKeepalive.Enabled, nonStreamKeepalive.FirstDelay, nonStreamKeepalive.Interval)
 
 	ps.logger.Info("代理服务配置已更新",
 		slog.Duration("request_timeout", requestTimeout),
+		slog.Duration("upstream_header_timeout", upstreamHeaderTimeout),
+		slog.Duration("stream_idle_timeout", streamIdleTimeout),
 		slog.Duration("stream_keepalive_interval", keepaliveInterval),
 		slog.Bool("non_stream_keepalive_enabled", nonStreamKeepalive.Enabled),
 		slog.Duration("non_stream_keepalive_first_delay", nonStreamKeepalive.FirstDelay),
@@ -307,6 +321,7 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 		slog.String("route_selection_strategy", "model_config_weighted_random"),
 		slog.String("configured_load_balance_strategy", loadBalanceStrategy),
 		slog.Int64("max_body_bytes", maxBodyBytes),
+		slog.Int64("max_response_bytes", maxResponseBytes),
 		slog.Bool("rate_limit_enabled", rateLimitConfig.Enabled),
 		slog.Int("rate_limit_global_rps", rateLimitConfig.GlobalRPS),
 		slog.Int("rate_limit_token_rps", rateLimitConfig.TokenRPS),
@@ -352,6 +367,25 @@ func (ps *ProxyService) isDebugModeEnabled() bool {
 
 func (ps *ProxyService) updateStreamKeepaliveInterval(interval time.Duration) {
 	ps.streamKeepaliveNanos.Store(int64(normalizeStreamKeepaliveInterval(interval)))
+}
+
+func (ps *ProxyService) updateStreamIdleTimeout(timeout time.Duration) {
+	ps.streamIdleNanos.Store(int64(normalizeStreamIdleTimeout(timeout)))
+}
+
+func (ps *ProxyService) getStreamIdleTimeout() time.Duration {
+	return time.Duration(ps.streamIdleNanos.Load())
+}
+
+func (ps *ProxyService) updateMaxResponseBytes(limit int64) {
+	if limit < 0 {
+		limit = int64(models.DefaultProxyMaxResponseBytes)
+	}
+	ps.maxResponseBytes.Store(limit)
+}
+
+func (ps *ProxyService) getMaxResponseBytes() int64 {
+	return ps.maxResponseBytes.Load()
 }
 
 func (ps *ProxyService) getStreamKeepaliveInterval() time.Duration {

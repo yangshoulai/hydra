@@ -227,8 +227,9 @@ func (ps *ProxyService) captureUpstreamResponse(attempt *AttemptRecord, resp *ht
 	if !readBody {
 		return
 	}
-	// 读完后 body 已消耗，后续 drainAndCloseBody 无副作用
-	attempt.UpstreamResponseBody = readAndCloseBody(resp)
+	// 读完后 body 已消耗，后续 drainAndCloseBody 无副作用。
+	// 调试采集同样必须受响应体上限保护。
+	attempt.UpstreamResponseBody = readAndCloseBody(resp, ps.getMaxResponseBytes())
 }
 
 // retryOrFail 封装 tryScheduleRetry 的两种返回，供 attemptOnce 简洁上抛
@@ -284,23 +285,20 @@ func (ps *ProxyService) handleStreamUpstream(
 
 	snifferEnabled, streamPacketCount := ps.getStreamSnifferConfig()
 	probeFirstChunkMS := 0
-	if snifferEnabled {
+	// 假 200 规则按 SSE data 帧解析；NDJSON / stream+json 不应误按 data: 等待。
+	if snifferEnabled && isSSEContentType(upstreamResp.Header.Get("Content-Type")) {
 		probePayload, firstChunkMS, probeErr := ps.readStreamSniffPayload(upstreamResp, streamPacketCount, proxyCtx.TraceID)
 		if emptyErr, ok := probeErr.(*EmptySSEBodyError); ok {
-			ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeNone, stageStreamProbe, emptyErr.Error())
-			return NewRetryableProxyError(emptyErr, FailureTypeSoft, FailureScopeNone, "空流式响应")
+			ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeModelConfig, stageStreamProbe, emptyErr.Error())
+			return NewRetryableProxyError(emptyErr, FailureTypeSoft, FailureScopeModelConfig, "空流式响应")
 		}
 		if probeErr != nil {
 			if isClientCancelled(c, probeErr) {
 				ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 				return ps.markClientCancelled(c, proxyCtx, probeErr)
 			}
-			ps.logTraceDebug(proxyCtx.TraceID, "流式嗅探预读失败", slog.String("error", probeErr.Error()))
-			proxyCtx.LastError = probeErr
-			proxyCtx.LastFailureStage = stageStreamProbe
-			ps.finalizeAttempt(attempt, upstreamResp, false, probeErr.Error())
-			ps.recordRequestMetrics(false, proxyCtx.Model, routeResult, 0, 0)
-			return probeErr
+			ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeModelConfig, stageStreamProbe, probeErr.Error())
+			return NewRetryableProxyError(probeErr, FailureTypeSoft, FailureScopeModelConfig, "流式嗅探预读失败")
 		}
 		probeFirstChunkMS = firstChunkMS
 
@@ -327,14 +325,21 @@ func (ps *ProxyService) handleStreamUpstream(
 	forwardResult, forwardErr := ps.responseForwarder.ForwardStreamResponse(
 		c,
 		upstreamResp,
+		routeResult.ChannelModel,
+		routeResult.Model,
 		proxyCtx.TraceID,
 		ps.getStreamKeepaliveInterval(),
+		ps.getStreamIdleTimeout(),
 	)
 	if emptyErr, ok := forwardErr.(*EmptySSEBodyError); ok {
-		ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeNone, stageStreamForward, emptyErr.Error())
-		return NewRetryableProxyError(emptyErr, FailureTypeSoft, FailureScopeNone, "空流式响应")
+		ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeModelConfig, stageStreamForward, emptyErr.Error())
+		return NewRetryableProxyError(emptyErr, FailureTypeSoft, FailureScopeModelConfig, "空流式响应")
 	}
 	if forwardErr != nil {
+		if errors.Is(forwardErr, ErrUpstreamStreamIdle) && forwardResult != nil && !forwardResult.ResponseCommitted {
+			ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeModelConfig, stageStreamForward, forwardErr.Error())
+			return NewRetryableProxyError(forwardErr, FailureTypeSoft, FailureScopeModelConfig, "流式首包超时")
+		}
 		if isClientCancelled(c, forwardErr) {
 			ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 			return ps.markClientCancelled(c, proxyCtx, forwardErr)
@@ -351,12 +356,17 @@ func (ps *ProxyService) handleStreamUpstream(
 		return NewRetryableProxyError(ErrEmptySniffResult, FailureTypeSoft, FailureScopeNone, "流式转发结果为空")
 	}
 
-	// 成功：流式场景下上游 body 与客户端响应 body 相同
+	// 成功：流式场景下上游 body 与客户端响应 body 相同。
+	// 长流只保存尾部用于 token 统计，调试记录明确标识这一降级，避免日志采集耗尽内存。
+	debugResponseBody := forwardResult.ResponseBody
+	if forwardResult.ResponseBodyTruncated {
+		debugResponseBody = formatTruncatedStreamCapture(debugResponseBody)
+	}
 	if attempt != nil && ps.isDebugModeEnabled() {
-		attempt.UpstreamResponseBody = []byte(forwardResult.ResponseBody)
+		attempt.UpstreamResponseBody = []byte(debugResponseBody)
 	}
 	if ps.isDebugModeEnabled() {
-		proxyCtx.ResponseBody = []byte(forwardResult.ResponseBody)
+		proxyCtx.ResponseBody = []byte(debugResponseBody)
 	}
 	ps.finalizeAttempt(attempt, upstreamResp, true, "")
 
@@ -387,18 +397,14 @@ func (ps *ProxyService) handleNonStreamUpstream(
 	attempt := proxyCtx.CurrentAttempt()
 	defer func() { _ = upstreamResp.Body.Close() }()
 
-	body, readErr := io.ReadAll(upstreamResp.Body)
+	body, readErr := readResponseBody(upstreamResp.Body, ps.getMaxResponseBytes())
 	if readErr != nil {
 		if isClientCancelled(c, readErr) {
 			ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 			return ps.markClientCancelled(c, proxyCtx, readErr)
 		}
-		ps.logTraceDebug(proxyCtx.TraceID, "读取非流式响应失败", slog.String("error", readErr.Error()))
-		proxyCtx.LastError = readErr
-		proxyCtx.LastFailureStage = stageNonStreamRead
-		ps.finalizeAttempt(attempt, upstreamResp, false, readErr.Error())
-		ps.recordRequestMetrics(false, proxyCtx.Model, routeResult, 0, 0)
-		return readErr
+		ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeModelConfig, stageNonStreamRead, readErr.Error())
+		return NewRetryableProxyError(readErr, FailureTypeSoft, FailureScopeModelConfig, "读取非流式响应失败")
 	}
 
 	// body 拿到即为原始上游响应，attach 到 attempt（仅调试模式保留）
@@ -493,32 +499,34 @@ func (ps *ProxyService) readStreamSniffPayload(
 	firstChunkSeen := false
 
 	const maxProbeBytes = 256 * 1024
-	buf := make([]byte, 1)
+	buf := make([]byte, 4*1024)
 	payload := make([]byte, 0, 4096)
 	var lineBuffer bytes.Buffer
 	packetRead := 0
 
 	for packetRead < packetCount {
-		n, readErr := upstreamResp.Body.Read(buf)
+		n, readErr := readStreamChunkWithIdleTimeout(upstreamResp.Body, buf, ps.getStreamIdleTimeout())
 		if n > 0 {
 			if !firstChunkSeen {
 				firstChunkSeen = true
 				firstChunkMS = int(time.Since(startTime).Milliseconds())
 			}
 
-			ch := buf[0]
-			payload = append(payload, ch)
-			lineBuffer.WriteByte(ch)
-			if ch == '\n' {
-				line := strings.TrimSpace(lineBuffer.String())
-				if strings.HasPrefix(line, "data:") {
-					packetRead++
+			part := buf[:n]
+			payload = append(payload, part...)
+			for _, ch := range part {
+				lineBuffer.WriteByte(ch)
+				if ch == '\n' {
+					line := strings.TrimSpace(lineBuffer.String())
+					if strings.HasPrefix(line, "data:") {
+						packetRead++
+					}
+					lineBuffer.Reset()
 				}
-				lineBuffer.Reset()
 			}
 
-			if len(payload) >= maxProbeBytes {
-				break
+			if len(payload) >= maxProbeBytes && packetRead < packetCount {
+				return nil, firstChunkMS, NewUpstreamCallError("stream sniff probe exceeded 256 KiB before enough data events")
 			}
 		}
 
@@ -530,10 +538,10 @@ func (ps *ProxyService) readStreamSniffPayload(
 		}
 	}
 
-	if len(payload) == 0 {
+	if len(payload) == 0 || packetRead == 0 {
 		return nil, firstChunkMS, &EmptySSEBodyError{
 			TraceID: traceID,
-			Message: "空流式响应体",
+			Message: "流式响应未包含 data 事件",
 		}
 	}
 
@@ -572,7 +580,16 @@ func (ps *ProxyService) tryScheduleRetry(
 	stage string,
 ) bool {
 	ps.recordFailure(routeResult, failureType, failureScope, err.Error(), proxyCtx.TraceID)
-	ps.retryCoordinator.RecordAttempt(proxyCtx, routeResult.Channel.ID, routeResult.Channel.Name, routeResult.ModelConfigID, routeResult.Key.ID, err, failureType)
+	ps.retryCoordinator.RecordAttempt(
+		proxyCtx,
+		routeResult.Channel.ID,
+		routeResult.Channel.Name,
+		routeResult.ModelConfigID,
+		routeResult.Key.ID,
+		err,
+		failureType,
+		failureScope,
+	)
 	proxyCtx.LastError = err
 	proxyCtx.LastFailureType = failureType
 	proxyCtx.LastFailureScope = failureScope

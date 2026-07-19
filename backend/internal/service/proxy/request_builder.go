@@ -99,8 +99,12 @@ func (rb *RequestBuilder) copyHeaders(src *http.Request, dst *http.Request) {
 		if _, skip := hopByHop[lowerKey]; skip {
 			continue
 		}
-		// 不转发 Authorization，避免覆盖上游 Key
-		if lowerKey == "authorization" {
+		// 不转发客户端的鉴权头，避免 Hydra Access Token 覆盖渠道 Key
+		// 或被第三方上游优先读取而导致鉴权失败。
+		if lowerKey == "authorization" ||
+			lowerKey == "x-api-key" ||
+			lowerKey == "x-goog-api-key" ||
+			lowerKey == "api-key" {
 			continue
 		}
 		// 不转发 Host/Content-Length，交由 http.Client 自行处理

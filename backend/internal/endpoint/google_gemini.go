@@ -51,10 +51,9 @@ func (e *GeminiEndpoint) ConfigureTestRequest(req *http.Request, apiKey string, 
 	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
 		query := req.URL.Query()
-		if query.Get("key") == "" {
-			query.Set("key", apiKey)
-			req.URL.RawQuery = query.Encode()
-		}
+		// 入站 key 属于 Hydra 访问凭证或客户端残留参数，绝不能带到上游。
+		query.Set("key", apiKey)
+		req.URL.RawQuery = query.Encode()
 		req.Header.Set("X-Goog-Api-Key", apiKey)
 	}
 	action := extractGeminiAction(req.URL.Path)
@@ -75,15 +74,20 @@ func (e *GeminiEndpoint) ValidateResponse(statusCode int, body []byte) (bool, st
 	}
 
 	candidates, ok := result["candidates"].([]any)
-	if !ok || len(candidates) == 0 {
-		if errMsg, ok := result["error"]; ok {
-			errBytes, _ := json.Marshal(errMsg)
-			return false, fmt.Sprintf("上游渠道异常: %s", string(errBytes))
-		}
-		responseBody, _ := json.Marshal(result)
-		return false, fmt.Sprintf("非法的响应报文: no candidates (response: %s)", string(responseBody))
+	if ok && len(candidates) > 0 {
+		return true, ""
 	}
-	return true, ""
+
+	// Gemini 在提示词被安全策略拦截时可合法返回 promptFeedback 而没有 candidates。
+	if feedback, ok := result["promptFeedback"].(map[string]any); ok && len(feedback) > 0 {
+		return true, ""
+	}
+	if errMsg, ok := result["error"]; ok {
+		errBytes, _ := json.Marshal(errMsg)
+		return false, fmt.Sprintf("上游渠道异常: %s", string(errBytes))
+	}
+	responseBody, _ := json.Marshal(result)
+	return false, fmt.Sprintf("非法的响应报文: no candidates or promptFeedback (response: %s)", string(responseBody))
 }
 
 func (e *GeminiEndpoint) ParseTokenUsage(_ []byte, responseBody string, isStream bool) (int64, int64) {
@@ -102,10 +106,9 @@ func (e *GeminiEndpoint) ConfigureRequest(req *http.Request, apiKey string, mode
 	}
 	if apiKey != "" {
 		query := req.URL.Query()
-		if query.Get("key") == "" {
-			query.Set("key", apiKey)
-			req.URL.RawQuery = query.Encode()
-		}
+		// 入站 key 可能是 Hydra 访问凭证或客户端残留参数，必须由渠道 Key 覆盖。
+		query.Set("key", apiKey)
+		req.URL.RawQuery = query.Encode()
 		req.Header.Set("X-Goog-Api-Key", apiKey)
 	}
 
