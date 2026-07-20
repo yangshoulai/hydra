@@ -100,6 +100,59 @@ func isSSEContentType(contentType string) bool {
 	return strings.EqualFold(mediaType, "text/event-stream")
 }
 
+// sseEventBoundaryTracker tracks whether the bytes already written to the
+// client end at a complete SSE event boundary. A keepalive comment is only
+// safe at that boundary: inserting it into a partially written data: line
+// turns the comment's newline into a premature end of that JSON payload.
+//
+// A trailing CR is deliberately kept unsafe until its following byte arrives.
+// This preserves CRLF as one line ending instead of inserting a comment
+// between the CR and LF.
+type sseEventBoundaryTracker struct {
+	lineEmpty       bool
+	atEventBoundary bool
+	pendingCR       bool
+	pendingBoundary bool
+}
+
+func newSSEEventBoundaryTracker() *sseEventBoundaryTracker {
+	return &sseEventBoundaryTracker{
+		lineEmpty:       true,
+		atEventBoundary: true,
+	}
+}
+
+func (t *sseEventBoundaryTracker) Observe(part []byte) {
+	for _, ch := range part {
+		if t.pendingCR {
+			t.pendingCR = false
+			t.atEventBoundary = t.pendingBoundary
+			if ch == '\n' {
+				// The LF completes the prior CRLF line ending.
+				continue
+			}
+		}
+
+		switch ch {
+		case '\r':
+			t.pendingCR = true
+			t.pendingBoundary = t.lineEmpty
+			t.atEventBoundary = false
+			t.lineEmpty = true
+		case '\n':
+			t.atEventBoundary = t.lineEmpty
+			t.lineEmpty = true
+		default:
+			t.atEventBoundary = false
+			t.lineEmpty = false
+		}
+	}
+}
+
+func (t *sseEventBoundaryTracker) CanWriteKeepalive() bool {
+	return t != nil && t.atEventBoundary && !t.pendingCR
+}
+
 func (rf *ResponseForwarder) prepareNonStreamBody(
 	upstreamResp *http.Response,
 	body []byte,
@@ -228,6 +281,10 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 	}
 	c.Header("X-Accel-Buffering", "no")
 	enableSSEKeepalive := shouldSendSSEKeepalive(c.Writer.Header().Get("Content-Type"))
+	var sseBoundary *sseEventBoundaryTracker
+	if enableSSEKeepalive {
+		sseBoundary = newSSEEventBoundaryTracker()
+	}
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
@@ -353,8 +410,12 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 			c.Status(upstreamResp.StatusCode)
 			responseCommitted = true
 		}
-		if _, err := c.Writer.Write(part); err != nil {
+		written, err := c.Writer.Write(part)
+		if err != nil {
 			return err
+		}
+		if sseBoundary != nil && written > 0 {
+			sseBoundary.Observe(part[:written])
 		}
 		flusher.Flush()
 		capture.Write(part)
@@ -367,10 +428,19 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 		case <-c.Request.Context().Done():
 			return buildResult(), c.Request.Context().Err()
 		case <-keepaliveC:
-			if _, err := c.Writer.Write([]byte(": keepalive\n\n")); err != nil {
-				return buildResult(), err
+			// Body.Read boundaries are arbitrary. Sending a comment while a data:
+			// line is incomplete would terminate that line and corrupt its JSON.
+			if sseBoundary.CanWriteKeepalive() {
+				keepalive := []byte(": keepalive\n\n")
+				written, err := c.Writer.Write(keepalive)
+				if err != nil {
+					return buildResult(), err
+				}
+				if written > 0 {
+					sseBoundary.Observe(keepalive[:written])
+				}
+				flusher.Flush()
 			}
-			flusher.Flush()
 			resetKeepaliveTimer()
 		case <-idleC:
 			// Close 会中断 net/http Body.Read，确保 reader goroutine 不会永久卡住。

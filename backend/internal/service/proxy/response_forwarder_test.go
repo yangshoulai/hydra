@@ -84,6 +84,143 @@ func TestShouldSendSSEKeepalive(t *testing.T) {
 	}
 }
 
+func TestSSEEventBoundaryTrackerWaitsForCompleteEventBoundary(t *testing.T) {
+	tracker := newSSEEventBoundaryTracker()
+	if !tracker.CanWriteKeepalive() {
+		t.Fatal("a new stream should be safe before any payload is written")
+	}
+
+	tracker.Observe([]byte("data: {\"message\":\"partial"))
+	if tracker.CanWriteKeepalive() {
+		t.Fatal("a partial data line must not allow a keepalive")
+	}
+
+	tracker.Observe([]byte(" value\"}\r"))
+	if tracker.CanWriteKeepalive() {
+		t.Fatal("a trailing CR must wait for its possible LF")
+	}
+	tracker.Observe([]byte("\n"))
+	if tracker.CanWriteKeepalive() {
+		t.Fatal("the first CRLF only ends the data line, not the SSE event")
+	}
+	tracker.Observe([]byte("\r\n"))
+	if !tracker.CanWriteKeepalive() {
+		t.Fatal("a completed blank line should allow a keepalive")
+	}
+}
+
+func TestForwardStreamResponseDoesNotInsertKeepaliveIntoPartialSSEData(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	first := []byte("data: {\"message\":\"partial")
+	second := []byte(" value\"}\n\n")
+	body := newDelayedStreamReadCloser(first, second)
+	upstreamResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       body,
+	}
+
+	type forwardResult struct {
+		result *StreamForwardResult
+		err    error
+	}
+	resultCh := make(chan forwardResult, 1)
+	go func() {
+		result, err := NewResponseForwarder(slog.New(slog.NewTextHandler(io.Discard, nil))).ForwardStreamResponse(
+			c, upstreamResp, "same-model", "same-model", "trace", 10*time.Millisecond, 0,
+		)
+		resultCh <- forwardResult{result: result, err: err}
+	}()
+	defer body.Release()
+
+	select {
+	case <-body.firstRead:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not read the first partial SSE payload")
+	}
+	// Give the keepalive timer multiple opportunities to fire while the SSE data
+	// line is incomplete. It must not inject a comment into that line.
+	time.Sleep(80 * time.Millisecond)
+	body.Release()
+
+	select {
+	case forwarded := <-resultCh:
+		if forwarded.err != nil {
+			t.Fatalf("ForwardStreamResponse: %v", forwarded.err)
+		}
+		if forwarded.result == nil {
+			t.Fatal("ForwardStreamResponse returned a nil result")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stream did not finish after the remaining payload was released")
+	}
+
+	if got, want := recorder.Body.String(), string(append(first, second...)); got != want {
+		t.Fatalf("forwarded body = %q, want %q", got, want)
+	}
+}
+
+func TestForwardStreamResponseKeepsAliveBetweenCompleteSSEEvents(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	first := []byte("data: {\"part\":1}\n\n")
+	second := []byte("data: {\"part\":2}\n\n")
+	body := newDelayedStreamReadCloser(first, second)
+	upstreamResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       body,
+	}
+
+	type forwardResult struct {
+		result *StreamForwardResult
+		err    error
+	}
+	resultCh := make(chan forwardResult, 1)
+	go func() {
+		result, err := NewResponseForwarder(slog.New(slog.NewTextHandler(io.Discard, nil))).ForwardStreamResponse(
+			c, upstreamResp, "same-model", "same-model", "trace", 10*time.Millisecond, 0,
+		)
+		resultCh <- forwardResult{result: result, err: err}
+	}()
+	defer body.Release()
+
+	select {
+	case <-body.firstRead:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not read the first SSE event")
+	}
+	time.Sleep(80 * time.Millisecond)
+	body.Release()
+
+	select {
+	case forwarded := <-resultCh:
+		if forwarded.err != nil {
+			t.Fatalf("ForwardStreamResponse: %v", forwarded.err)
+		}
+		if forwarded.result == nil {
+			t.Fatal("ForwardStreamResponse returned a nil result")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stream did not finish after the remaining event was released")
+	}
+
+	got := recorder.Body.String()
+	if !strings.Contains(got, string(first)) || !strings.Contains(got, string(second)) {
+		t.Fatalf("forwarded body should retain both SSE events: %q", got)
+	}
+	if !strings.Contains(got, ": keepalive\n\n") {
+		t.Fatalf("forwarded body should contain a keepalive between complete events: %q", got)
+	}
+}
+
 func TestForwardStreamResponseDoesNotCommitBeforeFirstPayload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
@@ -202,5 +339,47 @@ func (r *blockingReadCloser) Read(_ []byte) (int, error) {
 
 func (r *blockingReadCloser) Close() error {
 	r.once.Do(func() { close(r.done) })
+	return nil
+}
+
+type delayedStreamReadCloser struct {
+	first     []byte
+	second    []byte
+	readCount int
+	firstRead chan struct{}
+	release   chan struct{}
+	once      sync.Once
+}
+
+func newDelayedStreamReadCloser(first, second []byte) *delayedStreamReadCloser {
+	return &delayedStreamReadCloser{
+		first:     first,
+		second:    second,
+		firstRead: make(chan struct{}),
+		release:   make(chan struct{}),
+	}
+}
+
+func (r *delayedStreamReadCloser) Read(p []byte) (int, error) {
+	switch r.readCount {
+	case 0:
+		r.readCount++
+		close(r.firstRead)
+		return copy(p, r.first), nil
+	case 1:
+		<-r.release
+		r.readCount++
+		return copy(p, r.second), nil
+	default:
+		return 0, io.EOF
+	}
+}
+
+func (r *delayedStreamReadCloser) Release() {
+	r.once.Do(func() { close(r.release) })
+}
+
+func (r *delayedStreamReadCloser) Close() error {
+	r.Release()
 	return nil
 }
