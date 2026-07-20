@@ -376,6 +376,10 @@ func (ps *ProxyService) handleStreamUpstream(
 		return NewRetryableProxyError(emptyErr, FailureTypeSoft, FailureScopeModelConfig, "空流式响应")
 	}
 	if forwardErr != nil {
+		// ForwardStreamResponse may already have written bytes when an upstream
+		// read fails or the client disconnects. Persist that tail before taking
+		// the failure path so debug details do not falsely show a 0 B response.
+		ps.captureStreamForwardDebugResponse(proxyCtx, attempt, forwardResult)
 		if ps.isTotalBudgetExceeded(c, proxyCtx, forwardErr) {
 			ps.finalizeAttempt(attempt, upstreamResp, false, ErrRequestTotalTimeout.Error())
 			return ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, forwardErr)
@@ -400,18 +404,7 @@ func (ps *ProxyService) handleStreamUpstream(
 		return NewRetryableProxyError(ErrEmptySniffResult, FailureTypeSoft, FailureScopeNone, "流式转发结果为空")
 	}
 
-	// 成功：流式场景下上游 body 与客户端响应 body 相同。
-	// 长流只保存尾部用于 token 统计，调试记录明确标识这一降级，避免日志采集耗尽内存。
-	debugResponseBody := forwardResult.ResponseBody
-	if forwardResult.ResponseBodyTruncated {
-		debugResponseBody = formatTruncatedStreamCapture(debugResponseBody)
-	}
-	if attempt != nil && ps.isDebugModeEnabled() {
-		attempt.UpstreamResponseBody = []byte(debugResponseBody)
-	}
-	if ps.isDebugModeEnabled() {
-		proxyCtx.ResponseBody = []byte(debugResponseBody)
-	}
+	ps.captureStreamForwardDebugResponse(proxyCtx, attempt, forwardResult)
 	ps.finalizeAttempt(attempt, upstreamResp, true, "")
 
 	promptTokens, completionTokens := ps.recordAttemptSuccess(c, proxyCtx, routeResult, forwardResult.ResponseBody, true)
@@ -429,6 +422,28 @@ func (ps *ProxyService) handleStreamUpstream(
 		slog.Int64("completion_tokens", completionTokens),
 	)
 	return nil
+}
+
+// captureStreamForwardDebugResponse keeps the client-visible tail for both
+// successful and failed streams. It includes any SSE keepalive comment Hydra
+// emitted, which is necessary to diagnose downstream parser failures.
+func (ps *ProxyService) captureStreamForwardDebugResponse(
+	proxyCtx *ProxyContext,
+	attempt *AttemptRecord,
+	forwardResult *StreamForwardResult,
+) {
+	if proxyCtx == nil || forwardResult == nil || !ps.isDebugModeEnabled() {
+		return
+	}
+
+	debugResponseBody := forwardResult.ResponseBody
+	if forwardResult.ResponseBodyTruncated {
+		debugResponseBody = formatTruncatedStreamCapture(debugResponseBody)
+	}
+	proxyCtx.ResponseBody = []byte(debugResponseBody)
+	if attempt != nil {
+		attempt.UpstreamResponseBody = []byte(debugResponseBody)
+	}
 }
 
 // handleNonStreamUpstream 处理非流式上游响应：读取 → 嗅探 → 校验 → 转发 → 成功统计

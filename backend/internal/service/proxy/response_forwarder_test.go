@@ -109,6 +109,25 @@ func TestSSEEventBoundaryTrackerWaitsForCompleteEventBoundary(t *testing.T) {
 	}
 }
 
+func TestCaptureStreamForwardDebugResponseIncludesPartialStreamAndKeepalive(t *testing.T) {
+	service := &ProxyService{}
+	service.debugModeEnabled.Store(true)
+	proxyCtx := &ProxyContext{}
+	attempt := &AttemptRecord{}
+	forwardResult := &StreamForwardResult{
+		ResponseBody: "data: {\"part\":1}\n\n: keepalive\n\n",
+	}
+
+	service.captureStreamForwardDebugResponse(proxyCtx, attempt, forwardResult)
+
+	if got, want := string(proxyCtx.ResponseBody), forwardResult.ResponseBody; got != want {
+		t.Fatalf("client debug body = %q, want %q", got, want)
+	}
+	if got, want := string(attempt.UpstreamResponseBody), forwardResult.ResponseBody; got != want {
+		t.Fatalf("attempt debug body = %q, want %q", got, want)
+	}
+}
+
 func TestForwardStreamResponseDoesNotInsertKeepaliveIntoPartialSSEData(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
@@ -192,6 +211,7 @@ func TestForwardStreamResponseKeepsAliveBetweenCompleteSSEEvents(t *testing.T) {
 	}()
 	defer body.Release()
 
+	var captured *StreamForwardResult
 	select {
 	case <-body.firstRead:
 	case <-time.After(time.Second):
@@ -208,6 +228,7 @@ func TestForwardStreamResponseKeepsAliveBetweenCompleteSSEEvents(t *testing.T) {
 		if forwarded.result == nil {
 			t.Fatal("ForwardStreamResponse returned a nil result")
 		}
+		captured = forwarded.result
 	case <-time.After(time.Second):
 		t.Fatal("stream did not finish after the remaining event was released")
 	}
@@ -218,6 +239,34 @@ func TestForwardStreamResponseKeepsAliveBetweenCompleteSSEEvents(t *testing.T) {
 	}
 	if !strings.Contains(got, ": keepalive\n\n") {
 		t.Fatalf("forwarded body should contain a keepalive between complete events: %q", got)
+	}
+	if captured == nil || captured.ResponseBody != got {
+		t.Fatalf("debug capture = %#v, want the complete client-visible body %q", captured, got)
+	}
+}
+
+func TestForwardStreamResponseRetainsPartialBodyOnReadError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	payload := []byte("data: {\"part\":1}\n\n")
+	readErr := errors.New("upstream connection closed")
+	upstreamResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       &errorAfterChunkReadCloser{part: payload, err: readErr},
+	}
+
+	result, err := NewResponseForwarder(slog.New(slog.NewTextHandler(io.Discard, nil))).ForwardStreamResponse(
+		c, upstreamResp, "same-model", "same-model", "trace", 0, 0,
+	)
+	if !errors.Is(err, readErr) {
+		t.Fatalf("ForwardStreamResponse error = %v, want %v", err, readErr)
+	}
+	if result == nil || result.ResponseBody != string(payload) {
+		t.Fatalf("partial stream capture = %#v, want %q", result, payload)
 	}
 }
 
@@ -381,5 +430,23 @@ func (r *delayedStreamReadCloser) Release() {
 
 func (r *delayedStreamReadCloser) Close() error {
 	r.Release()
+	return nil
+}
+
+type errorAfterChunkReadCloser struct {
+	part []byte
+	err  error
+	read bool
+}
+
+func (r *errorAfterChunkReadCloser) Read(p []byte) (int, error) {
+	if r.read {
+		return 0, r.err
+	}
+	r.read = true
+	return copy(p, r.part), nil
+}
+
+func (r *errorAfterChunkReadCloser) Close() error {
 	return nil
 }

@@ -20,6 +20,9 @@ type NonStreamForwardResult struct {
 
 // StreamForwardResult 流式转发结果
 type StreamForwardResult struct {
+	// ResponseBody is the tail of bytes actually written to the client. It
+	// includes Hydra-generated SSE keepalive comments so debug logs can show
+	// the exact downstream stream.
 	ResponseBody          string
 	ResponseBodyTruncated bool
 	ResponseCommitted     bool
@@ -411,15 +414,17 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 			responseCommitted = true
 		}
 		written, err := c.Writer.Write(part)
-		if err != nil {
-			return err
-		}
 		if sseBoundary != nil && written > 0 {
 			sseBoundary.Observe(part[:written])
 		}
+		if written > 0 {
+			capture.Write(part[:written])
+			streamCounter.Observe(part[:written])
+		}
+		if err != nil {
+			return err
+		}
 		flusher.Flush()
-		capture.Write(part)
-		streamCounter.Observe(part)
 		return nil
 	}
 
@@ -433,11 +438,15 @@ func (rf *ResponseForwarder) ForwardStreamResponse(
 			if sseBoundary.CanWriteKeepalive() {
 				keepalive := []byte(": keepalive\n\n")
 				written, err := c.Writer.Write(keepalive)
-				if err != nil {
-					return buildResult(), err
-				}
 				if written > 0 {
 					sseBoundary.Observe(keepalive[:written])
+					// The debug capture represents the client-visible stream rather
+					// than only upstream bytes. Keepalive comments must be retained
+					// here so a failed stream remains diagnosable.
+					capture.Write(keepalive[:written])
+				}
+				if err != nil {
+					return buildResult(), err
 				}
 				flusher.Flush()
 			}
