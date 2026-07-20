@@ -20,7 +20,11 @@ func NewChannelKeyRepository(db *gorm.DB) *ChannelKeyRepository {
 
 // Create 创建渠道密钥
 func (r *ChannelKeyRepository) Create(ctx context.Context, channelKey *models.ChannelKey) error {
-	return r.db.WithContext(ctx).Create(channelKey).Error
+	err := r.db.WithContext(ctx).Create(channelKey).Error
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // FindByID 根据ID查询渠道密钥
@@ -63,7 +67,11 @@ func (r *ChannelKeyRepository) FindNonDeadByChannelID(ctx context.Context, chann
 
 // Update 更新渠道密钥
 func (r *ChannelKeyRepository) Update(ctx context.Context, channelKey *models.ChannelKey) error {
-	return r.db.WithContext(ctx).Save(channelKey).Error
+	err := r.db.WithContext(ctx).Save(channelKey).Error
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // IncrementTokenUsage 累加渠道密钥的 token 使用量
@@ -79,22 +87,34 @@ func (r *ChannelKeyRepository) IncrementTokenUsage(ctx context.Context, id uint,
 
 // UpdateStatus 更新渠道密钥状态
 func (r *ChannelKeyRepository) UpdateStatus(ctx context.Context, id uint, status string) error {
-	return r.db.WithContext(ctx).
+	err := r.db.WithContext(ctx).
 		Model(&models.ChannelKey{}).
 		Where("id = ?", id).
 		Update("status", status).Error
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // Delete 删除渠道密钥
 func (r *ChannelKeyRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&models.ChannelKey{}, id).Error
+	err := r.db.WithContext(ctx).Delete(&models.ChannelKey{}, id).Error
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // DeleteByChannelID 删除渠道下的所有渠道密钥
 func (r *ChannelKeyRepository) DeleteByChannelID(ctx context.Context, channelID uint) error {
-	return r.db.WithContext(ctx).
+	err := r.db.WithContext(ctx).
 		Where("channel_id = ?", channelID).
 		Delete(&models.ChannelKey{}).Error
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // FindAll 查询所有渠道密钥（不限制状态）

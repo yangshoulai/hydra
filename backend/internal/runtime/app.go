@@ -166,7 +166,7 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 		runtimeLogger.Warn("添加请求日志清理任务失败", slog.String("error", err.Error()))
 	}
 
-	requestTimeout, upstreamHeaderTimeout, streamIdleTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := settingService.GetProxyConfig(ctx)
+	requestTimeout, totalTimeout, upstreamHeaderTimeout, streamIdleTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := settingService.GetProxyConfig(ctx)
 	nonStreamKeepalive := settingService.GetNonStreamKeepaliveConfig(ctx)
 	maxResponseBytes := settingService.GetProxyMaxResponseBytes(ctx)
 	requestLogRecorder := proxyService.NewRequestLogRecorder(runtimeLogger, repos.RequestLogRepo, 1024, 2)
@@ -181,6 +181,7 @@ func NewApp(id int64, dataDir string, bootstrapLogger *slog.Logger, restartListe
 			MaxRetries:                   maxRetry,
 			RetryDelay:                   500 * time.Millisecond,
 			RequestTimeout:               requestTimeout,
+			TotalTimeout:                 totalTimeout,
 			UpstreamHeaderTimeout:        upstreamHeaderTimeout,
 			StreamIdleTimeout:            streamIdleTimeout,
 			StreamKeepaliveInterval:      keepaliveInterval,

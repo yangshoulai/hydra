@@ -60,11 +60,21 @@
 
           <div class="setting-row">
             <div class="setting-row__info">
-              <div class="setting-row__label">代理请求超时（秒）</div>
-              <div class="setting-row__desc">整个上游调用的总时长，0 表示不设总时长限制；流式请求可持续输出。</div>
+              <div class="setting-row__label">单次上游调用超时（秒）</div>
+              <div class="setting-row__desc">限制单次上游 HTTP 调用的总时长，0 表示不限制；流式请求建议保持 0。</div>
             </div>
             <div class="setting-row__control">
               <n-input-number v-model:value="formData.proxy_request_timeout" :min="0" :max="300" style="width: 100%" placeholder="0-300" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
+              <div class="setting-row__label">请求总预算（秒）</div>
+              <div class="setting-row__desc">限制一次代理请求包含所有重试在内的总耗时，0 表示不限制；流式请求建议保持 0。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-input-number v-model:value="formData.proxy_total_timeout" :min="0" :max="3600" style="width: 100%" placeholder="0-3600" />
             </div>
           </div>
 
@@ -149,8 +159,8 @@
 
           <div class="setting-row">
             <div class="setting-row__info">
-              <div class="setting-row__label">最大重试次数</div>
-              <div class="setting-row__desc">单次请求失败后的最大重试次数，0 表示不重试。</div>
+              <div class="setting-row__label">最大路由尝试数</div>
+              <div class="setting-row__desc">单次请求最多尝试 N 个上游路由；0 表示失败后不再重试，仍会进行首次尝试。</div>
             </div>
             <div class="setting-row__control">
               <n-input-number v-model:value="formData.proxy_max_retry" :min="0" :max="10" style="width: 100%" placeholder="0-10" />
@@ -639,6 +649,7 @@ interface SettingsData {
   circuit_breaker_cooling_duration: number
   proxy_network_url: string
   proxy_request_timeout: number
+  proxy_total_timeout: number
   proxy_upstream_header_timeout: number
   proxy_stream_idle_timeout: number
   proxy_keepalive_interval: number
@@ -695,6 +706,7 @@ const formData = ref<SettingsData>({
   circuit_breaker_cooling_duration: 60,
   proxy_network_url: '',
   proxy_request_timeout: 0,
+  proxy_total_timeout: 0,
   proxy_upstream_header_timeout: 60,
   proxy_stream_idle_timeout: 120,
   proxy_keepalive_interval: 0,
@@ -804,6 +816,9 @@ const loadSettings = async () => {
     }
     if (settings.proxy_request_timeout !== undefined) {
       formData.value.proxy_request_timeout = Math.max(0, parseInt(settings.proxy_request_timeout) || 0)
+    }
+    if (settings.proxy_total_timeout !== undefined) {
+      formData.value.proxy_total_timeout = Math.min(3600, Math.max(0, parseInt(settings.proxy_total_timeout) || 0))
     }
     if (settings.proxy_upstream_header_timeout !== undefined) {
       formData.value.proxy_upstream_header_timeout = Math.min(3600, Math.max(0, parseInt(settings.proxy_upstream_header_timeout) || 0))
@@ -1067,6 +1082,7 @@ const handleSave = async () => {
         circuit_breaker_cooling_duration: formData.value.circuit_breaker_cooling_duration.toString(),
         proxy_network_url: formData.value.proxy_network_url.trim(),
         proxy_request_timeout: formData.value.proxy_request_timeout.toString(),
+        proxy_total_timeout: Math.max(0, formData.value.proxy_total_timeout).toString(),
         proxy_upstream_header_timeout: Math.max(0, formData.value.proxy_upstream_header_timeout).toString(),
         proxy_stream_idle_timeout: Math.max(0, formData.value.proxy_stream_idle_timeout).toString(),
         proxy_keepalive_interval: formData.value.proxy_keepalive_interval.toString(),

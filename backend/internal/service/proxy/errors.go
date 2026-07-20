@@ -29,6 +29,8 @@ var (
 	ErrUpstreamResponseTooLarge = errors.New("upstream response body too large")
 	// ErrModelNotAllowedForToken 令牌无权访问模型
 	ErrModelNotAllowedForToken = errors.New("model not allowed for token")
+	// ErrRequestTotalTimeout 一次代理请求的总预算耗尽
+	ErrRequestTotalTimeout = errors.New("request total timeout exceeded")
 )
 
 // RetryableProxyError 可重试的代理错误

@@ -190,7 +190,7 @@ func (ps *ProxyService) handleNonStreamAttemptWithKeepalive(
 
 	respResult, waitErr := keepalive.waitForResponse(respCh)
 	if waitErr != nil {
-		return ps.handleNonStreamKeepaliveWaitError(c, proxyCtx, attempt, waitErr)
+		return ps.handleNonStreamKeepaliveWaitError(c, proxyCtx, routeResult, attempt, waitErr)
 	}
 
 	upstreamResp := respResult.resp
@@ -206,8 +206,16 @@ func (ps *ProxyService) handleNonStreamAttemptWithKeepalive(
 		ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 		return ps.markClientCancelled(c, proxyCtx, respResult.err)
 	}
+	if ps.isTotalBudgetExceeded(c, proxyCtx, respResult.err) {
+		if upstreamResp != nil {
+			ps.captureUpstreamResponse(attempt, upstreamResp, false)
+		}
+		drainAndCloseBody(upstreamResp)
+		ps.finalizeAttempt(attempt, upstreamResp, false, ErrRequestTotalTimeout.Error())
+		return ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, respResult.err)
+	}
 
-	failureType, failureScope, errMsg := ps.failureClassifier.ClassifyResponseError(upstreamResp, respResult.err)
+	failureType, failureScope, errMsg := ps.classifyResponseErrorWithBody(upstreamResp, respResult.err)
 	if failureType != FailureTypeNone {
 		ps.captureUpstreamResponse(attempt, upstreamResp, ps.isDebugModeEnabled() && !keepalive.committed)
 		drainAndCloseBody(upstreamResp)
@@ -246,7 +254,7 @@ func (ps *ProxyService) handleNonStreamAttemptWithKeepalive(
 	bodyResult, waitErr := keepalive.waitForBody(bodyCh)
 	if waitErr != nil {
 		_ = upstreamResp.Body.Close()
-		return ps.handleNonStreamKeepaliveWaitError(c, proxyCtx, attempt, waitErr)
+		return ps.handleNonStreamKeepaliveWaitError(c, proxyCtx, routeResult, attempt, waitErr)
 	}
 
 	return ps.finishNonStreamKeepaliveBody(c, proxyCtx, routeResult, upstreamResp, bodyResult.body, bodyResult.err, keepalive.committed)
@@ -255,9 +263,14 @@ func (ps *ProxyService) handleNonStreamAttemptWithKeepalive(
 func (ps *ProxyService) handleNonStreamKeepaliveWaitError(
 	c *gin.Context,
 	proxyCtx *ProxyContext,
+	routeResult *RouteResult,
 	attempt *AttemptRecord,
 	err error,
 ) error {
+	if ps.isTotalBudgetExceeded(c, proxyCtx, err) {
+		ps.finalizeAttempt(attempt, nil, false, ErrRequestTotalTimeout.Error())
+		return ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, err)
+	}
 	if isClientCancelled(c, err) || errorsIsContextDone(err) {
 		ps.finalizeAttempt(attempt, nil, false, "client cancelled")
 		return ps.markClientCancelled(c, proxyCtx, err)
@@ -287,6 +300,10 @@ func (ps *ProxyService) finishNonStreamKeepaliveBody(
 	attempt := proxyCtx.CurrentAttempt()
 
 	if readErr != nil {
+		if ps.isTotalBudgetExceeded(c, proxyCtx, readErr) {
+			ps.finalizeAttempt(attempt, upstreamResp, false, ErrRequestTotalTimeout.Error())
+			return ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, readErr)
+		}
 		if isClientCancelled(c, readErr) {
 			ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 			return ps.markClientCancelled(c, proxyCtx, readErr)

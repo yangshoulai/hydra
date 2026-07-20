@@ -43,6 +43,7 @@ const (
 	SettingLogRetentionDays                = "log_retention_days"
 	SettingLogDebugEnabled                 = "log_debug_enabled"
 	SettingProxyRequestTimeout             = "proxy_request_timeout"
+	SettingProxyTotalTimeout               = "proxy_total_timeout"
 	SettingProxyUpstreamHeaderTimeout      = "proxy_upstream_header_timeout"
 	SettingProxyStreamIdleTimeout          = "proxy_stream_idle_timeout"
 	SettingProxyKeepaliveInterval          = "proxy_keepalive_interval"
@@ -85,6 +86,7 @@ const (
 const (
 	DefaultProxyMaxBodyBytes                      = 50 * 1024 * 1024
 	DefaultProxyMaxResponseBytes                  = 50 * 1024 * 1024
+	DefaultProxyTotalTimeoutSeconds               = 0
 	DefaultProxyUpstreamHeaderTimeoutSeconds      = 60
 	DefaultProxyStreamIdleTimeoutSeconds          = 120
 	DefaultProxyRateLimitGlobalRPS                = 300

@@ -7,6 +7,7 @@ import (
 	"github.com/yangshoulai/hydra/internal/models"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // RunMigrations 执行数据库初始化（全新库场景）
@@ -25,12 +26,17 @@ func RunMigrations(db *gorm.DB) error {
 		&models.Channel{},
 		&models.ChannelKey{},
 		&models.ChannelModelConfig{},
+		&models.ChannelModelConfigEndpointType{},
 		&models.Model{},
 		&models.RequestLog{},
 		&models.RequestLogDetail{},
 		&models.RequestLogAttempt{},
 	); err != nil {
 		return fmt.Errorf("初始化数据库表结构失败: %w", err)
+	}
+
+	if err := backfillChannelModelConfigEndpointTypes(db); err != nil {
+		return fmt.Errorf("迁移渠道模型端点类型失败: %w", err)
 	}
 
 	if err := seedDefaultAdmin(db); err != nil {
@@ -42,6 +48,36 @@ func RunMigrations(db *gorm.DB) error {
 	}
 
 	return nil
+}
+
+func backfillChannelModelConfigEndpointTypes(db *gorm.DB) error {
+	var configs []models.ChannelModelConfig
+	if err := db.Find(&configs).Error; err != nil {
+		return err
+	}
+	if len(configs) == 0 {
+		return nil
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, config := range configs {
+			endpointTypes := models.NormalizeEndpointTypes(config.EndpointTypes)
+			rows := make([]models.ChannelModelConfigEndpointType, 0, len(endpointTypes))
+			for _, endpointType := range endpointTypes {
+				rows = append(rows, models.ChannelModelConfigEndpointType{
+					ChannelModelConfigID: config.ID,
+					EndpointType:         endpointType,
+				})
+			}
+			if len(rows) == 0 {
+				continue
+			}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error; err != nil {
+				return fmt.Errorf("channel_model_config_id=%d: %w", config.ID, err)
+			}
+		}
+		return nil
+	})
 }
 
 func renameLegacyWeightColumns(db *gorm.DB) error {

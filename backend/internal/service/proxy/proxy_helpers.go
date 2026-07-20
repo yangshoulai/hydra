@@ -185,6 +185,24 @@ func normalizeStreamIdleTimeout(timeout time.Duration) time.Duration {
 	return timeout
 }
 
+func normalizeTotalTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return 0
+	}
+	maxTimeout := time.Hour
+	if timeout > maxTimeout {
+		return maxTimeout
+	}
+	return timeout
+}
+
+func maxRouteAttemptsFromSetting(maxRetry int) int {
+	if maxRetry <= 0 {
+		return 1
+	}
+	return maxRetry
+}
+
 func normalizeNonStreamKeepaliveDelay(delay time.Duration) time.Duration {
 	if delay <= 0 {
 		return 0
@@ -278,5 +296,8 @@ func newRouteSnapshot(routeResult *RouteResult, endpointType string) *ProxyRoute
 		ChannelModel:  routeResult.ChannelModel,
 		Model:         routeResult.Model,
 		EndpointType:  endpointType,
+
+		KeyProbeAcquired:         routeResult.KeyProbeAcquired,
+		ModelConfigProbeAcquired: routeResult.ModelConfigProbeAcquired,
 	}
 }

@@ -10,10 +10,10 @@ import (
 	"github.com/yangshoulai/hydra/internal/endpoint"
 )
 
-// RetryCoordinator 重试协调器,控制最大重试次数
+// RetryCoordinator 重试协调器，控制单次请求最多路由尝试数。
 type RetryCoordinator struct {
 	logger     *slog.Logger
-	maxRetries int           // 最大重试次数
+	maxRetries int           // proxy_max_retry 原始语义：最多尝试的上游路由数；0 表示首次失败后不再重试
 	retryDelay time.Duration // 重试延迟
 	mu         sync.RWMutex  // 保护配置更新的锁
 	debugFn    func() bool
@@ -23,6 +23,9 @@ type RetryCoordinator struct {
 func NewRetryCoordinator(logger *slog.Logger, maxRetries int, retryDelay time.Duration, debugFn func() bool) *RetryCoordinator {
 	if debugFn == nil {
 		debugFn = func() bool { return false }
+	}
+	if maxRetries < 0 {
+		maxRetries = 0
 	}
 	return &RetryCoordinator{
 		logger:     logger,
@@ -60,6 +63,9 @@ type ProxyRouteSnapshot struct {
 	ChannelModel  string
 	Model         string
 	EndpointType  string
+
+	KeyProbeAcquired         bool
+	ModelConfigProbeAcquired bool
 }
 
 // AttemptRecord 单次上游尝试的全量采集信息
@@ -125,6 +131,8 @@ type ProxyContext struct {
 	LastRoute        *ProxyRouteSnapshot
 	StartTime        time.Time // 整体请求开始时间
 	AttemptStartTime time.Time // 当前尝试开始时间
+	TotalTimeout     time.Duration
+	BudgetDeadline   time.Time
 }
 
 // NewProxyContext 创建代理上下文
@@ -158,8 +166,8 @@ func (p *ProxyContext) CurrentAttempt() *AttemptRecord {
 	return p.Attempts[len(p.Attempts)-1]
 }
 
-// ShouldRetry 判断是否应该继续重试
-// 只要没超过最大重试次数就应该继续尝试下一个渠道
+// ShouldRetry 判断是否应该继续重试。
+// proxy_max_retry=N 表示单次请求最多尝试 N 个上游路由；0 表示只保留首次尝试。
 func (rc *RetryCoordinator) ShouldRetry(proxyCtx *ProxyContext) bool {
 	rc.mu.RLock()
 	maxRetries := rc.maxRetries
@@ -173,6 +181,7 @@ func (rc *RetryCoordinator) ShouldRetry(proxyCtx *ProxyContext) bool {
 				slog.String("trace_id", proxyCtx.TraceID),
 				slog.Int("retry_count", proxyCtx.AttemptCount),
 				slog.Int("max_retry", maxRetries),
+				slog.Int("max_route_attempts", maxRouteAttemptsFromSetting(maxRetries)),
 			)
 		}
 		return false
@@ -294,12 +303,16 @@ func (rc *RetryCoordinator) UpdateConfig(maxRetries int, retryDelay time.Duratio
 	oldMaxRetries := rc.maxRetries
 	oldRetryDelay := rc.retryDelay
 
+	if maxRetries < 0 {
+		maxRetries = 0
+	}
 	rc.maxRetries = maxRetries
 	rc.retryDelay = retryDelay
 
 	rc.logger.Info("重试协调器配置已更新",
 		slog.Int("old_max_retries", oldMaxRetries),
 		slog.Int("new_max_retries", maxRetries),
+		slog.Int("new_max_route_attempts", maxRouteAttemptsFromSetting(maxRetries)),
 		slog.Duration("old_retry_delay", oldRetryDelay),
 		slog.Duration("new_retry_delay", retryDelay),
 	)

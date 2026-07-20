@@ -122,7 +122,13 @@ var DefaultSettings = []models.SystemSetting{
 		Key:       models.SettingProxyRequestTimeout,
 		Value:     "0",
 		ValueType: "int",
-		Remark:    "代理请求总超时时间(秒，0 表示不设总时长限制；适合流式请求)",
+		Remark:    "单次上游调用超时时间(秒，0 表示不限制；流式请求建议保持 0)",
+	},
+	{
+		Key:       models.SettingProxyTotalTimeout,
+		Value:     strconv.Itoa(models.DefaultProxyTotalTimeoutSeconds),
+		ValueType: "int",
+		Remark:    "代理请求总预算(秒，包含所有重试；0 表示不限制，流式请求建议保持 0)",
 	},
 	{
 		Key:       models.SettingProxyUpstreamHeaderTimeout,
@@ -170,7 +176,7 @@ var DefaultSettings = []models.SystemSetting{
 		Key:       models.SettingProxyMaxRetry,
 		Value:     "3",
 		ValueType: "int",
-		Remark:    "最大重试次数",
+		Remark:    "单次请求最多尝试的上游路由数；0 表示失败后不再重试",
 	},
 	{
 		Key:       models.SettingProxyLoadBalanceStrategy,

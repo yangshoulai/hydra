@@ -3,6 +3,7 @@ package proxy
 import (
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // FailureType 故障类型
@@ -40,15 +41,32 @@ func NewFailureClassifier() *FailureClassifier {
 // ClassifyHTTPError 分类 HTTP 错误
 // 根据状态码和响应内容判断是硬故障还是软故障
 func (fc *FailureClassifier) ClassifyHTTPError(statusCode int) (FailureType, FailureScope, string) {
+	return fc.ClassifyHTTPErrorWithBody(statusCode, nil, "")
+}
+
+// ClassifyHTTPErrorWithBody 基于状态码与响应体综合分类 HTTP 错误。
+//
+// 401/403 本身不能直接等价为“永久 Key 失效”：它也可能来自额度、账单、
+// 组织权限、区域策略等临时问题。只有响应体明确命中凭据永久失效关键词时，
+// 才归类为 hard key；无法判定时默认 soft key，避免误停 Key。
+func (fc *FailureClassifier) ClassifyHTTPErrorWithBody(statusCode int, body []byte, _ string) (FailureType, FailureScope, string) {
 	// 2xx 成功响应
 	if statusCode >= 200 && statusCode < 300 {
 		return FailureTypeNone, FailureScopeNone, "正常（" + strconv.Itoa(statusCode) + "）"
 	}
 
-	// 硬故障: 认证和授权问题
+	bodyText := strings.ToLower(string(body))
+
+	// 认证、授权、账单与配额问题默认归因到 Key；根据响应体再区分 hard/soft。
 	if statusCode == http.StatusUnauthorized || // 401
 		statusCode == http.StatusPaymentRequired || // 402
 		statusCode == http.StatusForbidden { // 403
+		if containsAny(bodyText, softKeyFailureKeywords) {
+			return FailureTypeSoft, FailureScopeKey, "密钥额度或账单限制（" + strconv.Itoa(statusCode) + "）"
+		}
+		if containsAny(bodyText, hardKeyFailureKeywords) {
+			return FailureTypeHard, FailureScopeKey, "密钥凭据无效（" + strconv.Itoa(statusCode) + "）"
+		}
 		return FailureTypeSoft, FailureScopeKey, "认证和授权问题（" + strconv.Itoa(statusCode) + "）"
 	}
 
@@ -81,6 +99,46 @@ func (fc *FailureClassifier) ClassifyHTTPError(statusCode int) (FailureType, Fai
 
 	// 其他情况
 	return FailureTypeNone, FailureScopeNone, "正常（" + strconv.Itoa(statusCode) + "）"
+}
+
+var hardKeyFailureKeywords = []string{
+	"invalid api key",
+	"incorrect api key",
+	"api key not valid",
+	"invalid key",
+	"invalid token",
+	"invalid bearer token",
+	"authentication failed",
+	"invalid authentication",
+	"unauthenticated",
+	"permission denied",
+	"revoked api key",
+	"expired api key",
+}
+
+var softKeyFailureKeywords = []string{
+	"quota",
+	"rate limit",
+	"rate_limit",
+	"too many requests",
+	"billing",
+	"insufficient funds",
+	"insufficient credits",
+	"insufficient balance",
+	"balance not enough",
+	"payment required",
+}
+
+func containsAny(text string, keywords []string) bool {
+	if text == "" {
+		return false
+	}
+	for _, keyword := range keywords {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 // ClassifyNetworkError 分类网络错误

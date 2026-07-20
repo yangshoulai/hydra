@@ -18,6 +18,9 @@ type RouteResult struct {
 	Model         string             // 统一模型名
 	ModelWeight   int                // 模型配置权重
 	KeyGroups     []string           // 模型配置对应的密钥分组
+
+	KeyProbeAcquired         bool // 是否领取了 Key half-open 探测名额
+	ModelConfigProbeAcquired bool // 是否领取了模型配置 half-open 探测名额
 }
 
 type channelRouteCandidate struct {
@@ -38,6 +41,7 @@ type LoadBalancer struct {
 	channelSelector *ChannelSelector
 	keySelector     *KeySelector
 	modelRouter     *ModelRouter
+	circuitManager  *circuit.CircuitManager
 }
 
 // NewLoadBalancer 创建负载均衡器
@@ -55,6 +59,7 @@ func NewLoadBalancer(
 		channelSelector: channelSelector,
 		keySelector:     keySelector,
 		modelRouter:     modelRouter,
+		circuitManager:  circuitManager,
 	}
 	return loadBalancer
 }
@@ -101,38 +106,53 @@ func (lb *LoadBalancer) routeWithExclusions(
 	excludeKeys map[uint]bool,
 	traceID string,
 ) (*RouteResult, error) {
-	channels, err := lb.channelSelector.SelectChannels(ctx, model, endpointType, isStream, excludeChannels)
-	if err != nil {
-		return nil, err
-	}
+	for guard := 0; guard < 32; guard++ {
+		channels, err := lb.channelSelector.SelectChannels(ctx, model, endpointType, isStream, excludeChannels)
+		if err != nil {
+			return nil, err
+		}
 
-	candidates := make([]*channelRouteCandidate, 0, len(channels))
-	for i := range channels {
-		routeCandidate, ok := buildChannelRouteCandidate(&channels[i], excludeModelConfigs, excludeKeys)
-		if ok {
-			candidates = append(candidates, routeCandidate)
+		candidates := make([]*channelRouteCandidate, 0, len(channels))
+		for i := range channels {
+			routeCandidate, ok := buildChannelRouteCandidate(&channels[i], excludeModelConfigs, excludeKeys)
+			if ok {
+				candidates = append(candidates, routeCandidate)
+			}
+		}
+
+		if len(candidates) == 0 {
+			return nil, ErrNoAvailableRoute
+		}
+
+		modelCandidates := buildModelRouteCandidates(candidates)
+		if len(modelCandidates) == 0 {
+			return nil, ErrNoAvailableRoute
+		}
+
+		selectedCandidate := lb.modelRouter.RouteModel(modelCandidates, traceID)
+		if selectedCandidate == nil {
+			return nil, ErrNoAvailableRoute
+		}
+
+		routeResult, ok := lb.selectRouteFromModelCandidate(selectedCandidate)
+		if !ok {
+			return nil, ErrNoAvailableRoute
+		}
+		probeReserved, keyUnavailable, modelConfigUnavailable := lb.tryReserveRouteProbe(routeResult)
+		if probeReserved {
+			return routeResult, nil
+		}
+
+		// 候选在路由与领取 half-open 探测名额之间被其它并发请求抢占，
+		// 本请求排除该最小路由单元后重新选择。
+		if keyUnavailable && routeResult.Key != nil {
+			excludeKeys[routeResult.Key.ID] = true
+		}
+		if modelConfigUnavailable && routeResult.ModelConfigID != 0 {
+			excludeModelConfigs[routeResult.ModelConfigID] = true
 		}
 	}
-
-	if len(candidates) == 0 {
-		return nil, ErrNoAvailableRoute
-	}
-
-	modelCandidates := buildModelRouteCandidates(candidates)
-	if len(modelCandidates) == 0 {
-		return nil, ErrNoAvailableRoute
-	}
-
-	selectedCandidate := lb.modelRouter.RouteModel(modelCandidates, traceID)
-	if selectedCandidate == nil {
-		return nil, ErrNoAvailableRoute
-	}
-
-	routeResult, ok := lb.selectRouteFromModelCandidate(selectedCandidate)
-	if !ok {
-		return nil, ErrNoAvailableRoute
-	}
-	return routeResult, nil
+	return nil, ErrNoAvailableRoute
 }
 
 func modelConfigWeight(config models.ChannelModelConfig) int {
@@ -212,6 +232,32 @@ func (lb *LoadBalancer) selectRouteFromModelCandidate(
 		KeyGroups:     selectedConfig.KeyGroups,
 	}
 	return result, true
+}
+
+func (lb *LoadBalancer) tryReserveRouteProbe(routeResult *RouteResult) (ok bool, keyUnavailable bool, modelConfigUnavailable bool) {
+	if lb.circuitManager == nil || routeResult == nil || routeResult.Key == nil {
+		return true, false, false
+	}
+
+	keyOK, keyAcquired := lb.circuitManager.TryAcquireKeyProbe(routeResult.Key.ID)
+	if !keyOK {
+		return false, true, false
+	}
+
+	modelOK, modelAcquired := true, false
+	if routeResult.ModelConfigID != 0 {
+		modelOK, modelAcquired = lb.circuitManager.TryAcquireModelConfigProbe(routeResult.ModelConfigID, routeResult.Channel.ID)
+	}
+	if !modelOK {
+		if keyAcquired {
+			lb.circuitManager.ReleaseKeyProbe(routeResult.Key.ID)
+		}
+		return false, false, true
+	}
+
+	routeResult.KeyProbeAcquired = keyAcquired
+	routeResult.ModelConfigProbeAcquired = modelAcquired
+	return true, false, false
 }
 
 func filterModelConfigs(configs []models.ChannelModelConfig, exclude map[uint]bool) []models.ChannelModelConfig {

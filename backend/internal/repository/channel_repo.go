@@ -11,17 +11,22 @@ import (
 
 // ChannelRepository 渠道仓储
 type ChannelRepository struct {
-	db *gorm.DB
+	db         *gorm.DB
+	routeCache *routeCache
 }
 
 // NewChannelRepository 创建渠道仓储
 func NewChannelRepository(db *gorm.DB) *ChannelRepository {
-	return &ChannelRepository{db: db}
+	return &ChannelRepository{db: db, routeCache: newRouteCache(defaultRouteCacheTTL)}
 }
 
 // Create 创建渠道
 func (r *ChannelRepository) Create(ctx context.Context, channel *models.Channel) error {
-	return r.db.WithContext(ctx).Create(channel).Error
+	err := r.db.WithContext(ctx).Create(channel).Error
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // FindByID 根据ID查询渠道
@@ -71,12 +76,20 @@ func (r *ChannelRepository) FindActive(ctx context.Context) ([]*models.Channel, 
 
 // Update 更新渠道
 func (r *ChannelRepository) Update(ctx context.Context, channel *models.Channel) error {
-	return r.db.WithContext(ctx).Save(channel).Error
+	err := r.db.WithContext(ctx).Save(channel).Error
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // Delete 删除渠道
 func (r *ChannelRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&models.Channel{}, id).Error
+	err := r.db.WithContext(ctx).Delete(&models.Channel{}, id).Error
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // ChannelFilter 渠道过滤选项
@@ -156,28 +169,40 @@ func (r *ChannelRepository) ListWithFilter(ctx context.Context, offset, limit in
 
 // FindByModel 根据统一模型名查询所有支持该模型的渠道
 func (r *ChannelRepository) FindByModel(ctx context.Context, unifiedModel string, endpointType string, _ bool) ([]models.Channel, error) {
+	cacheKey := routeCacheKey{model: unifiedModel, endpointType: endpointType}
+	version := currentRouteDataVersion()
+	if cached, ok := r.routeCache.get(cacheKey, version); ok {
+		return cached, nil
+	}
+
 	var channels []models.Channel
 
 	// 子查询:找到所有支持该模型的 channel_id
 	query := r.db.WithContext(ctx).
 		Select("DISTINCT channels.*").
 		Joins("INNER JOIN channel_model_configs ON channel_model_configs.channel_id = channels.id").
+		Joins("INNER JOIN channel_model_config_endpoint_types ON channel_model_config_endpoint_types.channel_model_config_id = channel_model_configs.id").
 		Joins("INNER JOIN channel_keys ON channel_keys.channel_id = channels.id AND channel_keys.status = ?", "active").
 		Where("channel_model_configs.model = ?", unifiedModel).
-		Where("channel_model_configs.endpoint_types like ?", "%"+endpointType+"%").
+		Where("channel_model_config_endpoint_types.endpoint_type = ?", endpointType).
 		Where("channel_model_configs.status = ?", "active").
 		Where("channels.status = ?", "active")
-	modelConfigCondition := "model = ? AND status = ? AND endpoint_types like ?"
-	modelConfigArgs := []any{unifiedModel, "active", "%" + endpointType + "%"}
+	modelConfigCondition := "model = ? AND status = ?"
+	modelConfigArgs := []any{unifiedModel, "active"}
 	err := query.
 		Preload("ChannelKeys", "status = ?", "active").
 		Preload("ModelConfigs", func(db *gorm.DB) *gorm.DB {
 			return db.
+				Joins("INNER JOIN channel_model_config_endpoint_types ON channel_model_config_endpoint_types.channel_model_config_id = channel_model_configs.id").
 				Where(modelConfigCondition, modelConfigArgs...).
-				Order("weight DESC, id DESC")
+				Where("channel_model_config_endpoint_types.endpoint_type = ?", endpointType).
+				Order("channel_model_configs.weight DESC, channel_model_configs.id DESC")
 		}).
 		Order("channels.weight DESC, channels.id DESC").
 		Find(&channels).Error
 
+	if err == nil {
+		r.routeCache.set(cacheKey, channels, version)
+	}
 	return channels, err
 }

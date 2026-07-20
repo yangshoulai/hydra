@@ -181,15 +181,15 @@ func (r *ModelRepository) ListWithActiveChannelConfigs(ctx context.Context) ([]m
 // ListWithActiveChannelConfigsByEndpointType 查询指定端点类型的统一模型列表
 func (r *ModelRepository) ListWithActiveChannelConfigsByEndpointType(ctx context.Context, endpointType string) ([]models.Model, error) {
 	var modelList []models.Model
-	likePattern := "%\"" + endpointType + "\"%"
 	err := r.db.WithContext(ctx).
 		Distinct("models.*").
 		Table("models").
 		Joins("INNER JOIN channel_model_configs ON channel_model_configs.model = models.name").
+		Joins("INNER JOIN channel_model_config_endpoint_types ON channel_model_config_endpoint_types.channel_model_config_id = channel_model_configs.id").
 		Joins("INNER JOIN channels ON channel_model_configs.channel_id = channels.id").
 		Where("channel_model_configs.status = ?", "active").
 		Where("channels.status = ?", "active").
-		Where("channel_model_configs.endpoint_types LIKE ?", likePattern).
+		Where("channel_model_config_endpoint_types.endpoint_type = ?", endpointType).
 		Order("models.created_at DESC").
 		Find(&modelList).Error
 	if err != nil {

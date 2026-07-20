@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/endpoint"
@@ -13,6 +14,32 @@ type EndpointTypes []string
 
 // KeyGroups 密钥分组列表
 type KeyGroups []string
+
+// NormalizeEndpointTypes 规范化端点类型列表。
+//
+// 空列表或全部为空时回退到 OpenAI Chat Completions，避免历史空值导致路由不可达。
+func NormalizeEndpointTypes(raw []string) []string {
+	if len(raw) == 0 {
+		return []string{endpoint.TypeOpenAIChatCompletions}
+	}
+	seen := make(map[string]struct{}, len(raw))
+	normalized := make([]string, 0, len(raw))
+	for _, item := range raw {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	if len(normalized) == 0 {
+		return []string{endpoint.TypeOpenAIChatCompletions}
+	}
+	return normalized
+}
 
 // Scan 实现 sql.Scanner 接口
 func (e *EndpointTypes) Scan(value any) error {
@@ -32,15 +59,18 @@ func (e *EndpointTypes) Scan(value any) error {
 		return nil
 	}
 
-	return json.Unmarshal(bytes, e)
+	var endpointTypes []string
+	if err := json.Unmarshal(bytes, &endpointTypes); err != nil {
+		*e = []string{endpoint.TypeOpenAIChatCompletions}
+		return nil
+	}
+	*e = NormalizeEndpointTypes(endpointTypes)
+	return nil
 }
 
 // Value 实现 driver.Valuer 接口
 func (e EndpointTypes) Value() (driver.Value, error) {
-	if len(e) == 0 {
-		e = []string{endpoint.TypeOpenAIChatCompletions}
-	}
-	return json.Marshal(e)
+	return json.Marshal(NormalizeEndpointTypes(e))
 }
 
 // Scan 实现 sql.Scanner 接口
@@ -92,7 +122,8 @@ type ChannelModelConfig struct {
 	CompletionTokens int64 `gorm:"not null;default:0" json:"completion_tokens"`
 
 	// 关联
-	Channel *Channel `gorm:"foreignKey:ChannelID" json:"channel,omitempty"`
+	Channel          *Channel                         `gorm:"foreignKey:ChannelID" json:"channel,omitempty"`
+	EndpointTypeRows []ChannelModelConfigEndpointType `gorm:"foreignKey:ChannelModelConfigID;constraint:OnDelete:CASCADE" json:"-"`
 }
 
 // TableName 指定表名
@@ -103,4 +134,21 @@ func (ChannelModelConfig) TableName() string {
 // IsActive 检查配置是否激活
 func (c *ChannelModelConfig) IsActive() bool {
 	return c.Status == "active"
+}
+
+// ChannelModelConfigEndpointType 渠道模型配置支持的端点类型。
+//
+// 保留 channel_model_configs.endpoint_types JSON 字段用于前端展示与兼容；
+// 路由与可用性查询走该结构化表，避免 JSON 文本 LIKE 误匹配。
+type ChannelModelConfigEndpointType struct {
+	ID                   uint      `gorm:"primarykey" json:"id"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
+	ChannelModelConfigID uint      `gorm:"not null;uniqueIndex:idx_cmc_endpoint_type;index" json:"channel_model_config_id"`
+	EndpointType         string    `gorm:"type:varchar(80);not null;uniqueIndex:idx_cmc_endpoint_type;index" json:"endpoint_type"`
+}
+
+// TableName 指定表名
+func (ChannelModelConfigEndpointType) TableName() string {
+	return "channel_model_config_endpoint_types"
 }

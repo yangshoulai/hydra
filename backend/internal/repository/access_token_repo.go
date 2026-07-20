@@ -13,12 +13,13 @@ import (
 
 // AccessTokenRepository 访问令牌仓储
 type AccessTokenRepository struct {
-	db *gorm.DB
+	db    *gorm.DB
+	cache *accessTokenCache
 }
 
 // NewAccessTokenRepository 创建访问令牌仓储
 func NewAccessTokenRepository(db *gorm.DB) *AccessTokenRepository {
-	return &AccessTokenRepository{db: db}
+	return &AccessTokenRepository{db: db, cache: newAccessTokenCache(defaultAccessTokenCacheTTL)}
 }
 
 // hashToken 对令牌值进行 SHA256 哈希
@@ -49,6 +50,9 @@ func (r *AccessTokenRepository) FindByID(ctx context.Context, id uint) (*models.
 func (r *AccessTokenRepository) FindByToken(ctx context.Context, tokenValue string) (*models.AccessToken, error) {
 	var token models.AccessToken
 	hashedToken := hashToken(tokenValue)
+	if cached, ok := r.cache.get(hashedToken); ok {
+		return cached, nil
+	}
 
 	err := r.db.WithContext(ctx).
 		Where("token_hash = ?", hashedToken).
@@ -59,6 +63,7 @@ func (r *AccessTokenRepository) FindByToken(ctx context.Context, tokenValue stri
 		}
 		return nil, err
 	}
+	r.cache.set(hashedToken, &token)
 	return &token, nil
 }
 
@@ -144,6 +149,10 @@ func (r *AccessTokenRepository) ListWithFilter(
 
 // Update 更新令牌
 func (r *AccessTokenRepository) Update(ctx context.Context, token *models.AccessToken) error {
+	if token != nil {
+		r.cache.invalidateByID(token.ID)
+		r.cache.invalidateHash(token.TokenHash)
+	}
 	return r.db.WithContext(ctx).Save(token).Error
 }
 
@@ -169,11 +178,21 @@ func (r *AccessTokenRepository) UpdateLastUsed(ctx context.Context, id uint) err
 
 // Delete 删除令牌
 func (r *AccessTokenRepository) Delete(ctx context.Context, id uint) error {
+	r.cache.invalidateByID(id)
+	var token models.AccessToken
+	if err := r.db.WithContext(ctx).Select("id", "token_hash").First(&token, id).Error; err == nil {
+		r.cache.invalidateHash(token.TokenHash)
+	}
 	return r.db.WithContext(ctx).Delete(&models.AccessToken{}, id).Error
 }
 
 // ToggleStatus 切换令牌状态
 func (r *AccessTokenRepository) ToggleStatus(ctx context.Context, id uint, status string) error {
+	r.cache.invalidateByID(id)
+	var token models.AccessToken
+	if err := r.db.WithContext(ctx).Select("id", "token_hash").First(&token, id).Error; err == nil {
+		r.cache.invalidateHash(token.TokenHash)
+	}
 	return r.db.WithContext(ctx).
 		Model(&models.AccessToken{}).
 		Where("id = ?", id).

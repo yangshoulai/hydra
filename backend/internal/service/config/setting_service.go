@@ -275,6 +275,7 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingLogFileCompress:
 		return "logging"
 	case key == models.SettingProxyRequestTimeout ||
+		key == models.SettingProxyTotalTimeout ||
 		key == models.SettingProxyUpstreamHeaderTimeout ||
 		key == models.SettingProxyStreamIdleTimeout ||
 		key == models.SettingProxyKeepaliveInterval ||
@@ -321,12 +322,21 @@ func (s *SettingService) GetCircuitBreakerConfig(ctx context.Context) (failureTh
 }
 
 // GetProxyConfig 获取代理配置（超时/网络代理/重试/历史负载策略）
-func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, upstreamHeaderTimeout time.Duration, streamIdleTimeout time.Duration, keepaliveInterval time.Duration, networkProxyURL string, maxRetry int, loadBalanceStrategy string) {
+func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout time.Duration, totalTimeout time.Duration, upstreamHeaderTimeout time.Duration, streamIdleTimeout time.Duration, keepaliveInterval time.Duration, networkProxyURL string, maxRetry int, loadBalanceStrategy string) {
 	requestTimeoutSeconds := s.GetInt(ctx, models.SettingProxyRequestTimeout, 0)
 	if requestTimeoutSeconds < 0 {
 		requestTimeoutSeconds = 0
 	}
 	requestTimeout = time.Duration(requestTimeoutSeconds) * time.Second
+
+	totalTimeoutSeconds := s.GetInt(ctx, models.SettingProxyTotalTimeout, models.DefaultProxyTotalTimeoutSeconds)
+	if totalTimeoutSeconds < 0 {
+		totalTimeoutSeconds = 0
+	}
+	if totalTimeoutSeconds > 3600 {
+		totalTimeoutSeconds = 3600
+	}
+	totalTimeout = time.Duration(totalTimeoutSeconds) * time.Second
 
 	upstreamHeaderTimeoutSeconds := s.GetInt(ctx, models.SettingProxyUpstreamHeaderTimeout, models.DefaultProxyUpstreamHeaderTimeoutSeconds)
 	if upstreamHeaderTimeoutSeconds < 0 {
@@ -357,6 +367,12 @@ func (s *SettingService) GetProxyConfig(ctx context.Context) (requestTimeout tim
 
 	networkProxyURL = s.GetString(ctx, models.SettingProxyNetworkURL, "")
 	maxRetry = s.GetInt(ctx, models.SettingProxyMaxRetry, 3)
+	if maxRetry < 0 {
+		maxRetry = 0
+	}
+	if maxRetry > 10 {
+		maxRetry = 10
+	}
 	loadBalanceStrategy = normalizeProxyLoadBalanceStrategy(
 		s.GetString(ctx, models.SettingProxyLoadBalanceStrategy, models.ProxyLoadBalanceStrategyWeightedRandom),
 	)
@@ -454,6 +470,14 @@ func (s *SettingService) validateValue(key string, value string) error {
 		if seconds < 0 || seconds > 300 {
 			return &SettingValidationError{message: "代理请求超时必须在 0-300 秒之间"}
 		}
+	case models.SettingProxyTotalTimeout:
+		seconds, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "请求总预算必须是 0-3600 的整数秒数"}
+		}
+		if seconds < 0 || seconds > 3600 {
+			return &SettingValidationError{message: "请求总预算必须在 0-3600 秒之间，0 表示不限制"}
+		}
 	case models.SettingProxyUpstreamHeaderTimeout,
 		models.SettingProxyStreamIdleTimeout:
 		seconds, err := strconv.Atoi(trimmed)
@@ -502,6 +526,14 @@ func (s *SettingService) validateValue(key string, value string) error {
 		case models.ProxyLoadBalanceStrategyWeightedRandom, models.ProxyLoadBalanceStrategyRoundRobin:
 		default:
 			return &SettingValidationError{message: "历史负载策略必须是 weighted_random 或 round_robin"}
+		}
+	case models.SettingProxyMaxRetry:
+		value, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return &SettingValidationError{message: "最大路由尝试数必须是 0-10 的整数"}
+		}
+		if value < 0 || value > 10 {
+			return &SettingValidationError{message: "最大路由尝试数必须在 0-10 之间"}
 		}
 	case models.SettingProxyMaxBodyBytes,
 		models.SettingProxyMaxResponseBytes:

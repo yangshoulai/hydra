@@ -26,6 +26,7 @@ const (
 	stageNonStreamRead      = "non_stream_read"
 	stageNonStreamForward   = "non_stream_forward"
 	stageNonStreamKeepalive = "non_stream_keepalive"
+	stageRequestTotalBudget = "request_total_budget"
 	stageHandleResponse     = "handle_response"
 	stageClientCancelled    = "client_cancelled"
 )
@@ -79,6 +80,7 @@ type ProxyService struct {
 	streamIdleNanos                   atomic.Int64
 	maxResponseBytes                  atomic.Int64
 	streamKeepaliveNanos              atomic.Int64
+	totalTimeoutNanos                 atomic.Int64
 	nonStreamKeepaliveEnabled         atomic.Bool
 	nonStreamKeepaliveFirstDelayNanos atomic.Int64
 	nonStreamKeepaliveIntervalNanos   atomic.Int64
@@ -89,6 +91,7 @@ type ProxyServiceConfig struct {
 	MaxRetries                   int
 	RetryDelay                   time.Duration
 	RequestTimeout               time.Duration
+	TotalTimeout                 time.Duration
 	UpstreamHeaderTimeout        time.Duration
 	StreamIdleTimeout            time.Duration
 	StreamKeepaliveInterval      time.Duration
@@ -127,7 +130,7 @@ func NewProxyService(
 	if config.RetryDelay > 0 {
 		retryDelay = config.RetryDelay
 	}
-	if config.MaxRetries > 0 {
+	if config.MaxRetries >= 0 {
 		maxRetries = config.MaxRetries
 	}
 
@@ -158,6 +161,7 @@ func NewProxyService(
 	}
 	svc.debugModeEnabled.Store(settingService.GetBool(context.Background(), models.SettingLogDebugEnabled, false))
 	svc.updateStreamIdleTimeout(config.StreamIdleTimeout)
+	svc.updateTotalTimeout(config.TotalTimeout)
 	svc.updateMaxResponseBytes(config.MaxResponseBytes)
 	svc.updateStreamKeepaliveInterval(config.StreamKeepaliveInterval)
 	svc.updateNonStreamKeepaliveConfig(
@@ -190,6 +194,8 @@ func (ps *ProxyService) Close() {
 func (ps *ProxyService) ProxyRequest(c *gin.Context, ep endpoint.Endpoint) (retErr error) {
 	traceID := GetTraceIDFromContext(c)
 	proxyCtx := NewProxyContext(traceID, "", false, ep, nil)
+	cancelTotalBudget := ps.applyTotalTimeout(c, proxyCtx)
+	defer cancelTotalBudget()
 
 	defer func() {
 		ps.logFinalRequestResult(c, proxyCtx, retErr)
@@ -241,6 +247,10 @@ func (ps *ProxyService) OnConfigChanged(ctx context.Context, category string) {
 // routeAndProxy 每轮：路由 → 单次尝试；失败可重试则继续。
 func (ps *ProxyService) routeAndProxy(c *gin.Context, proxyCtx *ProxyContext) error {
 	for {
+		if ps.isTotalBudgetExceeded(c, proxyCtx, nil) {
+			return ps.finishTotalBudgetExceeded(c, proxyCtx, nil, nil, nil)
+		}
+
 		routeResult, routeErr := ps.loadBalancer.Route(c.Request.Context(), proxyCtx)
 		if routeErr != nil {
 			return ps.handleRouteFailure(c, proxyCtx, routeErr)
@@ -268,6 +278,9 @@ func (ps *ProxyService) handleRouteFailure(c *gin.Context, proxyCtx *ProxyContex
 	if isClientCancelled(c, routeErr) {
 		return ps.markClientCancelled(c, proxyCtx, routeErr)
 	}
+	if ps.isTotalBudgetExceeded(c, proxyCtx, routeErr) {
+		return ps.finishTotalBudgetExceeded(c, proxyCtx, nil, nil, routeErr)
+	}
 
 	ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, "model unavailable: "+proxyCtx.Model, proxyCtx.TraceID)
 	ps.recordRequestMetrics(false, proxyCtx.Model, nil, 0, 0)
@@ -292,7 +305,7 @@ func (ps *ProxyService) reloadLoggingConfig(ctx context.Context) {
 }
 
 func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
-	requestTimeout, upstreamHeaderTimeout, streamIdleTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := ps.settingService.GetProxyConfig(ctx)
+	requestTimeout, totalTimeout, upstreamHeaderTimeout, streamIdleTimeout, keepaliveInterval, networkProxyURL, maxRetry, loadBalanceStrategy := ps.settingService.GetProxyConfig(ctx)
 	nonStreamKeepalive := ps.settingService.GetNonStreamKeepaliveConfig(ctx)
 	maxBodyBytes := ps.settingService.GetProxyMaxBodyBytes(ctx)
 	maxResponseBytes := ps.settingService.GetProxyMaxResponseBytes(ctx)
@@ -304,12 +317,14 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 	ps.httpClient.UpdateUpstreamProxyURL(networkProxyURL)
 	ps.retryCoordinator.UpdateConfig(maxRetry, retryDelay)
 	ps.updateStreamIdleTimeout(streamIdleTimeout)
+	ps.updateTotalTimeout(totalTimeout)
 	ps.updateMaxResponseBytes(maxResponseBytes)
 	ps.updateStreamKeepaliveInterval(keepaliveInterval)
 	ps.updateNonStreamKeepaliveConfig(nonStreamKeepalive.Enabled, nonStreamKeepalive.FirstDelay, nonStreamKeepalive.Interval)
 
 	ps.logger.Info("代理服务配置已更新",
 		slog.Duration("request_timeout", requestTimeout),
+		slog.Duration("total_timeout", totalTimeout),
 		slog.Duration("upstream_header_timeout", upstreamHeaderTimeout),
 		slog.Duration("stream_idle_timeout", streamIdleTimeout),
 		slog.Duration("stream_keepalive_interval", keepaliveInterval),
@@ -318,6 +333,7 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 		slog.Duration("non_stream_keepalive_interval", nonStreamKeepalive.Interval),
 		slog.String("network_proxy_url", networkProxyURL),
 		slog.Int("max_retry", maxRetry),
+		slog.Int("max_route_attempts", maxRouteAttemptsFromSetting(maxRetry)),
 		slog.String("route_selection_strategy", "model_config_weighted_random"),
 		slog.String("configured_load_balance_strategy", loadBalanceStrategy),
 		slog.Int64("max_body_bytes", maxBodyBytes),
@@ -371,6 +387,14 @@ func (ps *ProxyService) updateStreamKeepaliveInterval(interval time.Duration) {
 
 func (ps *ProxyService) updateStreamIdleTimeout(timeout time.Duration) {
 	ps.streamIdleNanos.Store(int64(normalizeStreamIdleTimeout(timeout)))
+}
+
+func (ps *ProxyService) updateTotalTimeout(timeout time.Duration) {
+	ps.totalTimeoutNanos.Store(int64(normalizeTotalTimeout(timeout)))
+}
+
+func (ps *ProxyService) getTotalTimeout() time.Duration {
+	return time.Duration(ps.totalTimeoutNanos.Load())
 }
 
 func (ps *ProxyService) getStreamIdleTimeout() time.Duration {

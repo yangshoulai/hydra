@@ -3,9 +3,11 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/yangshoulai/hydra/internal/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ChannelModelConfigRepository 渠道模型配置仓储
@@ -47,7 +49,17 @@ func (r *ChannelModelConfigRepository) CountDistinctChannelsByModels(ctx context
 
 // Create 创建模型配置
 func (r *ChannelModelConfigRepository) Create(ctx context.Context, config *models.ChannelModelConfig) error {
-	return r.db.WithContext(ctx).Create(config).Error
+	config.EndpointTypes = models.NormalizeEndpointTypes(config.EndpointTypes)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(config).Error; err != nil {
+			return err
+		}
+		return replaceEndpointTypeRows(tx, config.ID, config.EndpointTypes)
+	})
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // FindByID 根据ID查询模型配置
@@ -127,7 +139,17 @@ func (r *ChannelModelConfigRepository) CountByChannelIDAndStatus(ctx context.Con
 
 // Update 更新模型配置
 func (r *ChannelModelConfigRepository) Update(ctx context.Context, config *models.ChannelModelConfig) error {
-	return r.db.WithContext(ctx).Save(config).Error
+	config.EndpointTypes = models.NormalizeEndpointTypes(config.EndpointTypes)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(config).Error; err != nil {
+			return err
+		}
+		return replaceEndpointTypeRows(tx, config.ID, config.EndpointTypes)
+	})
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // IncrementTokenUsage 累加模型配置的 token 使用量
@@ -143,7 +165,16 @@ func (r *ChannelModelConfigRepository) IncrementTokenUsage(ctx context.Context, 
 
 // Delete 删除模型配置
 func (r *ChannelModelConfigRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&models.ChannelModelConfig{}, id).Error
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("channel_model_config_id = ?", id).Delete(&models.ChannelModelConfigEndpointType{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.ChannelModelConfig{}, id).Error
+	})
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // FindByModelNameWithChannel 根据统一模型名查询渠道模型配置（包含渠道信息）
@@ -159,9 +190,24 @@ func (r *ChannelModelConfigRepository) FindByModelNameWithChannel(ctx context.Co
 
 // DeleteByChannelID 删除渠道下的所有模型配置
 func (r *ChannelModelConfigRepository) DeleteByChannelID(ctx context.Context, channelID uint) error {
-	return r.db.WithContext(ctx).
-		Where("channel_id = ?", channelID).
-		Delete(&models.ChannelModelConfig{}).Error
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var ids []uint
+		if err := tx.Model(&models.ChannelModelConfig{}).
+			Where("channel_id = ?", channelID).
+			Pluck("id", &ids).Error; err != nil {
+			return err
+		}
+		if len(ids) > 0 {
+			if err := tx.Where("channel_model_config_id IN ?", ids).Delete(&models.ChannelModelConfigEndpointType{}).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Where("channel_id = ?", channelID).Delete(&models.ChannelModelConfig{}).Error
+	})
+	if err == nil {
+		touchRouteDataVersion()
+	}
+	return err
 }
 
 // ExistsActiveModel 检查是否存在可用的统一模型配置
@@ -170,14 +216,36 @@ func (r *ChannelModelConfigRepository) ExistsActiveModel(ctx context.Context, mo
 	query := r.db.WithContext(ctx).
 		Model(&models.ChannelModelConfig{}).
 		Joins("INNER JOIN channels ON channels.id = channel_model_configs.channel_id").
+		Joins("INNER JOIN channel_model_config_endpoint_types ON channel_model_config_endpoint_types.channel_model_config_id = channel_model_configs.id").
 		Where("channel_model_configs.model = ?", model).
 		Where("channel_model_configs.status = ?", "active").
 		Where("channels.status = ?", "active").
-		Where("channel_model_configs.endpoint_types like '%\"" + endpointType + "\"%'")
+		Where("channel_model_config_endpoint_types.endpoint_type = ?", endpointType)
 	err := query.Limit(1).Count(&count).Error
 	if err != nil {
 		return false, err
 	}
 
 	return count > 0, nil
+}
+
+func replaceEndpointTypeRows(tx *gorm.DB, configID uint, endpointTypes models.EndpointTypes) error {
+	if configID == 0 {
+		return fmt.Errorf("channel model config id is required")
+	}
+	normalized := models.NormalizeEndpointTypes(endpointTypes)
+	if err := tx.Where("channel_model_config_id = ?", configID).Delete(&models.ChannelModelConfigEndpointType{}).Error; err != nil {
+		return err
+	}
+	rows := make([]models.ChannelModelConfigEndpointType, 0, len(normalized))
+	for _, endpointType := range normalized {
+		rows = append(rows, models.ChannelModelConfigEndpointType{
+			ChannelModelConfigID: configID,
+			EndpointType:         endpointType,
+		})
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error
 }

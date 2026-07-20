@@ -454,10 +454,34 @@ func (m *CircuitManager) IsKeyAvailable(keyID uint) bool {
 	return breaker.IsAvailable()
 }
 
+// TryAcquireKeyProbe 为已选中的 Key 领取 half-open 探测名额。
+func (m *CircuitManager) TryAcquireKeyProbe(keyID uint) (bool, bool) {
+	breaker := m.GetKeyBreaker(keyID)
+	return breaker.TryAcquireProbe()
+}
+
+// ReleaseKeyProbe 释放未实际使用的 Key half-open 探测名额。
+func (m *CircuitManager) ReleaseKeyProbe(keyID uint) {
+	breaker := m.GetKeyBreaker(keyID)
+	breaker.ReleaseProbe()
+}
+
 // IsModelConfigAvailable 检查模型配置是否可用
 func (m *CircuitManager) IsModelConfigAvailable(modelConfigID uint) bool {
 	breaker := m.GetModelConfigBreaker(modelConfigID, 0)
 	return breaker.IsAvailable()
+}
+
+// TryAcquireModelConfigProbe 为已选中的模型配置领取 half-open 探测名额。
+func (m *CircuitManager) TryAcquireModelConfigProbe(modelConfigID uint, channelID uint) (bool, bool) {
+	breaker := m.GetModelConfigBreaker(modelConfigID, channelID)
+	return breaker.TryAcquireProbe()
+}
+
+// ReleaseModelConfigProbe 释放未实际使用的模型配置 half-open 探测名额。
+func (m *CircuitManager) ReleaseModelConfigProbe(modelConfigID uint, channelID uint) {
+	breaker := m.GetModelConfigBreaker(modelConfigID, channelID)
+	breaker.ReleaseProbe()
 }
 
 // Stop 停止管理器

@@ -160,8 +160,16 @@ func (ps *ProxyService) attemptOnce(c *gin.Context, proxyCtx *ProxyContext, rout
 		ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 		return false, ps.markClientCancelled(c, proxyCtx, requestErr)
 	}
+	if ps.isTotalBudgetExceeded(c, proxyCtx, requestErr) {
+		if upstreamResp != nil {
+			ps.captureUpstreamResponse(attempt, upstreamResp, false)
+		}
+		drainAndCloseBody(upstreamResp)
+		ps.finalizeAttempt(attempt, upstreamResp, false, ErrRequestTotalTimeout.Error())
+		return false, ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, requestErr)
+	}
 
-	failureType, failureScope, errMsg := ps.failureClassifier.ClassifyResponseError(upstreamResp, requestErr)
+	failureType, failureScope, errMsg := ps.classifyResponseErrorWithBody(upstreamResp, requestErr)
 	if failureType != FailureTypeNone {
 		// 失败分支：调试模式下读完 body 再走 drain；非调试直接 drain
 		ps.captureUpstreamResponse(attempt, upstreamResp, ps.isDebugModeEnabled())
@@ -232,13 +240,40 @@ func (ps *ProxyService) captureUpstreamResponse(attempt *AttemptRecord, resp *ht
 	attempt.UpstreamResponseBody = readAndCloseBody(resp, ps.getMaxResponseBytes())
 }
 
+// classifyResponseErrorWithBody 在 HTTP 错误分支读取一小段响应体用于 401/403 精细分类，
+// 并把 body 放回 resp，保证后续调试采集或 drain 逻辑仍能统一处理。
+func (ps *ProxyService) classifyResponseErrorWithBody(resp *http.Response, networkErr error) (FailureType, FailureScope, string) {
+	if networkErr != nil || resp == nil {
+		return ps.failureClassifier.ClassifyResponseError(resp, networkErr)
+	}
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+		return FailureTypeNone, FailureScopeNone, "正常"
+	}
+
+	const maxClassifyBodyBytes = 64 * 1024
+	var body []byte
+	if resp.Body != nil {
+		body, _ = io.ReadAll(io.LimitReader(resp.Body, maxClassifyBodyBytes+1))
+		if len(body) > maxClassifyBodyBytes {
+			body = body[:maxClassifyBodyBytes]
+		}
+		_ = resp.Body.Close()
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+	}
+	return ps.failureClassifier.ClassifyHTTPErrorWithBody(resp.StatusCode, body, resp.Header.Get("Content-Type"))
+}
+
 // retryOrFail 封装 tryScheduleRetry 的两种返回，供 attemptOnce 简洁上抛
 func (ps *ProxyService) retryOrFail(
 	c *gin.Context, proxyCtx *ProxyContext, routeResult *RouteResult,
 	err error, failureType FailureType, failureScope FailureScope, stage string,
 ) (bool, error) {
-	if ps.tryScheduleRetry(c, proxyCtx, routeResult, err, failureType, failureScope, stage) {
+	shouldRetry, finalErr := ps.tryScheduleRetry(c, proxyCtx, routeResult, err, failureType, failureScope, stage)
+	if shouldRetry {
 		return true, nil
+	}
+	if finalErr != nil {
+		return false, finalErr
 	}
 	return false, err
 }
@@ -293,6 +328,10 @@ func (ps *ProxyService) handleStreamUpstream(
 			return NewRetryableProxyError(emptyErr, FailureTypeSoft, FailureScopeModelConfig, "空流式响应")
 		}
 		if probeErr != nil {
+			if ps.isTotalBudgetExceeded(c, proxyCtx, probeErr) {
+				ps.finalizeAttempt(attempt, upstreamResp, false, ErrRequestTotalTimeout.Error())
+				return ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, probeErr)
+			}
 			if isClientCancelled(c, probeErr) {
 				ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 				return ps.markClientCancelled(c, proxyCtx, probeErr)
@@ -336,6 +375,10 @@ func (ps *ProxyService) handleStreamUpstream(
 		return NewRetryableProxyError(emptyErr, FailureTypeSoft, FailureScopeModelConfig, "空流式响应")
 	}
 	if forwardErr != nil {
+		if ps.isTotalBudgetExceeded(c, proxyCtx, forwardErr) {
+			ps.finalizeAttempt(attempt, upstreamResp, false, ErrRequestTotalTimeout.Error())
+			return ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, forwardErr)
+		}
 		if errors.Is(forwardErr, ErrUpstreamStreamIdle) && forwardResult != nil && !forwardResult.ResponseCommitted {
 			ps.markAttemptRetry(attempt, upstreamResp, FailureTypeSoft, FailureScopeModelConfig, stageStreamForward, forwardErr.Error())
 			return NewRetryableProxyError(forwardErr, FailureTypeSoft, FailureScopeModelConfig, "流式首包超时")
@@ -399,6 +442,10 @@ func (ps *ProxyService) handleNonStreamUpstream(
 
 	body, readErr := readResponseBody(upstreamResp.Body, ps.getMaxResponseBytes())
 	if readErr != nil {
+		if ps.isTotalBudgetExceeded(c, proxyCtx, readErr) {
+			ps.finalizeAttempt(attempt, upstreamResp, false, ErrRequestTotalTimeout.Error())
+			return ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, readErr)
+		}
 		if isClientCancelled(c, readErr) {
 			ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 			return ps.markClientCancelled(c, proxyCtx, readErr)
@@ -437,6 +484,10 @@ func (ps *ProxyService) handleNonStreamUpstream(
 		c, upstreamResp, body, routeResult.ChannelModel, routeResult.Model, proxyCtx.TraceID,
 	)
 	if forwardErr != nil {
+		if ps.isTotalBudgetExceeded(c, proxyCtx, forwardErr) {
+			ps.finalizeAttempt(attempt, upstreamResp, false, ErrRequestTotalTimeout.Error())
+			return ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, attempt, forwardErr)
+		}
 		if isClientCancelled(c, forwardErr) {
 			ps.finalizeAttempt(attempt, upstreamResp, false, "client cancelled")
 			return ps.markClientCancelled(c, proxyCtx, forwardErr)
@@ -578,7 +629,7 @@ func (ps *ProxyService) tryScheduleRetry(
 	failureType FailureType,
 	failureScope FailureScope,
 	stage string,
-) bool {
+) (bool, error) {
 	ps.recordFailure(routeResult, failureType, failureScope, err.Error(), proxyCtx.TraceID)
 	ps.retryCoordinator.RecordAttempt(
 		proxyCtx,
@@ -611,17 +662,107 @@ func (ps *ProxyService) tryScheduleRetry(
 	if !ps.retryCoordinator.ShouldRetry(proxyCtx) {
 		ps.responseForwarder.ForwardErrorResponse(c, http.StatusBadGateway, ErrAllUpstreamAttemptsFailed.Error(), proxyCtx.TraceID)
 		ps.recordRequestMetrics(false, routeResult.Model, routeResult, 0, 0)
-		return false
+		return false, nil
 	}
 
-	_ = ps.retryCoordinator.WaitBeforeRetry(c.Request.Context(), proxyCtx)
-	return true
+	if ps.isTotalBudgetExceeded(c, proxyCtx, nil) {
+		return false, ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, proxyCtx.CurrentAttempt(), nil)
+	}
+
+	if waitErr := ps.retryCoordinator.WaitBeforeRetry(c.Request.Context(), proxyCtx); waitErr != nil {
+		if ps.isTotalBudgetExceeded(c, proxyCtx, waitErr) {
+			return false, ps.finishTotalBudgetExceeded(c, proxyCtx, routeResult, proxyCtx.CurrentAttempt(), waitErr)
+		}
+		if isClientCancelled(c, waitErr) {
+			return false, ps.markClientCancelled(c, proxyCtx, waitErr)
+		}
+		return false, waitErr
+	}
+	return true, nil
+}
+
+func (ps *ProxyService) applyTotalTimeout(c *gin.Context, proxyCtx *ProxyContext) context.CancelFunc {
+	timeout := ps.getTotalTimeout()
+	if timeout <= 0 || c == nil || c.Request == nil {
+		return func() {}
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+	c.Request = c.Request.WithContext(ctx)
+	proxyCtx.TotalTimeout = timeout
+	proxyCtx.BudgetDeadline = time.Now().Add(timeout)
+	return cancel
+}
+
+func (ps *ProxyService) isTotalBudgetExceeded(c *gin.Context, proxyCtx *ProxyContext, err error) bool {
+	if proxyCtx == nil || proxyCtx.TotalTimeout <= 0 {
+		return false
+	}
+	if c != nil && c.Request != nil && errors.Is(c.Request.Context().Err(), context.DeadlineExceeded) {
+		return true
+	}
+	if err != nil && errors.Is(err, context.DeadlineExceeded) && !proxyCtx.BudgetDeadline.IsZero() {
+		return !time.Now().Before(proxyCtx.BudgetDeadline)
+	}
+	return false
+}
+
+func (ps *ProxyService) finishTotalBudgetExceeded(
+	c *gin.Context,
+	proxyCtx *ProxyContext,
+	routeResult *RouteResult,
+	attempt *AttemptRecord,
+	cause error,
+) error {
+	if cause == nil {
+		cause = ErrRequestTotalTimeout
+	}
+	if attempt != nil {
+		attempt.FailureType = FailureTypeNone
+		attempt.FailureScope = FailureScopeNone
+		attempt.FailureStage = stageRequestTotalBudget
+		ps.finalizeAttempt(attempt, nil, false, ErrRequestTotalTimeout.Error())
+	}
+	if routeResult != nil {
+		ps.releaseUnrecordedRouteProbes(routeResult, false, false)
+	} else {
+		ps.releaseRouteProbeSnapshot(proxyCtx.LastRoute)
+	}
+	proxyCtx.LastError = ErrRequestTotalTimeout
+	proxyCtx.LastFailureType = FailureTypeNone
+	proxyCtx.LastFailureScope = FailureScopeNone
+	proxyCtx.LastFailureStage = stageRequestTotalBudget
+
+	modelName := proxyCtx.Model
+	if routeResult != nil {
+		modelName = routeResult.Model
+	}
+	ps.recordRequestMetrics(false, modelName, routeResult, 0, 0)
+
+	if c != nil {
+		if proxyCtx.ResponseStatusLocked || c.Writer.Written() {
+			if responseBody, writeErr := ps.responseForwarder.ForwardLockedErrorBody(c, ErrRequestTotalTimeout.Error(), proxyCtx.TraceID); writeErr == nil {
+				if ps.isDebugModeEnabled() {
+					proxyCtx.ResponseBody = []byte(responseBody)
+				}
+			}
+		} else {
+			ps.responseForwarder.ForwardErrorResponse(c, http.StatusGatewayTimeout, ErrRequestTotalTimeout.Error(), proxyCtx.TraceID)
+		}
+	}
+
+	ps.logTraceInfo(proxyCtx.TraceID, "请求总预算耗尽",
+		slog.Duration("total_timeout", proxyCtx.TotalTimeout),
+		slog.Time("deadline", proxyCtx.BudgetDeadline),
+		slog.String("cause", cause.Error()),
+	)
+	return ErrRequestTotalTimeout
 }
 
 // recordFailure 将故障记录到熔断器，根据 scope/type 决定归因范围
 func (ps *ProxyService) recordFailure(routeResult *RouteResult, failureType FailureType, failureScope FailureScope, errMsg, traceID string) {
 	recordKey := failureScope == FailureScopeKey || failureScope == FailureScopeBoth
 	recordModelConfig := failureScope == FailureScopeModelConfig || failureScope == FailureScopeBoth
+	defer ps.releaseUnrecordedRouteProbes(routeResult, recordKey, recordModelConfig)
 
 	if recordKey {
 		switch failureType {
@@ -647,9 +788,38 @@ func (ps *ProxyService) recordSuccess(routeResult *RouteResult, traceID string) 
 	}
 }
 
+func (ps *ProxyService) releaseUnrecordedRouteProbes(routeResult *RouteResult, keyRecorded bool, modelConfigRecorded bool) {
+	if routeResult == nil || ps.circuitManager == nil {
+		return
+	}
+	if routeResult.KeyProbeAcquired && !keyRecorded && routeResult.Key != nil {
+		ps.circuitManager.ReleaseKeyProbe(routeResult.Key.ID)
+		routeResult.KeyProbeAcquired = false
+	}
+	if routeResult.ModelConfigProbeAcquired && !modelConfigRecorded && routeResult.ModelConfigID != 0 {
+		ps.circuitManager.ReleaseModelConfigProbe(routeResult.ModelConfigID, routeResult.Channel.ID)
+		routeResult.ModelConfigProbeAcquired = false
+	}
+}
+
+func (ps *ProxyService) releaseRouteProbeSnapshot(route *ProxyRouteSnapshot) {
+	if route == nil || ps.circuitManager == nil {
+		return
+	}
+	if route.KeyProbeAcquired && route.KeyID != 0 {
+		ps.circuitManager.ReleaseKeyProbe(route.KeyID)
+		route.KeyProbeAcquired = false
+	}
+	if route.ModelConfigProbeAcquired && route.ModelConfigID != 0 {
+		ps.circuitManager.ReleaseModelConfigProbe(route.ModelConfigID, route.ChannelID)
+		route.ModelConfigProbeAcquired = false
+	}
+}
+
 // markClientCancelled 将 proxyCtx 标记为客户端取消；不记熔断、不重试、不计失败指标。
 // 返回规范化后的错误（优先使用 request context err）。
 func (ps *ProxyService) markClientCancelled(c *gin.Context, proxyCtx *ProxyContext, err error) error {
+	ps.releaseRouteProbeSnapshot(proxyCtx.LastRoute)
 	cancelled := err
 	if c != nil && c.Request != nil {
 		if ctxErr := c.Request.Context().Err(); ctxErr != nil {
