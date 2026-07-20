@@ -142,14 +142,15 @@ func (h *ModelSyncHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 // TestModelRequest 测试模型请求
 type TestModelRequest struct {
-	ChannelModel string   `json:"channel_model" binding:"required"`
-	Model        string   `json:"model"`
-	EndpointType string   `json:"endpoint_type" binding:"required"`
-	KeyGroups    []string `json:"key_groups"`
-	TestPrompt   string   `json:"test_prompt" binding:"omitempty,max=4000"`
-	ImageData    string   `json:"image_data"`
-	ImageSize    string   `json:"image_size" binding:"omitempty,max=50"`
-	ImageQuality string   `json:"image_quality" binding:"omitempty,max=50"`
+	ChannelModel          string   `json:"channel_model" binding:"required"`
+	Model                 string   `json:"model"`
+	EndpointType          string   `json:"endpoint_type" binding:"required"`
+	KeyGroups             []string `json:"key_groups"`
+	TestPrompt            string   `json:"test_prompt" binding:"omitempty,max=4000"`
+	ImageData             string   `json:"image_data"`
+	ImageSize             string   `json:"image_size" binding:"omitempty,max=50"`
+	ImageQuality          string   `json:"image_quality" binding:"omitempty,max=50"`
+	ClientHeaderProfileID string   `json:"client_header_profile_id" binding:"omitempty,max=64"`
 }
 
 // TestModelResponse 测试模型响应
@@ -314,11 +315,22 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 		return
 	}
 
+	headerProfile, ok := h.resolveModelTestClientHeaderProfile(c.Request.Context(), req.ClientHeaderProfileID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "client header profile not found",
+		})
+		return
+	}
+
 	testInput := modelTestInput{
-		Prompt:       testPrompt,
-		ImageData:    imageData,
-		ImageSize:    imageSize,
-		ImageQuality: imageQuality,
+		Prompt:                     testPrompt,
+		ImageData:                  imageData,
+		ImageSize:                  imageSize,
+		ImageQuality:               imageQuality,
+		ClientHeaderProfileID:      modelTestHeaderProfileID(headerProfile),
+		ClientHeaderProfileName:    modelTestHeaderProfileName(headerProfile),
+		ClientHeaderProfileHeaders: modelTestHeaderProfileHeaders(headerProfile),
 	}
 
 	// 使用第一个可用的key
@@ -411,6 +423,8 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 			slog.Bool("non_stream_success", nonStreamSuccess),
 			slog.Bool("stream_tested", streamResult.Tested),
 			slog.Bool("stream_success", streamResult.Success),
+			slog.String("client_header_profile_id", testInput.ClientHeaderProfileID),
+			slog.String("client_header_profile_name", testInput.ClientHeaderProfileName),
 		)
 	} else {
 		h.logger.Warn("渠道模型测试失败",
@@ -422,6 +436,8 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 			slog.Bool("stream_success", streamResult.Success),
 			slog.String("non_stream_message", nonStreamMessage),
 			slog.String("stream_message", streamResult.Message),
+			slog.String("client_header_profile_id", testInput.ClientHeaderProfileID),
+			slog.String("client_header_profile_name", testInput.ClientHeaderProfileName),
 		)
 	}
 
@@ -443,10 +459,13 @@ func (h *ModelSyncHandler) TestModel(c *gin.Context) {
 }
 
 type modelTestInput struct {
-	Prompt       string
-	ImageData    string
-	ImageSize    string
-	ImageQuality string
+	Prompt                     string
+	ImageData                  string
+	ImageSize                  string
+	ImageQuality               string
+	ClientHeaderProfileID      string
+	ClientHeaderProfileName    string
+	ClientHeaderProfileHeaders map[string]string
 }
 
 // testModelViaUpstream 通过上游API测试模型
@@ -503,6 +522,7 @@ func (h *ModelSyncHandler) testModelViaUpstream(
 	}
 
 	upstreamhttp.ApplyUserAgent(req, h.getModelTestUserAgent(ctx))
+	applyModelTestClientHeaders(req, input.ClientHeaderProfileHeaders)
 
 	// 记录开始时间
 	startTime := time.Now()
@@ -526,13 +546,18 @@ func (h *ModelSyncHandler) testModelViaUpstream(
 	}
 	content := buildModelTestResponseContent(endpointType, stream, body)
 	logAttrs := []any{
+		slog.String("component", "admin"),
+		slog.String("event", "model_sync.test.completed"),
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
 		slog.String("channel_model", upstreamModel),
 		slog.String("endpoint_type", endpointType),
 		slog.Bool("stream", stream),
-		slog.String("url", req.URL.String()),
-		slog.Uint64("status_code", uint64(resp.StatusCode)),
+		slog.String("url", loggerutil.SafeURLValueForLog(req.URL)),
+		slog.Int("status_code", resp.StatusCode),
+		slog.String("client_header_profile_id", input.ClientHeaderProfileID),
+		slog.String("client_header_profile_name", input.ClientHeaderProfileName),
+		slog.Int("client_header_count", len(input.ClientHeaderProfileHeaders)),
 	}
 	logAttrs = append(logAttrs, loggerutil.ResponseBodyLogAttrs(body)...)
 	h.logger.Info("模型测试完成", logAttrs...)
@@ -567,6 +592,64 @@ func (h *ModelSyncHandler) getModelTestUserAgent(ctx context.Context) string {
 		return models.DefaultModelTestUserAgent
 	}
 	return h.settingService.GetModelTestUserAgent(ctx)
+}
+
+func (h *ModelSyncHandler) resolveModelTestClientHeaderProfile(ctx context.Context, id string) (*configservice.ModelTestClientHeaderProfile, bool) {
+	if h.settingService == nil {
+		return nil, true
+	}
+	return h.settingService.GetModelTestClientHeaderProfile(ctx, id)
+}
+
+func modelTestHeaderProfileID(profile *configservice.ModelTestClientHeaderProfile) string {
+	if profile == nil {
+		return ""
+	}
+	return profile.ID
+}
+
+func modelTestHeaderProfileName(profile *configservice.ModelTestClientHeaderProfile) string {
+	if profile == nil {
+		return ""
+	}
+	return profile.Name
+}
+
+func modelTestHeaderProfileHeaders(profile *configservice.ModelTestClientHeaderProfile) map[string]string {
+	if profile == nil {
+		return nil
+	}
+	return profile.Headers
+}
+
+func applyModelTestClientHeaders(req *http.Request, headers map[string]string) {
+	if req == nil || len(headers) == 0 {
+		return
+	}
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" || isProtectedModelTestClientHeader(key) {
+			continue
+		}
+		req.Header.Set(key, value)
+	}
+}
+
+func isProtectedModelTestClientHeader(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "authorization",
+		"x-api-key",
+		"x-goog-api-key",
+		"cookie",
+		"set-cookie",
+		"content-type",
+		"content-length",
+		"host":
+		return true
+	default:
+		return false
+	}
 }
 
 const (

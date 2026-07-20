@@ -3,6 +3,21 @@
     <n-drawer-content :title="title" closable>
       <template v-if="!loading">
         <n-space vertical :size="12">
+          <section class="panel-card">
+            <div class="panel-card__body model-test-profile-bar">
+              <div>
+                <div class="model-test-profile-bar__label">模型测试客户端请求头</div>
+                <div class="muted">仅影响本抽屉内发起的模型测试；默认不附加额外客户端请求头。</div>
+              </div>
+              <n-select
+                v-model:value="selectedClientHeaderProfileId"
+                :options="clientHeaderProfileOptions"
+                style="width: 280px"
+                placeholder="请选择测试请求头"
+              />
+            </div>
+          </section>
+
           <n-empty v-if="groupedChannels.length === 0" description="该模型暂未关联任何渠道" />
 
           <section
@@ -75,6 +90,7 @@ import {
   NIcon,
   NInputNumber,
   NPopconfirm,
+  NSelect,
   NSpace,
   NSpin,
   NTag,
@@ -83,6 +99,7 @@ import {
 } from 'naive-ui'
 import {CheckmarkCircleOutline, CloseCircleOutline, PlayCircleOutline} from '@vicons/ionicons5'
 import {channelApi} from '../services/channelService'
+import { settingsService } from '@/services/settingsService'
 import ModelTestResultDialog from './ModelTestResultDialog.vue'
 import ImageTestDialog from './ImageTestDialog.vue'
 import EndpointTags from './EndpointTags.vue'
@@ -90,6 +107,7 @@ import type {ModelTestResultItem} from '../types/modelTest'
 import type {ModelRelatedChannelInfo} from '../types/channel'
 import {createModelTestResultItem} from '../utils/modelTest'
 import {getErrorMessage, toastApiError} from '@/utils/error'
+import { buildModelTestClientHeaderProfileOptions, parseModelTestClientHeaderProfiles } from '@/utils/modelTestClientHeaders'
 
 interface ModelConfig {
   id: number
@@ -139,6 +157,8 @@ const imageTestInitialPrompt = ref('')
 const imageTestInitialTextPrompt = ref('')
 const imageTestInitialGenerationPrompt = ref('')
 const imageTestInitialEditPrompt = ref('')
+const clientHeaderProfileOptions = ref(buildModelTestClientHeaderProfileOptions([]))
+const selectedClientHeaderProfileId = ref('')
 const weightSaveTimers = new Map<number, number>()
 const drawerWidth = 'min(1080px, calc(100vw - 32px))'
 const IMAGE_GENERATION_DEFAULT_PROMPT = '请生成一只戴着耳机的柯基'
@@ -205,6 +225,20 @@ async function loadChannels() {
     toastApiError(err, '加载渠道列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadClientHeaderProfiles() {
+  try {
+    const settings = await settingsService.getAllSettings()
+    const profiles = parseModelTestClientHeaderProfiles(settings.model_test_client_header_profiles)
+    clientHeaderProfileOptions.value = buildModelTestClientHeaderProfileOptions(profiles)
+    if (!clientHeaderProfileOptions.value.some((item) => item.value === selectedClientHeaderProfileId.value)) {
+      selectedClientHeaderProfileId.value = ''
+    }
+  } catch {
+    clientHeaderProfileOptions.value = buildModelTestClientHeaderProfileOptions([])
+    selectedClientHeaderProfileId.value = ''
   }
 }
 
@@ -380,6 +414,7 @@ async function executeChannelModelTest(
             imageData: endpointType === 'OpenAIImagesEdits' ? (options?.imageData || '') : '',
             imageSize: isImageEndpoint ? options?.imageSize : undefined,
             imageQuality: isImageEndpoint ? options?.imageQuality : undefined,
+            clientHeaderProfileId: selectedClientHeaderProfileId.value,
           },
         )
         return createModelTestResultItem({
@@ -415,6 +450,7 @@ async function executeChannelModelTest(
 
 watch(() => props.show, (newVal) => {
   if (newVal) {
+    loadClientHeaderProfiles()
     loadChannels()
     return
   }
@@ -584,6 +620,19 @@ function createColumns(channelId: number): DataTableColumns<ModelConfig> {
 .muted {
   font-size: 12px;
   color: var(--hydra-text-tertiary);
+}
+
+.model-test-profile-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.model-test-profile-bar__label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--hydra-text);
 }
 
 .weight-editor {

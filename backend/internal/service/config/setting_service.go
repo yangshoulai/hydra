@@ -60,6 +60,13 @@ type NonStreamKeepaliveConfig struct {
 	Interval   time.Duration
 }
 
+// ModelTestClientHeaderProfile 描述模型测试时可选附加的一组客户端请求头。
+type ModelTestClientHeaderProfile struct {
+	ID      string            `json:"id"`
+	Name    string            `json:"name"`
+	Headers map[string]string `json:"headers"`
+}
+
 // NewSettingService 创建系统设置服务
 func NewSettingService(logger *slog.Logger, systemSettingRepo *repository.SystemSettingRepository) *SettingService {
 	return &SettingService{
@@ -267,6 +274,7 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		return "circuit_breaker"
 	case key == models.SettingLogRetentionDays ||
 		key == models.SettingLogDebugEnabled ||
+		key == models.SettingLogFormat ||
 		key == models.SettingLogAddSource ||
 		key == models.SettingLogFileEnabled ||
 		key == models.SettingLogFileMaxSize ||
@@ -294,7 +302,8 @@ func (s *SettingService) getDefaultCategory(key string) string {
 		key == models.SettingProxyRateLimitTokenBurst:
 		return "proxy"
 	case key == models.SettingModelTestPrompt ||
-		key == models.SettingModelTestUserAgent:
+		key == models.SettingModelTestUserAgent ||
+		key == models.SettingModelTestClientHeaderProfiles:
 		return "model_test"
 	case key == models.SettingNotificationEnabled ||
 		key == models.SettingNotificationChannel ||
@@ -559,6 +568,12 @@ func (s *SettingService) validateValue(key string, value string) error {
 		if value < 0 || value > 100000 {
 			return &SettingValidationError{message: "限流参数必须在 0-100000 之间，0 表示不限制"}
 		}
+	case models.SettingLogFormat:
+		switch strings.ToLower(trimmed) {
+		case models.LogFormatText, models.LogFormatJSON:
+		default:
+			return &SettingValidationError{message: "日志格式必须是 text 或 json"}
+		}
 	case models.SettingNotificationEnabled:
 		if _, err := strconv.ParseBool(trimmed); err != nil {
 			return &SettingValidationError{message: "通知总开关必须是 true 或 false"}
@@ -578,6 +593,10 @@ func (s *SettingService) validateValue(key string, value string) error {
 	case models.SettingNotificationTelegramChatID:
 		if strings.ContainsAny(trimmed, " \t\r\n") {
 			return &SettingValidationError{message: "Telegram Chat ID 不能包含空白字符"}
+		}
+	case models.SettingModelTestClientHeaderProfiles:
+		if err := validateModelTestClientHeaderProfiles(trimmed); err != nil {
+			return err
 		}
 	}
 
@@ -603,6 +622,110 @@ func validateNotificationEvents(value string) error {
 		}
 	}
 	return nil
+}
+
+func validateModelTestClientHeaderProfiles(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	profiles, err := parseModelTestClientHeaderProfiles(value)
+	if err != nil {
+		return &SettingValidationError{message: "模型测试客户端请求头配置必须是 JSON 数组"}
+	}
+	if len(profiles) > 20 {
+		return &SettingValidationError{message: "模型测试客户端请求头配置最多支持 20 个档案"}
+	}
+	seen := map[string]bool{}
+	for _, profile := range profiles {
+		if strings.TrimSpace(profile.ID) == "" {
+			return &SettingValidationError{message: "模型测试客户端请求头配置的 id 不能为空"}
+		}
+		if strings.TrimSpace(profile.Name) == "" {
+			return &SettingValidationError{message: "模型测试客户端请求头配置的 name 不能为空"}
+		}
+		if seen[profile.ID] {
+			return &SettingValidationError{message: "模型测试客户端请求头配置的 id 不能重复：" + profile.ID}
+		}
+		seen[profile.ID] = true
+		if len(profile.Headers) > 30 {
+			return &SettingValidationError{message: "单个模型测试客户端请求头档案最多支持 30 个请求头"}
+		}
+		for key, val := range profile.Headers {
+			if !isValidHeaderName(key) {
+				return &SettingValidationError{message: "非法的请求头名称：" + key}
+			}
+			if isProtectedModelTestHeader(key) {
+				return &SettingValidationError{message: "模型测试客户端请求头不允许配置受保护字段：" + key}
+			}
+			if len(val) > 2000 {
+				return &SettingValidationError{message: "模型测试客户端请求头值过长：" + key}
+			}
+			if strings.ContainsAny(val, "\r\n") {
+				return &SettingValidationError{message: "模型测试客户端请求头值不能包含换行：" + key}
+			}
+		}
+	}
+	return nil
+}
+
+func parseModelTestClientHeaderProfiles(value string) ([]ModelTestClientHeaderProfile, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	var profiles []ModelTestClientHeaderProfile
+	if err := json.Unmarshal([]byte(value), &profiles); err != nil {
+		return nil, err
+	}
+	for i := range profiles {
+		profiles[i].ID = strings.TrimSpace(profiles[i].ID)
+		profiles[i].Name = strings.TrimSpace(profiles[i].Name)
+		if profiles[i].Headers == nil {
+			profiles[i].Headers = map[string]string{}
+		}
+		normalizedHeaders := make(map[string]string, len(profiles[i].Headers))
+		for key, value := range profiles[i].Headers {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			normalizedHeaders[key] = strings.TrimSpace(value)
+		}
+		profiles[i].Headers = normalizedHeaders
+	}
+	return profiles, nil
+}
+
+func isValidHeaderName(name string) bool {
+	if strings.TrimSpace(name) == "" {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case strings.ContainsRune("!#$%&'*+-.^_`|~", r):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isProtectedModelTestHeader(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "authorization",
+		"x-api-key",
+		"x-goog-api-key",
+		"cookie",
+		"set-cookie",
+		"content-type",
+		"content-length",
+		"host":
+		return true
+	default:
+		return false
+	}
 }
 
 func safeSettingValueForLog(key, value string) string {
@@ -722,6 +845,49 @@ func (s *SettingService) GetEffectiveLogLevel(ctx context.Context) string {
 		return "debug"
 	}
 	return "info"
+}
+
+// GetLogFormat 获取日志输出格式。默认 text，json 用于日志平台采集。
+func (s *SettingService) GetLogFormat(ctx context.Context) string {
+	format := strings.ToLower(strings.TrimSpace(s.GetString(ctx, models.SettingLogFormat, models.LogFormatText)))
+	switch format {
+	case models.LogFormatJSON:
+		return models.LogFormatJSON
+	default:
+		return models.LogFormatText
+	}
+}
+
+// GetModelTestClientHeaderProfiles 获取模型测试客户端请求头配置档案。
+func (s *SettingService) GetModelTestClientHeaderProfiles(ctx context.Context) []ModelTestClientHeaderProfile {
+	value := s.GetString(ctx, models.SettingModelTestClientHeaderProfiles, "[]")
+	profiles, err := parseModelTestClientHeaderProfiles(value)
+	if err != nil {
+		s.logger.Warn("解析模型测试客户端请求头配置失败",
+			slog.String("error", err.Error()),
+		)
+		return nil
+	}
+	return profiles
+}
+
+// GetModelTestClientHeaderProfile 根据 id 获取模型测试客户端请求头配置档案。
+func (s *SettingService) GetModelTestClientHeaderProfile(ctx context.Context, id string) (*ModelTestClientHeaderProfile, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, true
+	}
+	for _, profile := range s.GetModelTestClientHeaderProfiles(ctx) {
+		if profile.ID == id {
+			copied := profile
+			copied.Headers = make(map[string]string, len(profile.Headers))
+			for key, value := range profile.Headers {
+				copied.Headers[key] = value
+			}
+			return &copied, true
+		}
+	}
+	return nil, false
 }
 
 // GetSnifferConfig 获取响应嗅探配置（按流式/非流式拆分）。

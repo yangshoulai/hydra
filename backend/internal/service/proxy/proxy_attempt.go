@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yangshoulai/hydra/internal/endpoint"
+	loggerutil "github.com/yangshoulai/hydra/internal/service/logger"
 	"github.com/yangshoulai/hydra/internal/service/metrics"
 )
 
@@ -132,7 +133,7 @@ func (ps *ProxyService) attemptOnce(c *gin.Context, proxyCtx *ProxyContext, rout
 	}
 
 	// 采集上游请求信息（URL 和 header 始终采集；body 仅调试模式保留）
-	attempt.UpstreamURL = upstreamReq.URL.String()
+	attempt.UpstreamURL = loggerutil.SafeURLValueForLog(upstreamReq.URL)
 	attempt.UpstreamRequestHeaders = upstreamReq.Header.Clone()
 	if ps.isDebugModeEnabled() {
 		if captured, replacedReq, err := snapshotRequestBody(upstreamReq); err == nil {

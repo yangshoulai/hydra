@@ -33,6 +33,7 @@ const (
 
 	// Logging
 	SettingLogAddSource                    = "log_add_source"
+	SettingLogFormat                       = "log_format"
 	SettingLogFileEnabled                  = "log_file_enabled"
 	SettingLogFileMaxSize                  = "log_file_max_size"
 	SettingLogFileMaxBackups               = "log_file_max_backups"
@@ -67,6 +68,7 @@ const (
 	SettingSnifferPlainTextErrorRules      = "sniffer_plain_text_error_rules"
 	SettingModelTestPrompt                 = "model_test_prompt"
 	SettingModelTestUserAgent              = "model_test_user_agent"
+	SettingModelTestClientHeaderProfiles   = "model_test_client_header_profiles"
 
 	// Notification
 	SettingNotificationEnabled          = "notification_enabled"
@@ -81,6 +83,11 @@ const DefaultModelTestUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_
 const (
 	ProxyLoadBalanceStrategyWeightedRandom = "weighted_random"
 	ProxyLoadBalanceStrategyRoundRobin     = "round_robin"
+)
+
+const (
+	LogFormatText = "text"
+	LogFormatJSON = "json"
 )
 
 const (

@@ -496,6 +496,16 @@
 
           <div class="setting-row">
             <div class="setting-row__info">
+              <div class="setting-row__label">日志输出格式</div>
+              <div class="setting-row__desc">text 适合本地查看；json 适合接入 Loki、ELK、CloudWatch 等日志平台。</div>
+            </div>
+            <div class="setting-row__control">
+              <n-select v-model:value="formData.log_format" :options="logFormatOptions" placeholder="请选择日志格式" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-row__info">
               <div class="setting-row__label">调试模式</div>
               <div class="setting-row__desc">记录完整请求与响应正文，便于排障。含敏感信息，排障完成后建议关闭。</div>
             </div>
@@ -545,6 +555,24 @@
                 type="textarea"
                 :autosize="{ minRows: 2, maxRows: 5 }"
                 placeholder="例如：Mozilla/5.0 ..."
+                style="width: 100%"
+              />
+            </div>
+          </div>
+
+          <div class="setting-row setting-row--block">
+            <div class="setting-row__info">
+              <div class="setting-row__label">客户端请求头配置档案</div>
+              <div class="setting-row__desc">
+                JSON 数组。模型测试时可选择某个档案附加请求头；Authorization、Content-Type、Host 等受保护字段不允许配置。
+              </div>
+            </div>
+            <div class="setting-row__control setting-row__control--block">
+              <n-input
+                v-model:value="formData.model_test_client_header_profiles"
+                type="textarea"
+                :autosize="{ minRows: 6, maxRows: 14 }"
+                placeholder='例如：[{"id":"claude_code","name":"Claude Code","headers":{"anthropic-beta":"xxx"}}]'
                 style="width: 100%"
               />
             </div>
@@ -636,6 +664,7 @@ import {
   useMessage,
 } from 'naive-ui'
 import { settingsService } from '@/services/settingsService'
+import { DEFAULT_MODEL_TEST_CLIENT_HEADER_PROFILES_JSON, parseModelTestClientHeaderProfiles } from '@/utils/modelTestClientHeaders'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -669,9 +698,11 @@ interface SettingsData {
   sniffer_stream_enabled: boolean
   sniffer_stream_packet_count: number
   log_retention_days: number
+  log_format: 'text' | 'json'
   log_debug_enabled: boolean
   model_test_prompt: string
   model_test_user_agent: string
+  model_test_client_header_profiles: string
   notification_enabled: boolean
   notification_channel: 'telegram'
   notification_events: string[]
@@ -726,9 +757,11 @@ const formData = ref<SettingsData>({
   sniffer_stream_enabled: true,
   sniffer_stream_packet_count: 1,
   log_retention_days: 30,
+  log_format: 'text',
   log_debug_enabled: false,
   model_test_prompt: 'Hi',
   model_test_user_agent: DEFAULT_MODEL_TEST_USER_AGENT,
+  model_test_client_header_profiles: DEFAULT_MODEL_TEST_CLIENT_HEADER_PROFILES_JSON,
   notification_enabled: false,
   notification_channel: 'telegram',
   notification_events: [],
@@ -759,6 +792,11 @@ const notificationStatusText = computed(() => {
 const loadBalanceStrategyOptions = [
   { label: '兼容保留：加权随机', value: 'weighted_random' },
   { label: '兼容保留：轮询', value: 'round_robin' },
+]
+
+const logFormatOptions = [
+  { label: 'Text（本地查看）', value: 'text' },
+  { label: 'JSON（日志平台采集）', value: 'json' },
 ]
 
 const notificationChannelOptions = [{ label: 'Telegram', value: 'telegram' }]
@@ -890,6 +928,9 @@ const loadSettings = async () => {
       formData.value.sniffer_stream_packet_count = Math.max(1, parseInt(settings.sniffer_stream_packet_count))
     }
     if (settings.log_retention_days) formData.value.log_retention_days = parseInt(settings.log_retention_days)
+    if (settings.log_format !== undefined) {
+      formData.value.log_format = settings.log_format === 'json' ? 'json' : 'text'
+    }
     if (settings.log_debug_enabled !== undefined) {
       debugModeEnabled.value = settings.log_debug_enabled === 'true'
     }
@@ -898,6 +939,10 @@ const loadSettings = async () => {
     }
     if (settings.model_test_user_agent !== undefined) {
       formData.value.model_test_user_agent = settings.model_test_user_agent || DEFAULT_MODEL_TEST_USER_AGENT
+    }
+    if (settings.model_test_client_header_profiles !== undefined) {
+      formData.value.model_test_client_header_profiles =
+        settings.model_test_client_header_profiles || DEFAULT_MODEL_TEST_CLIENT_HEADER_PROFILES_JSON
     }
     if (settings.notification_enabled !== undefined) {
       formData.value.notification_enabled = settings.notification_enabled === 'true'
@@ -1054,6 +1099,24 @@ const handleSave = async () => {
     message.error('日志保留天数必须大于 0')
     return
   }
+  let parsedClientHeaderProfiles: unknown = []
+  try {
+    parsedClientHeaderProfiles = JSON.parse(formData.value.model_test_client_header_profiles || '[]')
+  } catch {
+    message.error('客户端请求头配置档案必须是合法 JSON')
+    return
+  }
+  if (!Array.isArray(parsedClientHeaderProfiles)) {
+    message.error('客户端请求头配置档案必须是 JSON 数组')
+    return
+  }
+  if (parsedClientHeaderProfiles.length > 0) {
+    const profiles = parseModelTestClientHeaderProfiles(formData.value.model_test_client_header_profiles)
+    if (profiles.length === 0) {
+      message.error('客户端请求头配置档案必须是包含 id/name/headers 的 JSON 数组')
+      return
+    }
+  }
   if (formData.value.notification_enabled) {
     if (!telegramConfigured.value) {
       message.error('开启通知前请先完成 Telegram Bot Token 和 Chat ID 配置')
@@ -1102,9 +1165,11 @@ const handleSave = async () => {
         sniffer_stream_enabled: formData.value.sniffer_stream_enabled.toString(),
         sniffer_stream_packet_count: Math.max(1, formData.value.sniffer_stream_packet_count).toString(),
         log_retention_days: formData.value.log_retention_days.toString(),
+        log_format: formData.value.log_format,
         log_debug_enabled: debugModeEnabled.value.toString(),
         model_test_prompt: formData.value.model_test_prompt.trim(),
         model_test_user_agent: formData.value.model_test_user_agent.trim(),
+        model_test_client_header_profiles: formData.value.model_test_client_header_profiles.trim() || '[]',
         notification_enabled: formData.value.notification_enabled.toString(),
         notification_channel: formData.value.notification_channel,
         notification_events: JSON.stringify(formData.value.notification_events),

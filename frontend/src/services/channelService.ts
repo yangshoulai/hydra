@@ -212,6 +212,7 @@ export const channelApi = {
       imageData?: string
       imageSize?: string
       imageQuality?: string
+      clientHeaderProfileId?: string
     }
   ): Promise<TestModelResponse> {
     const response = await apiClient.post<TestModelResponse>(
@@ -225,6 +226,7 @@ export const channelApi = {
         image_data: options?.imageData || '',
         image_size: options?.imageSize || '',
         image_quality: options?.imageQuality || '',
+        client_header_profile_id: options?.clientHeaderProfileId || '',
       }
     )
     return response.data

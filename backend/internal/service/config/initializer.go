@@ -82,6 +82,12 @@ var DefaultSettings = []models.SystemSetting{
 		Remark:    "是否启用调试日志",
 	},
 	{
+		Key:       models.SettingLogFormat,
+		Value:     models.LogFormatText,
+		ValueType: "string",
+		Remark:    "日志输出格式(text/json)",
+	},
+	{
 		Key:       models.SettingLogAddSource,
 		Value:     "false",
 		ValueType: "bool",
@@ -238,6 +244,12 @@ var DefaultSettings = []models.SystemSetting{
 		ValueType: "string",
 		Remark:    "渠道模型测试/同步/健康检查统一使用的 User-Agent",
 	},
+	{
+		Key:       models.SettingModelTestClientHeaderProfiles,
+		Value:     defaultModelTestClientHeaderProfilesJSON,
+		ValueType: "json",
+		Remark:    "模型测试客户端请求头配置档案(JSON)",
+	},
 	// 通知设置
 	{
 		Key:       models.SettingNotificationEnabled,
@@ -289,6 +301,19 @@ var DefaultSettings = []models.SystemSetting{
 		Remark:    "流式响应嗅探前缓存的数据包数量",
 	},
 }
+
+const defaultModelTestClientHeaderProfilesJSON = `[
+  {
+    "id": "codex_cli",
+    "name": "Codex CLI",
+    "headers": {}
+  },
+  {
+    "id": "claude_code",
+    "name": "Claude Code",
+    "headers": {}
+  }
+]`
 
 // GetDefaultPlainTextErrorRulesSetting 获取默认的明文错误规则设置
 func GetDefaultPlainTextErrorRulesSetting() models.SystemSetting {

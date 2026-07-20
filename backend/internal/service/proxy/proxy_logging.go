@@ -158,6 +158,8 @@ func formatRequestSummaryMessage(c *gin.Context, s requestSummary) string {
 
 func buildRequestSummaryAttrs(c *gin.Context, proxyCtx *ProxyContext, err error, s requestSummary) []any {
 	attrs := []any{
+		slog.String("component", "proxy"),
+		slog.String("event", "proxy.request.completed"),
 		slog.String("trace_id", s.traceID),
 		slog.Int("status_code", s.statusCode),
 		slog.String("method", c.Request.Method),
@@ -177,6 +179,12 @@ func buildRequestSummaryAttrs(c *gin.Context, proxyCtx *ProxyContext, err error,
 	}
 	if err != nil {
 		attrs = append(attrs, slog.String("error", err.Error()))
+		attrs = append(attrs,
+			slog.String("final_error_code", resolveFinalErrorCode(proxyCtx, s)),
+			slog.String("final_error_message", truncateErrorMessage(err.Error())),
+		)
+	} else if s.clientCancelled {
+		attrs = append(attrs, slog.String("final_error_code", stageClientCancelled))
 	}
 	if proxyCtx.LastFailureType != FailureTypeNone {
 		attrs = append(attrs, slog.String("last_failure_type", string(proxyCtx.LastFailureType)))
@@ -187,7 +195,48 @@ func buildRequestSummaryAttrs(c *gin.Context, proxyCtx *ProxyContext, err error,
 	if proxyCtx.LastFailureStage != "" {
 		attrs = append(attrs, slog.String("last_failure_stage", proxyCtx.LastFailureStage))
 	}
+	if attempt := proxyCtx.CurrentAttempt(); attempt != nil {
+		attrs = append(attrs,
+			slog.Int("last_attempt_num", attempt.AttemptNum),
+			slog.Int("last_attempt_status_code", attempt.UpstreamStatusCode),
+			slog.Uint64("last_attempt_channel_id", uint64(attempt.ChannelID)),
+			slog.String("last_attempt_channel_name", attempt.ChannelName),
+			slog.Uint64("last_attempt_model_config_id", uint64(attempt.ModelConfigID)),
+			slog.Uint64("last_attempt_key_id", uint64(attempt.KeyID)),
+		)
+		if attempt.FailureType != FailureTypeNone {
+			attrs = append(attrs, slog.String("last_attempt_failure_type", string(attempt.FailureType)))
+		}
+		if attempt.FailureScope != FailureScopeNone {
+			attrs = append(attrs, slog.String("last_attempt_failure_scope", string(attempt.FailureScope)))
+		}
+		if attempt.FailureStage != "" {
+			attrs = append(attrs, slog.String("last_attempt_failure_stage", attempt.FailureStage))
+		}
+		if attempt.ErrorMessage != "" {
+			attrs = append(attrs, slog.String("last_attempt_error", attempt.ErrorMessage))
+		}
+	}
 	return attrs
+}
+
+func resolveFinalErrorCode(proxyCtx *ProxyContext, s requestSummary) string {
+	if s.clientCancelled {
+		return stageClientCancelled
+	}
+	if proxyCtx == nil {
+		return "proxy_error"
+	}
+	if proxyCtx.LastFailureStage != "" {
+		return proxyCtx.LastFailureStage
+	}
+	if proxyCtx.LastFailureType != FailureTypeNone && proxyCtx.LastFailureScope != FailureScopeNone {
+		return string(proxyCtx.LastFailureType) + "_" + string(proxyCtx.LastFailureScope)
+	}
+	if proxyCtx.LastFailureType != FailureTypeNone {
+		return string(proxyCtx.LastFailureType)
+	}
+	return "proxy_error"
 }
 
 func (ps *ProxyService) emitRequestSummary(s requestSummary, msg string, attrs []any) {

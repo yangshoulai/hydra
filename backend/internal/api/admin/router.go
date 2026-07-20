@@ -45,6 +45,7 @@ func RegisterRoutes(
 
 	// 注册路由
 	adminAPI := router.Group("/admin/api")
+	adminAPI.Use(middleware.TraceID(), middleware.AdminAuditLogger(logger))
 	{
 		// 认证路由(不需要中间件)
 		auth := adminAPI.Group("/auth")

@@ -473,6 +473,7 @@ func initRuntimeLogger(settingService *configService.SettingService, dataDir str
 	ctx := context.Background()
 	cfg := &loggerService.LoggerConfig{
 		Level:      settingService.GetEffectiveLogLevel(ctx),
+		Format:     settingService.GetLogFormat(ctx),
 		AddSource:  settingService.GetBool(ctx, models.SettingLogAddSource, false),
 		EnableFile: settingService.GetBool(ctx, models.SettingLogFileEnabled, true),
 		FilePath:   filepath.Join(dataDir, logsSubDir, logFileName),

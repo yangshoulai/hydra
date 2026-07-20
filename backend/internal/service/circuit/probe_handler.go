@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/yangshoulai/hydra/internal/endpoint"
@@ -69,10 +68,12 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 	resp, err := ph.httpClient.DoWithProxy(plan.req, "", channel.UseProxy)
 	if err != nil {
 		ph.logger.Warn("嗅探请求失败（网络错误）",
+			slog.String("component", "circuit"),
+			slog.String("event", "circuit.probe.network_failed"),
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
-			slog.String("url", plan.req.URL.String()),
+			slog.String("url", loggerutil.SafeURLValueForLog(plan.req.URL)),
 			slog.String("error", err.Error()),
 		)
 		// 网络错误视为软故障
@@ -86,11 +87,13 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		ph.logger.Warn("无法读取嗅探响应报文",
+			slog.String("component", "circuit"),
+			slog.String("event", "circuit.probe.read_response_failed"),
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
-			slog.String("url", plan.req.URL.String()),
-			slog.String("status_code", strconv.Itoa(resp.StatusCode)),
+			slog.String("url", loggerutil.SafeURLValueForLog(plan.req.URL)),
+			slog.Int("status_code", resp.StatusCode),
 			slog.String("error", err.Error()),
 		)
 		return false, false, err
@@ -107,11 +110,13 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 			}
 		}
 		ph.logger.Info("嗅探成功",
+			slog.String("component", "circuit"),
+			slog.String("event", "circuit.probe.succeeded"),
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
-			slog.String("url", plan.req.URL.String()),
-			slog.String("status_code", strconv.Itoa(resp.StatusCode)),
+			slog.String("url", loggerutil.SafeURLValueForLog(plan.req.URL)),
+			slog.Int("status_code", resp.StatusCode),
 			slog.String("endpoint_type", plan.endpointType),
 			slog.String("model", plan.modelName),
 			slog.Bool("fallback", plan.fallback),
@@ -133,10 +138,12 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 	case resp.StatusCode == 429:
 		// 限流,视为软故障
 		ph.logger.Warn("嗅探失败 (rate limited)",
+			slog.String("component", "circuit"),
+			slog.String("event", "circuit.probe.rate_limited"),
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
-			slog.String("url", plan.req.URL.String()),
+			slog.String("url", loggerutil.SafeURLValueForLog(plan.req.URL)),
 			slog.Int("status_code", resp.StatusCode),
 		)
 		return false, false, fmt.Errorf("rate limited")
@@ -144,10 +151,12 @@ func (ph *ProbeHandler) ProbeChannelKey(ctx context.Context, channelKey *models.
 	case resp.StatusCode >= 500:
 		// 服务器错误,软故障
 		ph.logger.Warn("嗅探失败 (server error)",
+			slog.String("component", "circuit"),
+			slog.String("event", "circuit.probe.server_error"),
 			slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 			slog.Uint64("channel_id", uint64(channel.ID)),
 			slog.String("channel_name", channel.Name),
-			slog.String("url", plan.req.URL.String()),
+			slog.String("url", loggerutil.SafeURLValueForLog(plan.req.URL)),
 			slog.Int("status_code", resp.StatusCode),
 		)
 		return false, false, fmt.Errorf("server error: %d", resp.StatusCode)
@@ -243,13 +252,15 @@ func priorityValue(endpointType string, priority map[string]int) int {
 
 func (ph *ProbeHandler) baseProbeLogAttrs(channelKey *models.ChannelKey, channel *models.Channel, plan *probeRequestPlan, statusCode int) []any {
 	attrs := []any{
+		slog.String("component", "circuit"),
+		slog.String("event", "circuit.probe.failed"),
 		slog.Uint64("channel_key_id", uint64(channelKey.ID)),
 		slog.Uint64("channel_id", uint64(channel.ID)),
 		slog.String("channel_name", channel.Name),
 		slog.Int("status_code", statusCode),
 	}
 	if plan != nil && plan.req != nil {
-		attrs = append(attrs, slog.String("url", plan.req.URL.String()))
+		attrs = append(attrs, slog.String("url", loggerutil.SafeURLValueForLog(plan.req.URL)))
 	}
 	if plan != nil {
 		attrs = append(attrs,

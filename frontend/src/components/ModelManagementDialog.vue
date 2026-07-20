@@ -16,6 +16,21 @@
     </template>
 
     <n-space vertical :size="12">
+      <section class="panel-card">
+        <div class="panel-card__body model-test-profile-bar">
+          <div>
+            <div class="model-test-profile-bar__label">模型测试客户端请求头</div>
+            <div class="muted">仅影响本弹窗内发起的模型测试；默认不附加额外客户端请求头。</div>
+          </div>
+          <n-select
+            v-model:value="selectedClientHeaderProfileId"
+            :options="clientHeaderProfileOptions"
+            style="width: 280px"
+            placeholder="请选择测试请求头"
+          />
+        </div>
+      </section>
+
       <section class="metric-grid" style="grid-template-columns: repeat(4, minmax(140px, 1fr))">
         <div class="metric-tile">
           <div class="metric-tile__label">本地已配置</div>
@@ -269,6 +284,7 @@ import { channelApi } from '@/services/channelService'
 import { modelApi } from '@/services/modelService'
 import { endpointApi } from '@/services/endpointService'
 import { providerApi } from '@/services/providerService'
+import { settingsService } from '@/services/settingsService'
 import ModelTestResultDialog from '@/components/ModelTestResultDialog.vue'
 import ImageTestDialog from '@/components/ImageTestDialog.vue'
 import type {
@@ -284,6 +300,7 @@ import type { EndpointInfo } from '@/types/endpoint'
 import { createModelTestResultItem, formatTestResultSummary } from '@/utils/modelTest'
 import { getErrorMessage, toastApiError } from '@/utils/error'
 import { feedback } from '@/services/feedback'
+import { buildModelTestClientHeaderProfileOptions, parseModelTestClientHeaderProfiles } from '@/utils/modelTestClientHeaders'
 
 interface Props {
   channelId: number
@@ -401,6 +418,8 @@ const imageTestInitialSize = ref('1024x1024')
 const imageTestInitialQuality = ref('low')
 const testResultTitle = ref('模型测试结果')
 const testResultItems = ref<ModelTestResultItem[]>([])
+const clientHeaderProfileOptions = ref(buildModelTestClientHeaderProfileOptions([]))
+const selectedClientHeaderProfileId = ref('')
 
 const DEFAULT_IMAGE_TEST_SIZE = '1024x1024'
 const DEFAULT_IMAGE_TEST_QUALITY = 'low'
@@ -899,6 +918,20 @@ async function loadProviders() {
   }
 }
 
+async function loadClientHeaderProfiles() {
+  try {
+    const settings = await settingsService.getAllSettings()
+    const profiles = parseModelTestClientHeaderProfiles(settings.model_test_client_header_profiles)
+    clientHeaderProfileOptions.value = buildModelTestClientHeaderProfileOptions(profiles)
+    if (!clientHeaderProfileOptions.value.some((item) => item.value === selectedClientHeaderProfileId.value)) {
+      selectedClientHeaderProfileId.value = ''
+    }
+  } catch {
+    clientHeaderProfileOptions.value = buildModelTestClientHeaderProfileOptions([])
+    selectedClientHeaderProfileId.value = ''
+  }
+}
+
 function normalizeModelName(name: string): string {
   return (name || '').trim().toLowerCase()
 }
@@ -1211,6 +1244,7 @@ async function executeModelTest(
               imageData,
               imageSize: isImageEndpoint ? (options?.imageSize || getImageTestSize(key)) : undefined,
               imageQuality: isImageEndpoint ? (options?.imageQuality || getImageTestQuality(key)) : undefined,
+              clientHeaderProfileId: selectedClientHeaderProfileId.value,
             },
           )
           rowStatus[endpointType] = result.success ? 'success' : 'error'
@@ -1400,7 +1434,7 @@ watch(
     syncFailed.value = false
     syncResult.value = null
 
-    await Promise.all([loadLocalConfigs(), loadUnifiedModels(), loadProviders(), loadEndpoints()])
+    await Promise.all([loadLocalConfigs(), loadUnifiedModels(), loadProviders(), loadEndpoints(), loadClientHeaderProfiles()])
     initEditState()
     modelForm.test_prompt = ''
     await nextTick()
@@ -1461,6 +1495,24 @@ watch(
 :deep(.compact-multi-select .n-base-selection-tag-wrapper .n-tag .n-tag__content) {
   display: inline-flex;
   align-items: center;
+}
+
+.muted {
+  font-size: 12px;
+  color: var(--hydra-text-tertiary);
+}
+
+.model-test-profile-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.model-test-profile-bar__label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--hydra-text);
 }
 
 .image-test-upload {

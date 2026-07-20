@@ -156,3 +156,5 @@ credentials.json
 .serena/
 .specify/
 bin/
+
+.pnpm-store/

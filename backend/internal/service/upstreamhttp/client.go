@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yangshoulai/hydra/internal/models"
+	loggerutil "github.com/yangshoulai/hydra/internal/service/logger"
 )
 
 // HTTPClient 上游 HTTP 客户端
@@ -113,7 +114,7 @@ func buildProxyFunc(proxyURL string, logger *slog.Logger) func(*http.Request) (*
 	parsed, err := url.Parse(trimmed)
 	if err != nil {
 		logger.Warn("网络代理地址无效，已忽略",
-			slog.String("proxy_url", trimmed),
+			slog.String("proxy_url", loggerutil.SafeURLForLog(trimmed)),
 			slog.String("error", err.Error()),
 		)
 		return nil
@@ -123,7 +124,7 @@ func buildProxyFunc(proxyURL string, logger *slog.Logger) func(*http.Request) (*
 	case "http", "https", "socks5", "socks5h":
 	default:
 		logger.Warn("网络代理协议不支持，已忽略",
-			slog.String("proxy_url", trimmed),
+			slog.String("proxy_url", loggerutil.SafeURLForLog(trimmed)),
 			slog.String("scheme", parsed.Scheme),
 		)
 		return nil
@@ -131,7 +132,7 @@ func buildProxyFunc(proxyURL string, logger *slog.Logger) func(*http.Request) (*
 
 	if parsed.Host == "" {
 		logger.Warn("网络代理地址缺少主机信息，已忽略",
-			slog.String("proxy_url", trimmed),
+			slog.String("proxy_url", loggerutil.SafeURLForLog(trimmed)),
 		)
 		return nil
 	}
@@ -165,14 +166,18 @@ func (hc *HTTPClient) DoWithProxy(req *http.Request, traceID string, useSystemPr
 	if useSystemProxy {
 		effectiveProxyURL = strings.TrimSpace(currentProxyURL)
 	}
+	logURL := loggerutil.SafeURLValueForLog(req.URL)
+	logProxyURL := loggerutil.SafeURLForLog(effectiveProxyURL)
 
 	hc.logger.Debug("渠道调用开始",
+		slog.String("component", "upstream_http"),
+		slog.String("event", "upstream_http.request.started"),
 		slog.String("trace_id", traceID),
 		slog.String("method", req.Method),
-		slog.String("url", req.URL.String()),
+		slog.String("url", logURL),
 		slog.Bool("use_system_proxy", useSystemProxy),
 		slog.Duration("request_timeout", currentTimeout),
-		slog.String("network_proxy_url", effectiveProxyURL),
+		slog.String("network_proxy_url", logProxyURL),
 	)
 
 	resp, err := client.Do(req)
@@ -181,26 +186,30 @@ func (hc *HTTPClient) DoWithProxy(req *http.Request, traceID string, useSystemPr
 
 	if err != nil {
 		hc.logger.Debug("渠道调用异常",
+			slog.String("component", "upstream_http"),
+			slog.String("event", "upstream_http.request.failed"),
 			slog.String("trace_id", traceID),
 			slog.String("method", req.Method),
-			slog.String("url", req.URL.String()),
+			slog.String("url", logURL),
 			slog.Duration("duration", duration),
 			slog.Bool("use_system_proxy", useSystemProxy),
 			slog.Duration("request_timeout", currentTimeout),
-			slog.String("network_proxy_url", effectiveProxyURL),
+			slog.String("network_proxy_url", logProxyURL),
 			slog.String("error", err.Error()),
 		)
 		return nil, err
 	}
 
 	hc.logger.Debug("渠道调用完成",
+		slog.String("component", "upstream_http"),
+		slog.String("event", "upstream_http.request.completed"),
 		slog.String("trace_id", traceID),
 		slog.String("method", req.Method),
-		slog.String("url", req.URL.String()),
+		slog.String("url", logURL),
 		slog.Int("status_code", resp.StatusCode),
 		slog.Duration("duration", duration),
 		slog.Bool("use_system_proxy", useSystemProxy),
-		slog.String("network_proxy_url", effectiveProxyURL),
+		slog.String("network_proxy_url", logProxyURL),
 	)
 
 	return resp, nil
@@ -288,8 +297,8 @@ func (hc *HTTPClient) UpdateUpstreamProxyURL(proxyURL string) {
 	}
 
 	hc.logger.Info("HTTP客户端网络代理已更新",
-		slog.String("old_proxy_url", oldProxyURL),
-		slog.String("new_proxy_url", strings.TrimSpace(proxyURL)),
+		slog.String("old_proxy_url", loggerutil.SafeURLForLog(oldProxyURL)),
+		slog.String("new_proxy_url", loggerutil.SafeURLForLog(proxyURL)),
 	)
 }
 

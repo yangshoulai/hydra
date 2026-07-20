@@ -295,10 +295,13 @@ func (ps *ProxyService) reloadLoggingConfig(ctx context.Context) {
 	ps.debugModeEnabled.Store(ps.settingService.GetBool(ctx, models.SettingLogDebugEnabled, false))
 	effectiveLogLevel := ps.settingService.GetEffectiveLogLevel(ctx)
 	loggerService.SetLogLevel(effectiveLogLevel)
+	logFormat := ps.settingService.GetLogFormat(ctx)
+	loggerService.SetLogFormat(logFormat)
 	addSource := ps.settingService.GetBool(ctx, models.SettingLogAddSource, false)
 	loggerService.SetAddSource(addSource)
 	ps.logger.Info("代理日志级别已热更新",
 		slog.String("effective_log_level", effectiveLogLevel),
+		slog.String("log_format", logFormat),
 		slog.Bool("debug_mode", ps.debugModeEnabled.Load()),
 		slog.Bool("add_source", addSource),
 	)
@@ -331,7 +334,7 @@ func (ps *ProxyService) reloadProxyConfig(ctx context.Context) {
 		slog.Bool("non_stream_keepalive_enabled", nonStreamKeepalive.Enabled),
 		slog.Duration("non_stream_keepalive_first_delay", nonStreamKeepalive.FirstDelay),
 		slog.Duration("non_stream_keepalive_interval", nonStreamKeepalive.Interval),
-		slog.String("network_proxy_url", networkProxyURL),
+		slog.String("network_proxy_url", loggerService.SafeURLForLog(networkProxyURL)),
 		slog.Int("max_retry", maxRetry),
 		slog.Int("max_route_attempts", maxRouteAttemptsFromSetting(maxRetry)),
 		slog.String("route_selection_strategy", "model_config_weighted_random"),
