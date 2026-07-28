@@ -67,19 +67,39 @@ func (e *ImagesEditEndpoint) ParseTokenUsage(_ []byte, _ string, _ bool) (int64,
 
 func (e *ImagesEditEndpoint) ConfigureRequest(req *http.Request, apiKey string, modelName string, requestBody []byte) ([]byte, error) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	updatedBody, newContentType, err := replaceModelInMultipart(requestBody, req.Header.Get("Content-Type"), modelName)
+	contentType := req.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return nil, fmt.Errorf("rewrite images edit model: %w", err)
+		return nil, fmt.Errorf("parse images edit content type: %w", err)
 	}
-	req.Header.Set("Content-Type", newContentType)
-	return updatedBody, nil
+
+	switch mediaType {
+	case "application/json":
+		return replaceRequestModel(requestBody, contentType, modelName)
+	case "multipart/form-data":
+		updatedBody, newContentType, err := replaceModelInMultipart(requestBody, contentType, modelName)
+		if err != nil {
+			return nil, fmt.Errorf("rewrite images edit model: %w", err)
+		}
+		req.Header.Set("Content-Type", newContentType)
+		return updatedBody, nil
+	default:
+		return nil, fmt.Errorf("unsupported content type for images/edits endpoint: %s", mediaType)
+	}
 }
 
 func (e *ImagesEditEndpoint) GetModelFromRequest(req *http.Request, body []byte) (string, error) {
 	contentType := req.Header.Get("Content-Type")
 	mediaType, params, err := mime.ParseMediaType(contentType)
-	if err != nil || mediaType != "multipart/form-data" {
-		return "", errors.New("invalid content type for images/edits endpoint")
+	if err != nil {
+		return "", fmt.Errorf("parse images edit content type: %w", err)
+	}
+
+	if mediaType == "application/json" {
+		return GetModelFromJSONBody(body)
+	}
+	if mediaType != "multipart/form-data" {
+		return "", fmt.Errorf("unsupported content type for images/edits endpoint: %s", mediaType)
 	}
 	boundary := params["boundary"]
 	if boundary == "" {
@@ -88,8 +108,11 @@ func (e *ImagesEditEndpoint) GetModelFromRequest(req *http.Request, body []byte)
 	reader := multipart.NewReader(bytes.NewReader(body), boundary)
 	for {
 		part, err := reader.NextPart()
-		if err != nil {
+		if errors.Is(err, io.EOF) {
 			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("read images edit multipart: %w", err)
 		}
 		if part.FormName() == "model" {
 			val, err := io.ReadAll(part)
@@ -122,15 +145,22 @@ func replaceModelInMultipart(body []byte, contentType string, modelName string) 
 	reader := multipart.NewReader(bytes.NewReader(body), boundary)
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
+	modelFound := false
 
 	for {
 		part, err := reader.NextPart()
-		if err != nil {
+		if errors.Is(err, io.EOF) {
 			break
+		}
+		if err != nil {
+			return nil, "", fmt.Errorf("read multipart part: %w", err)
 		}
 		if part.FormName() == "model" {
 			_ = part.Close()
-			_ = writer.WriteField("model", modelName)
+			if err := writer.WriteField("model", modelName); err != nil {
+				return nil, "", err
+			}
+			modelFound = true
 			continue
 		}
 		// 复制其他字段（包括文件字段）
@@ -146,6 +176,11 @@ func replaceModelInMultipart(body []byte, contentType string, modelName string) 
 		}
 	}
 
-	_ = writer.Close()
+	if !modelFound {
+		return nil, "", errors.New("model field is missing")
+	}
+	if err := writer.Close(); err != nil {
+		return nil, "", err
+	}
 	return buf.Bytes(), writer.FormDataContentType(), nil
 }

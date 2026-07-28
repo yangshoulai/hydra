@@ -20,14 +20,14 @@ func TestGeminiEndpointAllowsSafetyFeedbackWithoutCandidates(t *testing.T) {
 	}
 }
 
-func TestImagesEditEndpointReturnsMultipartRewriteError(t *testing.T) {
+func TestImagesEditEndpointReturnsUnsupportedContentTypeError(t *testing.T) {
 	request, err := http.NewRequest(http.MethodPost, "https://upstream.example/v1/images/edits", strings.NewReader(`{"model":"public"}`))
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Type", "text/plain")
 	_, err = (&ImagesEditEndpoint{}).ConfigureRequest(request, "key", "gpt-image-1", []byte(`{"model":"public"}`))
 	if err == nil {
-		t.Fatal("invalid multipart request must return an error instead of silently preserving the public model")
+		t.Fatal("unsupported content type must return an error instead of silently preserving the public model")
 	}
 }

@@ -1,13 +1,17 @@
 package proxy
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yangshoulai/hydra/internal/endpoint"
 	"github.com/yangshoulai/hydra/internal/models"
 )
 
@@ -323,7 +327,7 @@ func (ps *ProxyService) persistRequestLog(c *gin.Context, proxyCtx *ProxyContext
 			TraceID:             log.TraceID,
 			CreatedAt:           log.CreatedAt,
 			RequestHeadersJSON:  marshalHeaders(sanitizeHeaders(proxyCtx.RequestHeaders)),
-			RequestBody:         string(proxyCtx.RequestBody),
+			RequestBody:         requestBodyForDebugLog(proxyCtx.RequestBody, proxyCtx.RequestHeaders, log.EndpointType),
 			RequestBodySize:     int64(len(proxyCtx.RequestBody)),
 			ResponseHeadersJSON: marshalHeaders(sanitizeHeaders(c.Writer.Header())),
 			ResponseBody:        string(proxyCtx.ResponseBody),
@@ -366,7 +370,7 @@ func buildRequestLogAttempts(log *models.RequestLog, attempts []*AttemptRecord, 
 		}
 		if includePayload {
 			item.UpstreamRequestHeadersJSON = marshalHeaders(sanitizeHeaders(a.UpstreamRequestHeaders))
-			item.UpstreamRequestBody = string(a.UpstreamRequestBody)
+			item.UpstreamRequestBody = requestBodyForDebugLog(a.UpstreamRequestBody, a.UpstreamRequestHeaders, log.EndpointType)
 			item.UpstreamRequestBodySize = int64(len(a.UpstreamRequestBody))
 			item.UpstreamResponseHeadersJSON = marshalHeaders(sanitizeHeaders(a.UpstreamResponseHeaders))
 			item.UpstreamResponseBody = string(a.UpstreamResponseBody)
@@ -375,4 +379,32 @@ func buildRequestLogAttempts(log *models.RequestLog, attempts []*AttemptRecord, 
 		result = append(result, item)
 	}
 	return result
+}
+
+// requestBodyForDebugLog 避免把图片编辑请求中的二进制或 base64 图片写入文本日志。
+// 原始大小仍由独立字段记录；JSON 仅保留顶层字段名，便于诊断协议差异。
+func requestBodyForDebugLog(body []byte, headers http.Header, endpointType string) string {
+	if endpointType != endpoint.TypeOpenAIImagesEdits {
+		return string(body)
+	}
+
+	contentType := strings.TrimSpace(headers.Get("Content-Type"))
+	mediaType := contentType
+	if parsed, _, err := mime.ParseMediaType(contentType); err == nil {
+		mediaType = parsed
+	}
+
+	if mediaType == "application/json" {
+		var payload map[string]json.RawMessage
+		if err := json.Unmarshal(body, &payload); err == nil {
+			fields := make([]string, 0, len(payload))
+			for field := range payload {
+				fields = append(fields, field)
+			}
+			sort.Strings(fields)
+			return fmt.Sprintf("[image edit JSON body omitted; fields=%s; size=%d bytes]", strings.Join(fields, ","), len(body))
+		}
+	}
+
+	return fmt.Sprintf("[image edit request body omitted; content_type=%q; size=%d bytes]", mediaType, len(body))
 }
